@@ -6,8 +6,6 @@
   "RemoteAccessAllowed": true,
   "AuthenticationEnabled": false,
   "SslEnabled": false,
-  "CorsEnabled": true,
-  "CorsOrigins": "*",
   "DicomWeb": {
     "Enable": true,
     "Root": "/dicom-web/",

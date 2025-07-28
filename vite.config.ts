@@ -15,4 +15,15 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  server: {
+    proxy: {
+      // Proxy Orthanc API requests to avoid CORS issues
+      '/api/orthanc': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+        rewrite: (path) => path.replace(/^\/api\/orthanc/, ''),
+        secure: false,
+      }
+    }
+  }
 })

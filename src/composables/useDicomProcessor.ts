@@ -18,9 +18,9 @@ export function useDicomProcessor() {
   const dicomProcessor = new DicomProcessor()
   const anonymizer = new Anonymizer()
 
-  // Default server config - Orthanc endpoints
+  // Default server config - Use Vite proxy to avoid CORS issues
   const serverConfig = ref<DicomServerConfig>({
-    url: 'http://localhost:8080'
+    url: '/api/orthanc'
   })
 
   // Default anonymization config

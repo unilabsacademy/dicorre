@@ -64,3 +64,30 @@ docker-compose up -d
 ## Architecture Guidelines
 
 TODO
+
+## Testing with Playwright MCP
+
+When testing the web app with Playwright MCP:
+
+### File Upload Testing
+- **Issue**: File uploads require clicking the file label to trigger the browser's file chooser
+- **Solution**: 
+  1. Click the "Browse Files" label element to open file chooser
+  2. Use `browser_file_upload` tool when modal state shows "[File chooser]"
+  3. Example workflow:
+     ```typescript
+     // Click Browse Files label to trigger file input
+     await page.getByText('Browse Files').click()
+     // Wait for file chooser modal state
+     // Then upload file
+     await fileChooser.setFiles(['/path/to/test/file.zip'])
+     ```
+
+### DICOM Anonymization Testing
+- **Important**: The `@umessen/dicom-deidentifier` library expects raw `Uint8Array` data, not parsed dcmjs datasets
+- **Correct usage**: Pass `new Uint8Array(arrayBuffer)` directly to `deidentifier.deidentify()`
+- **Test files**: Use `/test-data/CASES/Caso1.zip` which contains valid DICOM files with proper headers
+
+### Console Monitoring
+- Use `browser_console_messages()` to monitor application logs and errors
+- Helpful for debugging DICOM processing and anonymization issues
