@@ -1,0 +1,25 @@
+{
+  "Name": "Ratatoskr DICOM Server",
+  "HttpPort": 8042,
+  "DicomPort": 4242,
+  "DicomAet": "ORTHANC",
+  "RemoteAccessAllowed": true,
+  "AuthenticationEnabled": false,
+  "SslEnabled": false,
+  "CorsEnabled": true,
+  "CorsOrigins": "*",
+  "DicomWeb": {
+    "Enable": true,
+    "Root": "/dicom-web/",
+    "EnableWado": true,
+    "WadoRoot": "/wado",
+    "Ssl": false,
+    "StowMaxInstances": 10,
+    "StowMaxPatients": 10,
+    "StowMaxStudies": 10,
+    "StowMaxSeries": 10
+  },
+  "Plugins": [
+    "/usr/share/orthanc/plugins"
+  ]
+}
