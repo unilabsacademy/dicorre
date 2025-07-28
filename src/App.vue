@@ -1,6 +1,12 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { useDicomProcessor } from '@/composables/useDicomProcessor'
+import { DataTable, columns } from '@/components/StudyDataTable'
+import { Button } from '@/components/ui/button'
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Alert, AlertDescription } from '@/components/ui/alert'
+import { Badge } from '@/components/ui/badge'
+import { Progress } from '@/components/ui/progress'
 
 const {
   studies,
@@ -17,12 +23,14 @@ const {
   getProgressForStudy
 } = useDicomProcessor()
 
+const dataTableRef = ref()
+
 const isDragOver = ref(false)
 
 function handleDrop(event: DragEvent) {
   event.preventDefault()
   isDragOver.value = false
-  
+
   const files = event.dataTransfer?.files
   if (files && files.length > 0) {
     const file = files[0]
@@ -53,347 +61,135 @@ function handleFileInput(event: Event) {
 </script>
 
 <template>
-  <div class="app">
-    <header class="header">
-      <h1>DICOM Anonymizer & Sender</h1>
-      <p>Drop a ZIP file containing DICOM files to get started</p>
-    </header>
+  <div class="min-h-screen bg-background p-6">
+    <div class="mx-auto max-w-7xl space-y-6">
+      <!-- Header -->
+      <div class="text-center">
+        <h1 class="text-4xl font-bold tracking-tight">DICOM Anonymizer & Sender</h1>
+        <p class="text-muted-foreground mt-2">Drop a ZIP file containing DICOM files to get started</p>
+      </div>
 
-    <main class="main">
       <!-- File Drop Zone -->
-      <div 
+      <Card
         v-if="!hasFiles"
-        class="drop-zone"
-        :class="{ 'drag-over': isDragOver }"
+        class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
+        :class="{ 'border-primary bg-primary/5': isDragOver }"
         @drop="handleDrop"
         @dragover="handleDragOver"
         @dragleave="handleDragLeave"
       >
-        <div class="drop-content">
-          <p>Drop ZIP file here or</p>
-          <input 
-            type="file" 
-            accept=".zip" 
-            @change="handleFileInput"
-            class="file-input"
-            id="file-input"
-          >
-          <label for="file-input" class="file-label">Browse Files</label>
-        </div>
-      </div>
+        <CardContent class="flex flex-col items-center justify-center py-16">
+          <div class="text-center space-y-4">
+            <div class="text-6xl text-muted-foreground">📁</div>
+            <div>
+              <p class="text-lg text-muted-foreground mb-4">Drop ZIP file here or</p>
+              <input
+                type="file"
+                accept=".zip"
+                @change="handleFileInput"
+                class="hidden"
+                id="file-input"
+              >
+              <Button asChild>
+                <label
+                  for="file-input"
+                  class="cursor-pointer"
+                >
+                  Browse Files
+                </label>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <!-- Error Display -->
-      <div v-if="error" class="error">
-        {{ error }}
-        <button @click="error = null" class="close-btn">×</button>
-      </div>
+      <Alert
+        v-if="error"
+        variant="destructive"
+      >
+        <AlertDescription>
+          {{ error }}
+          <Button
+            variant="ghost"
+            size="sm"
+            @click="error = null"
+            class="ml-2 h-auto p-1"
+          >
+            ×
+          </Button>
+        </AlertDescription>
+      </Alert>
 
       <!-- Loading State -->
-      <div v-if="isProcessing" class="loading">
-        Processing files...
-      </div>
-
-      <!-- File Summary -->
-      <div v-if="hasFiles" class="summary">
-        <div class="summary-stats">
-          <span>Total Files: {{ totalFiles }}</span>
-          <span>Anonymized: {{ anonymizedFiles }}</span>
-          <span>Studies: {{ studies.length }}</span>
-        </div>
-        
-        <div class="actions">
-          <button 
-            @click="anonymizeAllFiles" 
-            :disabled="isProcessing || anonymizedFiles === totalFiles"
-            class="btn btn-primary"
-          >
-            {{ anonymizedFiles === totalFiles ? 'All Files Anonymized' : 'Anonymize All' }}
-          </button>
-          
-          <button @click="testConnection" class="btn btn-secondary">
-            Test Connection
-          </button>
-          
-          <button @click="clearFiles" class="btn btn-danger">
-            Clear All
-          </button>
-        </div>
-      </div>
-
-      <!-- Studies List -->
-      <div v-if="studies.length > 0" class="studies">
-        <h3>Studies</h3>
-        <div v-for="study in studies" :key="study.studyInstanceUID" class="study-card">
-          <div class="study-header">
-            <h4>{{ study.patientName || 'Unknown Patient' }}</h4>
-            <span class="study-date">{{ study.studyDate || 'Unknown Date' }}</span>
+      <Card v-if="isProcessing">
+        <CardContent class="flex items-center justify-center py-8">
+          <div class="text-center space-y-2">
+            <div class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
+            <p class="text-muted-foreground">Processing files...</p>
           </div>
-          
-          <div class="study-details">
-            <p><strong>Study ID:</strong> {{ study.studyInstanceUID }}</p>
-            <p><strong>Patient ID:</strong> {{ study.patientId || 'Unknown' }}</p>
-            <p><strong>Description:</strong> {{ study.studyDescription || 'No description' }}</p>
-            <p><strong>Series:</strong> {{ study.series.length }}</p>
-            <p><strong>Total Files:</strong> {{ study.series.reduce((sum, s) => sum + s.files.length, 0) }}</p>
-          </div>
+        </CardContent>
+      </Card>
 
-          <!-- Progress Display -->
-          <div v-if="getProgressForStudy(study.studyInstanceUID)" class="progress">
-            <div class="progress-info">
-              <span>{{ getProgressForStudy(study.studyInstanceUID)?.status }}</span>
-              <span>{{ getProgressForStudy(study.studyInstanceUID)?.sentFiles }} / {{ getProgressForStudy(study.studyInstanceUID)?.totalFiles }}</span>
-            </div>
-            <div class="progress-bar">
-              <div 
-                class="progress-fill" 
-                :style="{ width: `${(getProgressForStudy(study.studyInstanceUID)?.sentFiles || 0) / (getProgressForStudy(study.studyInstanceUID)?.totalFiles || 1) * 100}%` }"
-              ></div>
+      <!-- File Summary and Actions -->
+      <Card v-if="hasFiles">
+        <CardHeader>
+          <CardTitle>Study Summary</CardTitle>
+          <CardDescription>
+            Manage your DICOM studies and anonymization process
+          </CardDescription>
+        </CardHeader>
+        <CardContent class="space-y-4">
+          <div class="flex flex-wrap gap-4">
+            <div class="flex items-center gap-2">
+              <Badge variant="outline">Total Files: {{ totalFiles }}</Badge>
+              <Badge variant="default">Anonymized: {{ anonymizedFiles }}</Badge>
+              <Badge variant="secondary">Studies: {{ studies.length }}</Badge>
             </div>
           </div>
 
-          <button 
-            @click="sendStudy(study)" 
-            :disabled="isProcessing || !study.series.every(s => s.files.every(f => f.anonymized))"
-            class="btn btn-primary"
-          >
-            {{ study.series.every(s => s.files.every(f => f.anonymized)) ? 'Send Study' : 'Anonymize First' }}
-          </button>
-        </div>
-      </div>
-    </main>
+          <div class="flex flex-wrap gap-2">
+            <Button
+              @click="anonymizeAllFiles"
+              :disabled="isProcessing || anonymizedFiles === totalFiles"
+              variant="default"
+            >
+              {{ anonymizedFiles === totalFiles ? 'All Files Anonymized' : 'Anonymize All' }}
+            </Button>
+
+            <Button
+              @click="testConnection"
+              variant="secondary"
+            >
+              Test Connection
+            </Button>
+
+            <Button
+              @click="clearFiles"
+              variant="destructive"
+            >
+              Clear All
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Studies Data Table -->
+      <Card v-if="studies.length > 0">
+        <CardHeader>
+          <CardTitle>DICOM Studies</CardTitle>
+          <CardDescription>
+            Select studies to anonymize and send to PACS
+          </CardDescription>
+        </CardHeader>
+        <CardContent>
+          <DataTable
+            ref="dataTableRef"
+            :columns="columns"
+            :data="studies"
+          />
+        </CardContent>
+      </Card>
+    </div>
   </div>
 </template>
-
-<style scoped>
-.app {
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
-  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-}
-
-.header {
-  text-align: center;
-  margin-bottom: 40px;
-}
-
-.header h1 {
-  color: #2c3e50;
-  margin-bottom: 10px;
-}
-
-.header p {
-  color: #7f8c8d;
-}
-
-/* Drop Zone */
-.drop-zone {
-  border: 3px dashed #bdc3c7;
-  border-radius: 10px;
-  padding: 60px 20px;
-  text-align: center;
-  margin-bottom: 20px;
-  transition: all 0.3s ease;
-  cursor: pointer;
-}
-
-.drop-zone.drag-over {
-  border-color: #3498db;
-  background-color: #f8f9fa;
-}
-
-.drop-content p {
-  margin-bottom: 20px;
-  font-size: 18px;
-  color: #7f8c8d;
-}
-
-.file-input {
-  display: none;
-}
-
-.file-label {
-  background-color: #3498db;
-  color: white;
-  padding: 12px 24px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: inline-block;
-  transition: background-color 0.3s ease;
-}
-
-.file-label:hover {
-  background-color: #2980b9;
-}
-
-/* Error Display */
-.error {
-  background-color: #e74c3c;
-  color: white;
-  padding: 15px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-  position: relative;
-}
-
-.close-btn {
-  position: absolute;
-  right: 15px;
-  top: 15px;
-  background: none;
-  border: none;
-  color: white;
-  font-size: 20px;
-  cursor: pointer;
-}
-
-/* Loading */
-.loading {
-  text-align: center;
-  padding: 20px;
-  font-size: 18px;
-  color: #7f8c8d;
-}
-
-/* Summary */
-.summary {
-  background-color: #f8f9fa;
-  padding: 20px;
-  border-radius: 6px;
-  margin-bottom: 20px;
-}
-
-.summary-stats {
-  display: flex;
-  gap: 20px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-}
-
-.summary-stats span {
-  background-color: white;
-  padding: 8px 16px;
-  border-radius: 4px;
-  font-weight: 500;
-}
-
-.actions {
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-}
-
-/* Buttons */
-.btn {
-  padding: 10px 20px;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  transition: all 0.3s ease;
-}
-
-.btn:disabled {
-  opacity: 0.6;
-  cursor: not-allowed;
-}
-
-.btn-primary {
-  background-color: #3498db;
-  color: white;
-}
-
-.btn-primary:hover:not(:disabled) {
-  background-color: #2980b9;
-}
-
-.btn-secondary {
-  background-color: #95a5a6;
-  color: white;
-}
-
-.btn-secondary:hover:not(:disabled) {
-  background-color: #7f8c8d;
-}
-
-.btn-danger {
-  background-color: #e74c3c;
-  color: white;
-}
-
-.btn-danger:hover:not(:disabled) {
-  background-color: #c0392b;
-}
-
-/* Studies */
-.studies h3 {
-  color: #2c3e50;
-  margin-bottom: 20px;
-}
-
-.study-card {
-  background-color: white;
-  border: 1px solid #ecf0f1;
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 15px;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.study-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 15px;
-  border-bottom: 1px solid #ecf0f1;
-  padding-bottom: 10px;
-}
-
-.study-header h4 {
-  margin: 0;
-  color: #2c3e50;
-}
-
-.study-date {
-  color: #7f8c8d;
-  font-size: 14px;
-}
-
-.study-details {
-  margin-bottom: 15px;
-}
-
-.study-details p {
-  margin: 5px 0;
-  font-size: 14px;
-  color: #34495e;
-}
-
-/* Progress */
-.progress {
-  margin: 15px 0;
-}
-
-.progress-info {
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 5px;
-  font-size: 14px;
-  color: #7f8c8d;
-}
-
-.progress-bar {
-  width: 100%;
-  height: 8px;
-  background-color: #ecf0f1;
-  border-radius: 4px;
-  overflow: hidden;
-}
-
-.progress-fill {
-  height: 100%;
-  background-color: #27ae60;
-  transition: width 0.3s ease;
-}
-</style>
