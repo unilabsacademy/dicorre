@@ -5,7 +5,6 @@ import {
   CleanGraphOption,
   RetainDeviceIdentOption 
 } from '@umessen/dicom-deidentifier'
-import * as dcmjs from 'dcmjs'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from './dicomProcessor'
 

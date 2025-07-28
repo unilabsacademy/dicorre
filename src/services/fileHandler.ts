@@ -36,7 +36,7 @@ export class FileHandler {
       try {
         // Look for DICOM group/element tags at the beginning
         const group1 = view.getUint16(0, true)
-        const element1 = view.getUint16(2, true)
+        const _element1 = view.getUint16(2, true)
         
         // Common starting tags for DICOM files
         if (
@@ -52,7 +52,7 @@ export class FileHandler {
         // Also check a few bytes in for implicit VR files
         if (arrayBuffer.byteLength > 16) {
           const group2 = view.getUint16(8, true)
-          const element2 = view.getUint16(10, true)
+          const _element2 = view.getUint16(10, true)
           
           if (
             (group2 === 0x0008) || 
@@ -74,7 +74,6 @@ export class FileHandler {
   async extractZipFile(file: File): Promise<DicomFile[]> {
     const zip = new JSZip()
     const zipContent = await zip.loadAsync(file)
-    const dicomFiles: DicomFile[] = []
 
     const filePromises = Object.keys(zipContent.files).map(async (fileName) => {
       const zipFile = zipContent.files[fileName]

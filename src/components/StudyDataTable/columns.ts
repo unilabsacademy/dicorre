@@ -2,7 +2,6 @@ import type { ColumnDef } from '@tanstack/vue-table'
 import type { DicomStudy } from '@/types/dicom'
 import { h } from 'vue'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
 export const columns: ColumnDef<DicomStudy>[] = [
@@ -10,12 +9,12 @@ export const columns: ColumnDef<DicomStudy>[] = [
     id: 'select',
     header: ({ table }) => h(Checkbox, {
       'checked': table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate'),
-      'onUpdate:checked': (value) => table.toggleAllPageRowsSelected(!!value),
+      'onUpdate:checked': (value: boolean) => table.toggleAllPageRowsSelected(!!value),
       'ariaLabel': 'Select all',
     }),
     cell: ({ row }) => h(Checkbox, {
       'checked': row.getIsSelected(),
-      'onUpdate:checked': (value) => row.toggleSelected(!!value),
+      'onUpdate:checked': (value: boolean) => row.toggleSelected(!!value),
       'ariaLabel': 'Select row',
     }),
     enableSorting: false,
@@ -82,7 +81,7 @@ export const columns: ColumnDef<DicomStudy>[] = [
       const study = row.original
       const allAnonymized = study.series.every(s => s.files.every(f => f.anonymized))
       const someAnonymized = study.series.some(s => s.files.some(f => f.anonymized))
-      
+
       if (allAnonymized) {
         return h(Badge, { variant: 'default' }, () => 'Anonymized')
       } else if (someAnonymized) {
@@ -97,9 +96,9 @@ export const columns: ColumnDef<DicomStudy>[] = [
     header: 'Accession/Study UID',
     cell: ({ row }) => {
       const uid = row.getValue('studyInstanceUID') as string
-      return h('div', { 
+      return h('div', {
         class: 'font-mono text-xs text-muted-foreground max-w-[150px] truncate',
-        title: uid 
+        title: uid
       }, uid)
     },
   },

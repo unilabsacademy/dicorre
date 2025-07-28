@@ -47,3 +47,30 @@ export interface SendProgress {
   status: 'pending' | 'sending' | 'completed' | 'error'
   error?: string
 }
+
+// Lightweight metadata types for persistence (without ArrayBuffer)
+export interface DicomFileMetadata {
+  id: string
+  fileName: string
+  fileSize: number
+  metadata?: DicomMetadata
+  anonymized?: boolean
+  // Reference to OPFS file
+  opfsFileId?: string
+}
+
+export interface DicomStudyMetadata {
+  studyInstanceUID: string
+  patientName?: string
+  patientId?: string
+  studyDate?: string
+  studyDescription?: string
+  series: DicomSeriesMetadata[]
+}
+
+export interface DicomSeriesMetadata {
+  seriesInstanceUID: string
+  seriesDescription?: string
+  modality?: string
+  files: DicomFileMetadata[]
+}

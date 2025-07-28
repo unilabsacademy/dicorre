@@ -1,5 +1,5 @@
 import * as dcmjs from 'dcmjs'
-import type { DicomFile, DicomMetadata, DicomStudy, DicomSeries } from '@/types/dicom'
+import type { DicomFile, DicomMetadata, DicomStudy } from '@/types/dicom'
 
 export class DicomProcessor {
   parseDicomFile(file: DicomFile): DicomFile {

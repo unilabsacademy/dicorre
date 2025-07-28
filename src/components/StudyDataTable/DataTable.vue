@@ -14,7 +14,7 @@ import {
   useVueTable,
 } from '@tanstack/vue-table'
 
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -32,6 +32,10 @@ interface DataTableProps {
 }
 
 const props = defineProps<DataTableProps>()
+const emit = defineEmits<{
+  anonymizeSelected: [studies: TData[]]
+  sendSelected: [studies: TData[]]
+}>()
 
 const sorting = ref<SortingState>([])
 const columnFilters = ref<ColumnFiltersState>([])
@@ -46,9 +50,9 @@ const table = useVueTable({
     return props.columns
   },
   getCoreRowModel: getCoreRowModel(),
-  getPaginationRowModel: getPaginationRowModel(),
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
+  enableRowSelection: true,
   onSortingChange: updaterOrValue => {
     sorting.value = typeof updaterOrValue === 'function' 
       ? updaterOrValue(sorting.value) 
@@ -84,6 +88,28 @@ const table = useVueTable({
     },
   },
 })
+
+// Computed properties for button states
+const isAllSelectedAnonymized = computed(() => {
+  const selectedRows = table.getFilteredSelectedRowModel().rows
+  if (selectedRows.length === 0) return false
+  
+  return selectedRows.every(row => {
+    const study = row.original as any
+    return study.series.every((s: any) => s.files.every((f: any) => f.anonymized))
+  })
+})
+
+// Event handlers
+const anonymizeSelected = () => {
+  const selectedStudies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+  emit('anonymizeSelected', selectedStudies)
+}
+
+const sendSelected = () => {
+  const selectedStudies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
+  emit('sendSelected', selectedStudies)
+}
 
 // Expose selected rows to parent
 defineExpose({
@@ -158,26 +184,26 @@ defineExpose({
         </TableBody>
       </Table>
     </div>
-    <div class="flex items-center justify-end space-x-2 py-4">
-      <div class="flex-1 text-sm text-muted-foreground">
+    <div class="flex items-center justify-between py-4">
+      <div class="text-sm text-muted-foreground">
         {{ table.getFilteredSelectedRowModel().rows.length }} of {{ table.getFilteredRowModel().rows.length }} row(s) selected
       </div>
-      <div class="space-x-2">
+      <div class="space-x-2" v-if="table.getFilteredSelectedRowModel().rows.length > 0">
         <Button
-          variant="outline"
+          @click="anonymizeSelected"
+          :disabled="isAllSelectedAnonymized"
+          variant="default"
           size="sm"
-          :disabled="!table.getCanPreviousPage()"
-          @click="table.previousPage()"
         >
-          Previous
+          Anonymize Selected
         </Button>
         <Button
-          variant="outline"
+          @click="sendSelected"
+          :disabled="!isAllSelectedAnonymized"
+          variant="secondary"
           size="sm"
-          :disabled="!table.getCanNextPage()"
-          @click="table.nextPage()"
         >
-          Next
+          Send Selected
         </Button>
       </div>
     </div>
