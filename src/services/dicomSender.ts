@@ -5,6 +5,12 @@ import type { DicomFile, DicomStudy, SendProgress } from '@/types/dicom'
 export interface DicomServerConfig {
   url: string
   headers?: Record<string, string>
+  timeout?: number
+  auth?: {
+    type: 'basic' | 'bearer'
+    credentials: string
+  } | null
+  description?: string
 }
 
 export class DicomSender {
@@ -13,13 +19,26 @@ export class DicomSender {
 
   constructor(config: DicomServerConfig) {
     this.config = config
+
+    // Prepare headers with auth if provided
+    const headers: Record<string, string> = {
+      'Accept': 'multipart/related; type="application/dicom"',
+      ...config.headers
+    }
+
+    // Add authentication headers if configured
+    if (config.auth) {
+      if (config.auth.type === 'basic') {
+        headers['Authorization'] = `Basic ${config.auth.credentials}`
+      } else if (config.auth.type === 'bearer') {
+        headers['Authorization'] = `Bearer ${config.auth.credentials}`
+      }
+    }
+
     this.client = new DICOMwebClient({
       url: config.url,
       singlepart: false,
-      headers: {
-        'Accept': 'multipart/related; type="application/dicom"',
-        ...config.headers
-      }
+      headers
     })
   }
 

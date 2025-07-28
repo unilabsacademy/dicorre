@@ -13,6 +13,7 @@ import { DicomProcessor } from '@/services/dicomProcessor'
 import { Anonymizer } from '@/services/anonymizer'
 import { DicomSender, type DicomServerConfig } from '@/services/dicomSender'
 import { opfsStorage, OPFSStorage } from '@/services/opfsStorage'
+import { configService } from '@/services/config'
 
 export function useDicomProcessor() {
   // In-memory state (with ArrayBuffers)
@@ -26,13 +27,16 @@ export function useDicomProcessor() {
   // Persistent state (metadata only, no ArrayBuffers)
   const studiesMetadata = useStorage<DicomStudyMetadata[]>('dicom-studies', [])
   const sendProgress = useStorage<SendProgress[]>('dicom-send-progress', [])
-  const serverConfig = useStorage<DicomServerConfig>('dicom-server-config', {
-    url: '/api/orthanc'
-  })
-  const anonymizationConfig = useStorage<AnonymizationConfig>('dicom-anon-config', {
-    removePrivateTags: true,
-    profile: 'basic'
-  })
+  
+  // Use config service for defaults
+  const serverConfig = useStorage<DicomServerConfig>(
+    'dicom-server-config', 
+    configService.getDefaultServerConfig()
+  )
+  const anonymizationConfig = useStorage<AnonymizationConfig>(
+    'dicom-anon-config', 
+    configService.getDefaultAnonymizationConfig()
+  )
   const sessionInfo = useStorage('dicom-session', {
     lastUpdated: Date.now(),
     filesCount: 0
@@ -293,6 +297,17 @@ export function useDicomProcessor() {
     return sendProgress.value.find(p => p.studyUID === studyUID)
   }
 
+  function applyAnonymizationPreset(presetName: string) {
+    const preset = configService.getAnonymizationPreset(presetName)
+    if (preset) {
+      anonymizationConfig.value = preset
+    }
+  }
+
+  function getAvailablePresets() {
+    return configService.getPresets()
+  }
+
   return {
     // State
     files,
@@ -316,6 +331,8 @@ export function useDicomProcessor() {
     sendStudy,
     testConnection,
     clearFiles,
-    getProgressForStudy
+    getProgressForStudy,
+    applyAnonymizationPreset,
+    getAvailablePresets
   }
 }

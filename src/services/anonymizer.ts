@@ -7,6 +7,8 @@ import {
 } from '@umessen/dicom-deidentifier'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from './dicomProcessor'
+import { configService } from './config'
+import { getAllSpecialHandlers } from './anonymizationHandlers'
 
 export class Anonymizer {
   private dicomProcessor: DicomProcessor
@@ -34,19 +36,28 @@ export class Anonymizer {
           break
       }
 
+      // Get processed replacements (with timestamp substitution)
+      const processedReplacements = configService.processReplacements(
+        (config.replacements || {}) as Record<string, string>
+      )
+
       // Configure deidentifier options
       const deidentifierConfig = {
         profileOptions: profileOptions,
         dummies: {
-          default: 'REMOVED',
+          default: processedReplacements.default || 'REMOVED',
           lookup: {
-            // Specific replacements for common tags
-            '00100010': 'ANONYMOUS', // Patient Name
-            '00100020': `ANON${Date.now().toString().slice(-6)}`, // Patient ID
+            // Use config replacements with fallbacks
+            '00100010': processedReplacements.patientName || 'ANONYMOUS', // Patient Name
+            '00100020': processedReplacements.patientId || `PAT${Date.now().toString().slice(-6)}`, // Patient ID  
+            '00100030': processedReplacements.patientBirthDate || '19000101', // Patient Birth Date
+            '00080080': processedReplacements.institution || 'ANONYMIZED', // Institution Name
+            // Add any custom replacements
+            ...config.customReplacements
           }
         },
-        keep: [
-          // Keep essential technical tags for image interpretation
+        keep: config.preserveTags || [
+          // Default essential technical tags for image interpretation
           '00080016', // SOP Class UID
           '00080018', // SOP Instance UID
           '0020000D', // Study Instance UID
@@ -60,11 +71,19 @@ export class Anonymizer {
         deidentifierConfig.profileOptions.push(RetainDeviceIdentOption)
       }
 
+      // Add custom special handlers if enabled
+      if (config.useCustomHandlers) {
+        const tagsToRemove = config.tagsToRemove || configService.getTagsToRemove()
+        const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove)
+        // @ts-expect-error - specialHandlers property may not be in official types
+        deidentifierConfig.specialHandlers = specialHandlers
+      }
+
       // Create deidentifier instance
       let deidentifier: any
       try {
         deidentifier = new DicomDeidentifier(deidentifierConfig)
-        console.log(`Created deidentifier for ${file.fileName}`)
+        console.log(`Created deidentifier for ${file.fileName} with ${config.useCustomHandlers ? 'custom' : 'standard'} handlers`)
       } catch (deidentifierError) {
         console.error(`Failed to create deidentifier:`, deidentifierError)
         throw new Error(`Cannot create anonymizer: ${deidentifierError}`)

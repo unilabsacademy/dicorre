@@ -38,6 +38,21 @@ export interface DicomSeries {
 export interface AnonymizationConfig {
   removePrivateTags: boolean
   profile: 'basic' | 'clean' | 'very-clean'
+  replacements?: {
+    default?: string
+    patientName?: string
+    patientId?: string
+    patientBirthDate?: string
+    institution?: string
+    [key: string]: string | undefined
+  }
+  preserveTags?: string[]
+  tagsToRemove?: string[]
+  customReplacements?: Record<string, string>
+  // Advanced options for custom handlers
+  dateJitterDays?: number
+  useCustomHandlers?: boolean
+  organizationRoot?: string
 }
 
 export interface SendProgress {
@@ -74,3 +89,24 @@ export interface DicomSeriesMetadata {
   modality?: string
   files: DicomFileMetadata[]
 }
+
+// App configuration types
+export interface AnonymizationPreset {
+  profile: 'basic' | 'clean' | 'very-clean'
+  removePrivateTags: boolean
+  description: string
+}
+
+// Import DicomServerConfig for use in AppConfig
+import type { DicomServerConfig } from '@/services/dicomSender'
+
+export interface AppConfig {
+  dicomServer: DicomServerConfig
+  anonymization: AnonymizationConfig & {
+    tagDescriptions?: Record<string, string>
+  }
+  presets?: Record<string, AnonymizationPreset>
+}
+
+// Re-export DicomServerConfig for convenience
+export type { DicomServerConfig } from '@/services/dicomSender'
