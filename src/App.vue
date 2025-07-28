@@ -1,6 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useDicomProcessor } from '@/composables/useDicomProcessor'
+import { ref, computed, reactive } from 'vue'
+import { useDicomWorkflow } from '@/composables/useDicomServices'
+import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import { FileHandler } from '@/services/fileHandler'
+import { groupDicomFilesByStudy } from '@/utils/dicomGrouping'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -8,38 +11,50 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 
-const {
-  studies,
-  isProcessing,
-  error,
-  totalFiles,
-  anonymizedFiles,
-  hasFiles,
-  isRestoring,
-  restoreProgress,
-  processZipFile,
-  anonymizeAllFiles,
-  sendStudy,
-  testConnection,
-  clearFiles
-} = useDicomProcessor()
+// Initialize the workflow composable and file handler
+const workflow = useDicomWorkflow()
+const fileHandler = new FileHandler()
+
+// Component state
+const selectedFiles = ref<File[]>([])
+const extractedDicomFiles = ref<DicomFile[]>([])
+const fileInput = ref<HTMLInputElement>()
+const successMessage = ref('')
+const concurrency = ref(3)
+
+// Anonymization configuration
+const config = reactive<AnonymizationConfig>({
+  profile: 'basic',
+  removePrivateTags: true,
+  useCustomHandlers: true,
+  dateJitterDays: 31
+})
+
+// For compatibility with existing template
+const studies = ref<DicomStudy[]>([])
+const isProcessing = workflow.loading
+const error = computed(() => workflow.errors.value[0]?.message || null)
+const totalFiles = computed(() => extractedDicomFiles.value.length)
+const anonymizedFiles = computed(() => workflow.anonymizer.results.value.length)
+const hasFiles = computed(() => selectedFiles.value.length > 0)
+const isRestoring = ref(false)
+const restoreProgress = ref(0)
 
 const dataTableRef = ref()
 
 const isDragOver = ref(false)
 
-function handleDrop(event: DragEvent) {
+async function handleDrop(event: DragEvent) {
   event.preventDefault()
   isDragOver.value = false
 
   const files = event.dataTransfer?.files
   if (files && files.length > 0) {
-    const file = files[0]
-    if (file.name.endsWith('.zip')) {
-      processZipFile(file)
-    } else {
-      error.value = 'Please drop a ZIP file containing DICOM files'
-    }
+    const fileArray = Array.from(files)
+    selectedFiles.value = fileArray
+    
+    // Auto-process files when they're dropped
+    await processFiles()
   }
 }
 
@@ -52,30 +67,90 @@ function handleDragLeave() {
   isDragOver.value = false
 }
 
-function handleFileInput(event: Event) {
+async function handleFileInput(event: Event) {
   const target = event.target as HTMLInputElement
-  const file = target.files?.[0]
-  if (file && file.name.endsWith('.zip')) {
-    processZipFile(file)
+  if (target.files) {
+    const files = Array.from(target.files)
+    selectedFiles.value = files
+    
+    // Auto-process files when they're selected
+    await processFiles()
   }
 }
 
-import type { DicomStudy } from '@/types/dicom'
+// Process files (parse + anonymize)
+async function processFiles() {
+  if (selectedFiles.value.length === 0) return
+
+  successMessage.value = ''
+  
+  // Process each file and extract DICOM files from ZIP archives
+  let dicomFiles: DicomFile[] = []
+  
+  for (const file of selectedFiles.value) {
+    if (file.name.toLowerCase().endsWith('.zip')) {
+      // Extract DICOM files from ZIP archive
+      const extractedFiles = await fileHandler.extractZipFile(file)
+      dicomFiles.push(...extractedFiles)
+    } else {
+      // Process single DICOM file
+      const dicomFile = await fileHandler.readSingleDicomFile(file)
+      dicomFiles.push(dicomFile)
+    }
+  }
+
+  if (dicomFiles.length === 0) {
+    workflow.errors.value.push({ message: 'No DICOM files found in the uploaded files.' })
+    return
+  }
+
+  // Store the extracted DICOM files for proper counting
+  extractedDicomFiles.value = dicomFiles
+  console.log(`Extracted ${dicomFiles.length} DICOM files from uploaded files`)
+
+  // Parse files
+  const parsedFiles = await workflow.processor.parseFiles(dicomFiles, concurrency.value)
+  if (parsedFiles.length === 0) {
+    return
+  }
+
+  // Anonymize files
+  const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(parsedFiles, config, concurrency.value)
+  if (anonymizedFiles.length > 0) {
+    successMessage.value = `Successfully processed ${anonymizedFiles.length} files!`
+    
+    // Group files by patient/study/series based on DICOM metadata
+    const groupedStudies = groupDicomFilesByStudy(anonymizedFiles)
+    studies.value = groupedStudies
+    
+    console.log(`Grouped into ${groupedStudies.length} studies across ${new Set(groupedStudies.map(s => s.patientId)).size} patients`)
+  }
+}
+
+// Test server connection - simple async/await
+async function testConnection() {
+  await workflow.sender.testConnection()
+}
+
+// Send files to server
+async function sendStudy(study: DicomStudy) {
+  if (workflow.anonymizer.results.value.length === 0) return
+
+  successMessage.value = ''
+
+  const success = await workflow.sender.sendStudyWithProgress(study, {
+    concurrency: concurrency.value,
+    maxRetries: 2
+  })
+
+  if (success) {
+    successMessage.value = 'Files sent successfully to server!'
+  }
+}
 
 function handleAnonymizeSelected(selectedStudies: DicomStudy[]) {
-  // Anonymize files in selected studies
-  selectedStudies.forEach(study => {
-    study.series.forEach(series => {
-      series.files.forEach(file => {
-        if (!file.anonymized) {
-          // This would trigger the anonymization process for this specific file
-          // For now, we'll use the existing anonymizeAllFiles method
-        }
-      })
-    })
-  })
-  // For simplicity, just call anonymizeAllFiles for now
-  anonymizeAllFiles()
+  // Process all files again 
+  processFiles()
 }
 
 function handleSendSelected(selectedStudies: DicomStudy[]) {
@@ -84,6 +159,22 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
     sendStudy(study)
   })
 }
+
+// Clear all files
+function clearFiles() {
+  selectedFiles.value = []
+  extractedDicomFiles.value = []
+  studies.value = []
+  workflow.resetAll()
+  successMessage.value = ''
+}
+
+// Aliases for template compatibility
+const anonymizeAllFiles = processFiles
+const processZipFile = (file: File) => {
+  selectedFiles.value = [file]
+  processFiles()
+}
 </script>
 
 <template>
@@ -91,13 +182,14 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
     <div class="mx-auto max-w-7xl space-y-6">
       <!-- Header -->
       <div class="text-center">
-        <h1 class="text-4xl font-bold tracking-tight">DICOM Anonymizer & Sender</h1>
-        <p class="text-muted-foreground mt-2">Drop a ZIP file containing DICOM files to get started</p>
+        <h1 data-testid="app-title" class="text-4xl font-bold tracking-tight">DICOM Anonymizer & Sender</h1>
+        <p class="text-muted-foreground mt-2">Drop DICOM files or ZIP archives to get started</p>
       </div>
 
       <!-- File Drop Zone -->
       <Card
         v-if="!hasFiles"
+        data-testid="file-drop-zone"
         class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
         :class="{ 'border-primary bg-primary/5': isDragOver }"
         @drop="handleDrop"
@@ -108,18 +200,21 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
           <div class="text-center space-y-4">
             <div class="text-6xl text-muted-foreground">📁</div>
             <div>
-              <p class="text-lg text-muted-foreground mb-4">Drop ZIP file here or</p>
+              <p data-testid="drop-zone-text" class="text-lg text-muted-foreground mb-4">Drop DICOM files here or</p>
               <input
                 type="file"
-                accept=".zip"
+                accept=".dcm,.zip"
+                multiple
                 @change="handleFileInput"
                 class="hidden"
                 id="file-input"
+                data-testid="file-input"
               >
               <Button asChild>
                 <label
                   for="file-input"
                   class="cursor-pointer"
+                  data-testid="browse-files-button"
                 >
                   Browse Files
                 </label>
@@ -166,11 +261,11 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
       </Card>
 
       <!-- Toolbar -->
-      <div v-if="hasFiles" class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border">
+      <div v-if="hasFiles" class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border" data-testid="toolbar">
         <div class="flex items-center gap-3">
-          <Badge variant="outline">{{ totalFiles }} Files</Badge>
-          <Badge variant="default">{{ anonymizedFiles }} Anonymized</Badge>
-          <Badge variant="secondary">{{ studies.length }} Studies</Badge>
+          <Badge variant="outline" data-testid="files-count-badge">{{ totalFiles }} Files</Badge>
+          <Badge variant="default" data-testid="anonymized-count-badge">{{ anonymizedFiles }} Anonymized</Badge>
+          <Badge variant="secondary" data-testid="studies-count-badge">{{ studies.length }} Studies</Badge>
         </div>
         
         <div class="flex items-center gap-2">
@@ -179,6 +274,7 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
             :disabled="isProcessing || anonymizedFiles === totalFiles"
             variant="default"
             size="sm"
+            data-testid="anonymize-all-button"
           >
             {{ anonymizedFiles === totalFiles ? 'All Anonymized' : 'Anonymize All' }}
           </Button>
@@ -187,6 +283,7 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
             @click="testConnection"
             variant="secondary"
             size="sm"
+            data-testid="test-connection-button"
           >
             Test Connection
           </Button>
@@ -195,6 +292,7 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
             @click="clearFiles"
             variant="destructive"
             size="sm"
+            data-testid="clear-all-button"
           >
             Clear All
           </Button>
@@ -202,9 +300,9 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
       </div>
 
       <!-- Studies Data Table -->
-      <Card v-if="studies.length > 0">
+      <Card v-if="studies.length > 0" data-testid="studies-table-card">
         <CardHeader>
-          <CardTitle>DICOM Studies</CardTitle>
+          <CardTitle data-testid="studies-table-title">DICOM Studies</CardTitle>
           <CardDescription>
             Select studies to anonymize and send to PACS
           </CardDescription>
@@ -216,6 +314,7 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
             :data="studies"
             @anonymize-selected="handleAnonymizeSelected"
             @send-selected="handleSendSelected"
+            data-testid="studies-data-table"
           />
         </CardContent>
       </Card>

@@ -17,6 +17,7 @@
     "format": "prettier --write src/"
   },
   "dependencies": {
+    "@effect/platform": "^0.90.0",
     "@tailwindcss/vite": "^4.1.11",
     "@tanstack/vue-table": "^8.21.3",
     "@umessen/dicom-deidentifier": "1.0.0-beta.4",
@@ -25,6 +26,7 @@
     "clsx": "^2.1.1",
     "dcmjs": "^0.43.1",
     "dicomweb-client": "^0.11.2",
+    "effect": "^3.17.2",
     "jszip": "^3.10.1",
     "lucide-vue-next": "^0.528.0",
     "reka-ui": "^2.4.0",
