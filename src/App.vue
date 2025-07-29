@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, reactive } from 'vue'
+import { ref, computed, reactive, onMounted, watch } from 'vue'
 import type { DicomFile } from '@/types/dicom'
 import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
@@ -11,6 +11,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
+import { useSessionPersistence } from '@/composables/useSessionPersistence'
 
 // Initialize the workflow composable and file handler
 const workflow = useDicomWorkflow()
@@ -22,6 +23,9 @@ const extractedDicomFiles = ref<DicomFile[]>([])
 const fileInput = ref<HTMLInputElement>()
 const successMessage = ref('')
 const concurrency = ref(3)
+
+// Store parsed (but not yet anonymized) DICOM files
+const parsedDicomFiles = ref<DicomFile[]>([])
 
 // Anonymization configuration
 const config = reactive<AnonymizationConfig>({
@@ -104,22 +108,45 @@ async function processFiles() {
   extractedDicomFiles.value = dicomFiles
   console.log(`Extracted ${dicomFiles.length} DICOM files from uploaded files`)
 
-  // Parse files
+  // Parse files (no anonymization here)
   const parsedFiles = await workflow.processor.parseFiles(dicomFiles, concurrency.value)
   if (parsedFiles.length === 0) {
     return
   }
 
-  // Anonymize files
-  const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(parsedFiles, config, concurrency.value)
-  if (anonymizedFiles.length > 0) {
-    successMessage.value = `Successfully processed ${anonymizedFiles.length} files!`
+  // Persist parsed files for later anonymization
+  parsedDicomFiles.value = parsedFiles
 
-    // Group files by patient/study/series based on DICOM metadata
+  // Update extracted files reference so that we store files with metadata
+  extractedDicomFiles.value = parsedFiles
+
+  // Group the parsed files so that the UI can display studies even before anonymization
+  const groupedStudies = groupDicomFilesByStudy(parsedFiles)
+  studies.value = groupedStudies
+
+  console.log(`Parsed ${parsedFiles.length} files, grouped into ${groupedStudies.length} studies`)
+}
+
+// Anonymize all parsed files – invoked manually from the toolbar
+async function anonymizeAllFiles() {
+  if (parsedDicomFiles.value.length === 0) return
+
+  successMessage.value = ''
+
+  const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(
+    parsedDicomFiles.value,
+    config,
+    concurrency.value
+  )
+
+  if (anonymizedFiles.length > 0) {
+    successMessage.value = `Successfully anonymized ${anonymizedFiles.length} files!`
+
+    // Refresh study grouping to include anonymization status
     const groupedStudies = groupDicomFilesByStudy(anonymizedFiles)
     studies.value = groupedStudies
 
-    console.log(`Grouped into ${groupedStudies.length} studies across ${new Set(groupedStudies.map(s => s.patientId)).size} patients`)
+    console.log(`Grouped into ${groupedStudies.length} studies across ${new Set(groupedStudies.map(s => s.patientId)).size} patients after anonymization`)
   }
 }
 
@@ -145,8 +172,15 @@ async function sendStudy(study: DicomStudy) {
 }
 
 function handleAnonymizeSelected(selectedStudies: DicomStudy[]) {
-  // Process all files again
-  processFiles()
+  // Anonymize only the selected studies
+  const filesToAnonymize = selectedStudies.flatMap(study =>
+    study.series.flatMap(series => series.files)
+  )
+
+  workflow.anonymizer.anonymizeFiles(filesToAnonymize, config, concurrency.value).then(() => {
+    // Refresh grouping after selective anonymization
+    studies.value = groupDicomFilesByStudy(parsedDicomFiles.value)
+  })
 }
 
 function handleSendSelected(selectedStudies: DicomStudy[]) {
@@ -163,14 +197,30 @@ function clearFiles() {
   studies.value = []
   workflow.resetAll()
   successMessage.value = ''
+  clearSession()
 }
 
 // Aliases for template compatibility
-const anonymizeAllFiles = processFiles
 const processZipFile = (file: File) => {
   selectedFiles.value = [file]
   processFiles()
 }
+
+// Session persistence
+const {
+  restore: restoreSession,
+  clear: clearSession,
+  isRestoring: persistenceRestoring,
+  restoreProgress: persistenceProgress
+} = useSessionPersistence(extractedDicomFiles, studies)
+
+// Bridge persistence state to local refs used in template
+watch(persistenceRestoring, (v) => (isRestoring.value = v))
+watch(persistenceProgress, (v) => (restoreProgress.value = v))
+
+onMounted(() => {
+  restoreSession()
+})
 </script>
 
 <template>
