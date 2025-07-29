@@ -1,173 +1,224 @@
-/**
- * DICOM Processor service that uses Effect internally
- */
-
-import { Effect } from "effect"
+import { Effect, Context, Layer } from "effect"
 import * as dcmjs from 'dcmjs'
 import type { DicomFile, DicomMetadata, DicomStudy } from '@/types/dicom'
-import { parseDicomFile, validateDicomFile, extractMetadata } from './effects'
-import { AppLayerLive } from '../shared/layers'
+import { ParseError, ValidationError, type DicomProcessorError } from '@/types/effects'
+import { ConfigService } from '../config'
 
-export class DicomProcessor {
-  /**
-   * Parse a DICOM file and extract metadata
-   */
-  async parseFile(file: DicomFile): Promise<DicomFile> {
-    return Effect.runPromise(
-      Effect.provide(parseDicomFile(file), AppLayerLive)
-    )
+export class DicomProcessor extends Context.Tag("DicomProcessor")<
+  DicomProcessor,
+  {
+    readonly parseFile: (file: DicomFile) => Effect.Effect<DicomFile, DicomProcessorError>
+    readonly parseFiles: (files: DicomFile[], concurrency?: number) => Effect.Effect<DicomFile[], DicomProcessorError>
+    readonly groupFilesByStudy: (files: DicomFile[]) => Effect.Effect<DicomStudy[], DicomProcessorError>
+    readonly validateFile: (file: DicomFile) => Effect.Effect<void, ValidationError>
   }
+>() {}
 
+/**
+ * Internal implementation class
+ */
+class DicomProcessorImpl {
   /**
-   * Synchronous version for compatibility
+   * Effect-based DICOM file validation
    */
-  parseDicomFile(file: DicomFile): DicomFile {
-    try {
-      // Check if ArrayBuffer has proper DICOM structure
+  static validateFile = (file: DicomFile): Effect.Effect<void, ValidationError> =>
+    Effect.gen(function* () {
+      if (!file.arrayBuffer || file.arrayBuffer.byteLength === 0) {
+        return yield* Effect.fail(new ValidationError({
+          message: `File ${file.fileName} has no data`,
+          fileName: file.fileName
+        }))
+      }
+
       if (file.arrayBuffer.byteLength < 132) {
-        throw new Error('File too small to be a valid DICOM file')
+        return yield* Effect.fail(new ValidationError({
+          message: `File ${file.fileName} is too small to be a valid DICOM file`,
+          fileName: file.fileName
+        }))
       }
 
       // Verify DICOM magic number
       const view = new DataView(file.arrayBuffer)
-      const magic = String.fromCharCode(
-        view.getUint8(128),
-        view.getUint8(129),
-        view.getUint8(130),
-        view.getUint8(131)
-      )
-      
-      if (magic !== 'DICM') {
-        console.warn(`File ${file.fileName} missing DICM header, attempting to parse anyway`)
-      }
+      try {
+        const magic = String.fromCharCode(
+          view.getUint8(128),
+          view.getUint8(129),
+          view.getUint8(130),
+          view.getUint8(131)
+        )
 
-      const dicomData = dcmjs.data.DicomMessage.readFile(file.arrayBuffer)
-      const dataset = dcmjs.data.DicomMetaDictionary.naturalizeDataset(dicomData.dict)
-      
-      const metadata: DicomMetadata = {
-        patientName: dataset.PatientName?.Alphabetic || 'Unknown',
-        patientId: dataset.PatientID || 'Unknown',
-        studyInstanceUID: dataset.StudyInstanceUID,
-        studyDate: dataset.StudyDate,
-        studyDescription: dataset.StudyDescription || '',
-        seriesInstanceUID: dataset.SeriesInstanceUID,
-        seriesDescription: dataset.SeriesDescription || '',
-        modality: dataset.Modality || '',
-        sopInstanceUID: dataset.SOPInstanceUID
-      }
-
-      return {
-        ...file,
-        metadata
-      }
-    } catch (error) {
-      console.error(`Error parsing DICOM file ${file.fileName}:`, error)
-      console.error('File size:', file.arrayBuffer.byteLength)
-      // Log first few bytes for debugging
-      const view = new DataView(file.arrayBuffer)
-      const firstBytes = Array.from({length: Math.min(16, file.arrayBuffer.byteLength)}, (_, i) => 
-        view.getUint8(i).toString(16).padStart(2, '0')
-      ).join(' ')
-      console.error('First 16 bytes:', firstBytes)
-      
-      throw new Error(`Failed to parse DICOM file: ${file.fileName}`)
-    }
-  }
-
-  groupFilesByStudy(files: DicomFile[]): DicomStudy[] {
-    const studyMap = new Map<string, DicomStudy>()
-
-    files.forEach(file => {
-      if (!file.metadata?.studyInstanceUID) return
-
-      const studyUID = file.metadata.studyInstanceUID
-      
-      if (!studyMap.has(studyUID)) {
-        studyMap.set(studyUID, {
-          studyInstanceUID: studyUID,
-          patientName: file.metadata.patientName,
-          patientId: file.metadata.patientId,
-          studyDate: file.metadata.studyDate,
-          studyDescription: file.metadata.studyDescription,
-          series: []
-        })
-      }
-
-      const study = studyMap.get(studyUID)!
-      let series = study.series.find(s => s.seriesInstanceUID === file.metadata?.seriesInstanceUID)
-
-      if (!series && file.metadata?.seriesInstanceUID) {
-        series = {
-          seriesInstanceUID: file.metadata.seriesInstanceUID,
-          seriesDescription: file.metadata.seriesDescription,
-          modality: file.metadata.modality,
-          files: []
+        if (magic !== 'DICM') {
+          return yield* Effect.fail(new ValidationError({
+            message: `File ${file.fileName} does not have valid DICOM magic number`,
+            fileName: file.fileName
+          }))
         }
-        study.series.push(series)
-      }
-
-      if (series) {
-        series.files.push(file)
+      } catch (error) {
+        return yield* Effect.fail(new ValidationError({
+          message: `Error reading DICOM magic number in ${file.fileName}`,
+          fileName: file.fileName,
+          cause: error
+        }))
       }
     })
 
-    return Array.from(studyMap.values())
-  }
+  /**
+   * Effect-based DICOM file parsing
+   */
+  static parseFile = (file: DicomFile): Effect.Effect<DicomFile, DicomProcessorError> =>
+    Effect.gen(function* () {
+      // Validate the file first
+      yield* DicomProcessorImpl.validateFile(file)
 
-  getDicomDataFromFile(file: DicomFile): dcmjs.data.DicomMessage {
-    return dcmjs.data.DicomMessage.readFile(file.arrayBuffer)
-  }
+      const result = yield* Effect.try({
+        try: () => {
+          console.log(`Parsing DICOM file: ${file.fileName}`)
+          
+          // Parse with dcmjs
+          const dataset = dcmjs.data.DicomMessage.readFile(file.arrayBuffer)
+          const dict = dataset.dict
+
+          // Extract metadata
+          const metadata: DicomMetadata = {
+            patientName: dict['00100010']?.Value?.[0] || 'Unknown',
+            patientId: dict['00100020']?.Value?.[0] || 'Unknown',
+            patientBirthDate: dict['00100030']?.Value?.[0] || '',
+            studyInstanceUID: dict['0020000D']?.Value?.[0] || '',
+            studyDate: dict['00080020']?.Value?.[0] || '',
+            studyDescription: dict['00081030']?.Value?.[0] || '',
+            seriesInstanceUID: dict['0020000E']?.Value?.[0] || '',
+            seriesDescription: dict['0008103E']?.Value?.[0] || '',
+            modality: dict['00080060']?.Value?.[0] || 'Unknown',
+            sopInstanceUID: dict['00080018']?.Value?.[0] || '',
+            instanceNumber: dict['00200013']?.Value?.[0] || 1,
+            transferSyntaxUID: dict['00020010']?.Value?.[0] || '1.2.840.10008.1.2'
+          }
+
+          console.log(`Successfully parsed ${file.fileName}: Patient ${metadata.patientId}, Study ${metadata.studyInstanceUID}`)
+
+          return {
+            ...file,
+            metadata,
+            parsed: true
+          }
+        },
+        catch: (error) => new ParseError({
+          message: `Failed to parse DICOM file: ${file.fileName}`,
+          fileName: file.fileName,
+          cause: error
+        })
+      })
+
+      return result
+    })
 
   /**
-   * Validate a DICOM file and return its metadata
+   * Parse multiple files concurrently
    */
-  async validateFile(file: DicomFile): Promise<DicomMetadata> {
-    return Effect.runPromise(
-      Effect.provide(validateDicomFile(file), AppLayerLive)
-    )
-  }
+  static parseFiles = (files: DicomFile[], concurrency = 3): Effect.Effect<DicomFile[], DicomProcessorError> =>
+    Effect.gen(function* () {
+      if (files.length === 0) {
+        return []
+      }
+
+      console.log(`Starting to parse ${files.length} DICOM files with concurrency ${concurrency}`)
+
+      const results = yield* Effect.all(
+        files.map(file => DicomProcessorImpl.parseFile(file)),
+        { concurrency, batching: true }
+      )
+
+      const successfulResults = results.filter(file => file.parsed)
+      console.log(`Successfully parsed ${successfulResults.length}/${files.length} DICOM files`)
+
+      return successfulResults
+    })
 
   /**
-   * Extract metadata from raw ArrayBuffer
+   * Group files by patient/study/series
    */
-  async extractMetadataFromBuffer(arrayBuffer: ArrayBuffer): Promise<DicomMetadata> {
-    return Effect.runPromise(
-      Effect.provide(extractMetadata(arrayBuffer), AppLayerLive)
-    )
-  }
-
-  /**
-   * Process multiple files in parallel
-   */
-  async parseFiles(files: DicomFile[], concurrency = 3): Promise<DicomFile[]> {
-    const parseEffect = Effect.forEach(
-      files,
-      (file) => parseDicomFile(file),
-      { concurrency, batching: true }
-    )
-
-    return Effect.runPromise(
-      Effect.provide(parseEffect, AppLayerLive)
-    )
-  }
-
-  /**
-   * Synchronous version for compatibility
-   */
-  extractMetadata(arrayBuffer: ArrayBuffer): DicomMetadata {
-    const dicomData = dcmjs.data.DicomMessage.readFile(arrayBuffer)
-    const dataset = dcmjs.data.DicomMetaDictionary.naturalizeDataset(dicomData.dict)
-    
-    return {
-      patientName: dataset.PatientName?.Alphabetic || 'Unknown',
-      patientId: dataset.PatientID || 'Unknown',
-      studyInstanceUID: dataset.StudyInstanceUID,
-      studyDate: dataset.StudyDate,
-      studyDescription: dataset.StudyDescription || '',
-      seriesInstanceUID: dataset.SeriesInstanceUID,
-      seriesDescription: dataset.SeriesDescription || '',
-      modality: dataset.Modality || '',
-      sopInstanceUID: dataset.SOPInstanceUID
-    }
-  }
+  static groupFilesByStudy = (files: DicomFile[]): Effect.Effect<DicomStudy[], DicomProcessorError> =>
+    Effect.gen(function* () {
+      const studyMap = new Map<string, DicomStudy>()
+      
+      for (const file of files) {
+        if (!file.metadata) {
+          console.warn(`File ${file.fileName} has no metadata, skipping`)
+          continue
+        }
+        
+        const {
+          patientId,
+          patientName,
+          studyInstanceUID,
+          studyDate,
+          studyDescription,
+          seriesInstanceUID,
+          seriesDescription,
+          modality
+        } = file.metadata
+        
+        // Create study key that includes both patient and study info
+        const studyKey = `${patientId}|${studyInstanceUID}`
+        
+        // Get or create study
+        if (!studyMap.has(studyKey)) {
+          studyMap.set(studyKey, {
+            studyInstanceUID,
+            patientName: patientName || 'Unknown',
+            patientId: patientId || 'Unknown',
+            studyDate: studyDate || new Date().toISOString().split('T')[0].replace(/-/g, ''),
+            studyDescription: studyDescription || 'Unknown Study',
+            series: []
+          })
+        }
+        
+        const study = studyMap.get(studyKey)!
+        
+        // Find or create series
+        let series = study.series.find(s => s.seriesInstanceUID === seriesInstanceUID)
+        if (!series) {
+          series = {
+            seriesInstanceUID,
+            seriesDescription: seriesDescription || 'Unknown Series',
+            modality: modality || 'Unknown',
+            files: []
+          }
+          study.series.push(series)
+        }
+        
+        // Add file to series
+        series.files.push(file)
+      }
+      
+      // Convert map to array and sort
+      const studies = Array.from(studyMap.values())
+      
+      // Sort studies by patient ID and study date
+      studies.sort((a, b) => {
+        const patientCompare = a.patientId.localeCompare(b.patientId)
+        if (patientCompare !== 0) return patientCompare
+        return a.studyDate.localeCompare(b.studyDate)
+      })
+      
+      // Sort series within each study
+      studies.forEach(study => {
+        study.series.sort((a, b) => a.seriesInstanceUID.localeCompare(b.seriesInstanceUID))
+      })
+      
+      return studies
+    })
 }
+
+/**
+ * Live implementation layer with ConfigService dependency
+ */
+export const DicomProcessorLive = Layer.succeed(
+  DicomProcessor,
+  DicomProcessor.of({
+    parseFile: DicomProcessorImpl.parseFile,
+    parseFiles: DicomProcessorImpl.parseFiles,
+    groupFilesByStudy: DicomProcessorImpl.groupFilesByStudy,
+    validateFile: DicomProcessorImpl.validateFile
+  })
+)

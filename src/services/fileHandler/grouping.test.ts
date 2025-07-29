@@ -1,8 +1,9 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { FileHandler } from '../fileHandler'
-import { DicomProcessor } from '../dicomProcessor'
+import { Effect } from 'effect'
+import { FileHandler, FileHandlerLive } from './index'
+import { DicomProcessor, DicomProcessorLive } from '../dicomProcessor'
 import type { DicomFile } from '@/types/dicom'
 
 // Helper to group DICOM files by patient/study/series
@@ -54,13 +55,11 @@ function groupDicomFiles(files: DicomFile[]) {
 }
 
 describe('DICOM File Grouping', () => {
-  let fileHandler: FileHandler
-  let dicomProcessor: DicomProcessor
-
-  beforeEach(() => {
-    fileHandler = new FileHandler()
-    dicomProcessor = new DicomProcessor()
-  })
+  const runFileHandlerTest = <A, E>(effect: Effect.Effect<A, E, FileHandler>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(FileHandlerLive)))
+    
+  const runDicomProcessorTest = <A, E>(effect: Effect.Effect<A, E, DicomProcessor>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(DicomProcessorLive)))
 
   it('should correctly group files from 3_cases_each_with_3_series_6_images.zip', async () => {
     // Load and extract the test ZIP file
@@ -68,11 +67,17 @@ describe('DICOM File Grouping', () => {
     const zipFile = new File([readFileSync(zipPath)], '3_cases_each_with_3_series_6_images.zip')
     
     // Extract DICOM files from ZIP
-    const extractedFiles = await fileHandler.extractZipFile(zipFile)
+    const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
+      const fileHandler = yield* FileHandler
+      return yield* fileHandler.extractZipFile(zipFile)
+    }))
     console.log(`Extracted ${extractedFiles.length} files from ZIP`)
     
     // Parse all DICOM files to get metadata
-    const parsedFiles = extractedFiles.map(file => dicomProcessor.parseDicomFile(file))
+    const parsedFiles = await runDicomProcessorTest(Effect.gen(function* () {
+      const processor = yield* DicomProcessor
+      return yield* processor.parseFiles(extractedFiles)
+    }))
     console.log(`Parsed ${parsedFiles.length} DICOM files`)
     
     // Group files by patient/study/series
@@ -122,11 +127,17 @@ describe('DICOM File Grouping', () => {
     const zipFile = new File([readFileSync(zipPath)], '1_case_3_series_6_images.zip')
     
     // Extract DICOM files from ZIP
-    const extractedFiles = await fileHandler.extractZipFile(zipFile)
+    const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
+      const fileHandler = yield* FileHandler
+      return yield* fileHandler.extractZipFile(zipFile)
+    }))
     console.log(`Extracted ${extractedFiles.length} files from ZIP`)
     
     // Parse all DICOM files to get metadata
-    const parsedFiles = extractedFiles.map(file => dicomProcessor.parseDicomFile(file))
+    const parsedFiles = await runDicomProcessorTest(Effect.gen(function* () {
+      const processor = yield* DicomProcessor
+      return yield* processor.parseFiles(extractedFiles)
+    }))
     console.log(`Parsed ${parsedFiles.length} DICOM files`)
     
     // Group files by patient/study/series

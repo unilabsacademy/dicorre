@@ -1,39 +1,104 @@
 import { describe, it, expect } from 'vitest'
-import { DicomSender, createDicomSenderService, type DicomServerConfig } from './index'
+import { Effect, Layer } from 'effect'
+import { DicomSender, DicomSenderLive, type DicomServerConfig } from './index'
+import { ConfigServiceLive } from '../config'
+import type { DicomFile, DicomStudy } from '@/types/dicom'
 
-const mockConfig: DicomServerConfig = {
-  url: 'http://localhost:8042',
-  description: 'Test server'
-}
+describe('DicomSender Service (Effect Service Testing)', () => {
+  // Test the service through Effect.provide pattern
+  const testLayer = Layer.mergeAll(
+    DicomSenderLive,
+    ConfigServiceLive
+  )
+  
+  const runTest = <A, E>(effect: Effect.Effect<A, E, DicomSender>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(testLayer)))
 
-describe('DicomSender', () => {
-  it('should create a DicomSender instance', () => {
-    const sender = new DicomSender(mockConfig)
-    expect(sender).toBeDefined()
+  describe('Connection testing', () => {
+    it('should test connection', async () => {
+      // Since we don't have a real server, this should fail gracefully
+      await expect(
+        runTest(Effect.gen(function* () {
+          const sender = yield* DicomSender
+          return yield* sender.testConnection
+        }))
+      ).rejects.toThrow()
+    })
   })
 
-  it('should have async sendStudy method', () => {
-    const sender = new DicomSender(mockConfig)
-    expect(typeof sender.sendStudy).toBe('function')
+  describe('File sending', () => {
+    it('should send DICOM file', async () => {
+      const mockFile: DicomFile = {
+        id: 'test-file',
+        fileName: 'test.dcm',
+        fileSize: 1000,
+        arrayBuffer: new ArrayBuffer(1000),
+        anonymized: true,
+        metadata: {
+          patientName: 'Test Patient',
+          patientId: 'TEST001',
+          studyInstanceUID: '1.2.3.4.5',
+          studyDate: '20241201',
+          studyDescription: 'Test Study',
+          seriesInstanceUID: '1.2.3.4.6',
+          seriesDescription: 'Test Series',
+          modality: 'CT',
+          sopInstanceUID: '1.2.3.4.7'
+        }
+      }
+
+      // Should fail gracefully without a real server
+      await expect(
+        runTest(Effect.gen(function* () {
+          const sender = yield* DicomSender
+          return yield* sender.sendFile(mockFile)
+        }))
+      ).rejects.toThrow()
+    })
+
+    it('should send study with multiple files', async () => {
+      const mockStudy: DicomStudy = {
+        studyInstanceUID: '1.2.3.4.5',
+        patientName: 'Test Patient',
+        patientId: 'TEST001',
+        studyDate: '20241201',
+        studyDescription: 'Test Study',
+        series: []
+      }
+
+      // Empty study should return empty array
+      const result = await runTest(Effect.gen(function* () {
+        const sender = yield* DicomSender
+        return yield* sender.sendStudy(mockStudy)
+      }))
+      
+      expect(result).toEqual([])
+    })
   })
 
-  it('should have async testConnection method', () => {
-    const sender = new DicomSender(mockConfig)
-    expect(typeof sender.testConnection).toBe('function')
-  })
+  describe('Configuration', () => {
+    it('should get current config', async () => {
+      const config = await runTest(Effect.gen(function* () {
+        const sender = yield* DicomSender
+        return yield* sender.getConfig
+      }))
+      
+      expect(config).toBeDefined()
+      expect(config.url).toBeDefined()
+    })
 
-  it('should have updateConfig method', () => {
-    const sender = new DicomSender(mockConfig)
-    expect(typeof sender.updateConfig).toBe('function')
-  })
+    it('should validate server config', async () => {
+      const invalidConfig = {
+        url: '',
+        description: 'Invalid server'
+      }
 
-  it('should have getConfig method', () => {
-    const sender = new DicomSender(mockConfig)
-    expect(typeof sender.getConfig).toBe('function')
-  })
-
-  it('should create service using factory function', () => {
-    const sender = createDicomSenderService(mockConfig)
-    expect(sender).toBeInstanceOf(DicomSender)
+      await expect(
+        runTest(Effect.gen(function* () {
+          const sender = yield* DicomSender
+          return yield* sender.updateConfig(invalidConfig)
+        }))
+      ).rejects.toThrow()
+    })
   })
 })

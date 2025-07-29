@@ -1,8 +1,9 @@
 <script setup lang="ts">
 import { ref, computed, reactive } from 'vue'
-import { useDicomWorkflow } from '@/composables/useDicomServices'
+import type { DicomFile } from '@/types/dicom'
+import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
-import { FileHandler } from '@/services/fileHandler'
+import { FileHandlerWrapper } from '@/services/runtime/fileHandler'
 import { groupDicomFilesByStudy } from '@/utils/dicomGrouping'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
@@ -13,7 +14,7 @@ import { Progress } from '@/components/ui/progress'
 
 // Initialize the workflow composable and file handler
 const workflow = useDicomWorkflow()
-const fileHandler = new FileHandler()
+const fileHandler = new FileHandlerWrapper()
 
 // Component state
 const selectedFiles = ref<File[]>([])
@@ -52,7 +53,7 @@ async function handleDrop(event: DragEvent) {
   if (files && files.length > 0) {
     const fileArray = Array.from(files)
     selectedFiles.value = fileArray
-    
+
     // Auto-process files when they're dropped
     await processFiles()
   }
@@ -72,7 +73,7 @@ async function handleFileInput(event: Event) {
   if (target.files) {
     const files = Array.from(target.files)
     selectedFiles.value = files
-    
+
     // Auto-process files when they're selected
     await processFiles()
   }
@@ -83,10 +84,10 @@ async function processFiles() {
   if (selectedFiles.value.length === 0) return
 
   successMessage.value = ''
-  
+
   // Process each file and extract DICOM files from ZIP archives
   let dicomFiles: DicomFile[] = []
-  
+
   for (const file of selectedFiles.value) {
     if (file.name.toLowerCase().endsWith('.zip')) {
       // Extract DICOM files from ZIP archive
@@ -100,7 +101,7 @@ async function processFiles() {
   }
 
   if (dicomFiles.length === 0) {
-    workflow.errors.value.push({ message: 'No DICOM files found in the uploaded files.' })
+    workflow.errors.value.push(new Error('No DICOM files found in the uploaded files.'))
     return
   }
 
@@ -118,11 +119,11 @@ async function processFiles() {
   const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(parsedFiles, config, concurrency.value)
   if (anonymizedFiles.length > 0) {
     successMessage.value = `Successfully processed ${anonymizedFiles.length} files!`
-    
+
     // Group files by patient/study/series based on DICOM metadata
     const groupedStudies = groupDicomFilesByStudy(anonymizedFiles)
     studies.value = groupedStudies
-    
+
     console.log(`Grouped into ${groupedStudies.length} studies across ${new Set(groupedStudies.map(s => s.patientId)).size} patients`)
   }
 }
@@ -149,7 +150,7 @@ async function sendStudy(study: DicomStudy) {
 }
 
 function handleAnonymizeSelected(selectedStudies: DicomStudy[]) {
-  // Process all files again 
+  // Process all files again
   processFiles()
 }
 
@@ -182,7 +183,10 @@ const processZipFile = (file: File) => {
     <div class="mx-auto max-w-7xl space-y-6">
       <!-- Header -->
       <div class="text-center">
-        <h1 data-testid="app-title" class="text-4xl font-bold tracking-tight">DICOM Anonymizer & Sender</h1>
+        <h1
+          data-testid="app-title"
+          class="text-4xl font-bold tracking-tight"
+        >DICOM Anonymizer & Sender</h1>
         <p class="text-muted-foreground mt-2">Drop DICOM files or ZIP archives to get started</p>
       </div>
 
@@ -200,7 +204,10 @@ const processZipFile = (file: File) => {
           <div class="text-center space-y-4">
             <div class="text-6xl text-muted-foreground">📁</div>
             <div>
-              <p data-testid="drop-zone-text" class="text-lg text-muted-foreground mb-4">Drop DICOM files here or</p>
+              <p
+                data-testid="drop-zone-text"
+                class="text-lg text-muted-foreground mb-4"
+              >Drop DICOM files here or</p>
               <input
                 type="file"
                 accept=".dcm,.zip"
@@ -240,7 +247,10 @@ const processZipFile = (file: File) => {
           >
             ×
           </Button>
-          <div v-if="error.includes('browser')" class="mt-2 text-sm">
+          <div
+            v-if="error.includes('browser')"
+            class="mt-2 text-sm"
+          >
             <p>This application requires modern browser features for optimal performance.</p>
             <p>Supported browsers: Chrome 86+, Edge 86+, Safari 15.2+, Firefox 111+</p>
           </div>
@@ -255,19 +265,36 @@ const processZipFile = (file: File) => {
             <p class="text-muted-foreground">
               {{ isRestoring ? 'Restoring previous session...' : 'Processing files...' }}
             </p>
-            <Progress v-if="isRestoring && restoreProgress > 0" :value="restoreProgress" class="w-full" />
+            <Progress
+              v-if="isRestoring && restoreProgress > 0"
+              :value="restoreProgress"
+              class="w-full"
+            />
           </div>
         </CardContent>
       </Card>
 
       <!-- Toolbar -->
-      <div v-if="hasFiles" class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border" data-testid="toolbar">
+      <div
+        v-if="hasFiles"
+        class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border"
+        data-testid="toolbar"
+      >
         <div class="flex items-center gap-3">
-          <Badge variant="outline" data-testid="files-count-badge">{{ totalFiles }} Files</Badge>
-          <Badge variant="default" data-testid="anonymized-count-badge">{{ anonymizedFiles }} Anonymized</Badge>
-          <Badge variant="secondary" data-testid="studies-count-badge">{{ studies.length }} Studies</Badge>
+          <Badge
+            variant="outline"
+            data-testid="files-count-badge"
+          >{{ totalFiles }} Files</Badge>
+          <Badge
+            variant="default"
+            data-testid="anonymized-count-badge"
+          >{{ anonymizedFiles }} Anonymized</Badge>
+          <Badge
+            variant="secondary"
+            data-testid="studies-count-badge"
+          >{{ studies.length }} Studies</Badge>
         </div>
-        
+
         <div class="flex items-center gap-2">
           <Button
             @click="anonymizeAllFiles"
@@ -300,7 +327,10 @@ const processZipFile = (file: File) => {
       </div>
 
       <!-- Studies Data Table -->
-      <Card v-if="studies.length > 0" data-testid="studies-table-card">
+      <Card
+        v-if="studies.length > 0"
+        data-testid="studies-table-card"
+      >
         <CardHeader>
           <CardTitle data-testid="studies-table-title">DICOM Studies</CardTitle>
           <CardDescription>

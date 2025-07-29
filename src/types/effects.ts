@@ -13,6 +13,7 @@ export class ParseError extends Data.TaggedError("ParseError")<{
 
 export class ValidationError extends Data.TaggedError("ValidationError")<{
   readonly message: string
+  readonly fileName?: string
   readonly field?: string
   readonly value?: unknown
 }> {}
@@ -43,7 +44,22 @@ export class ConfigurationError extends Data.TaggedError("ConfigurationError")<{
   readonly value?: unknown
 }> {}
 
+export class FileHandlerError extends Data.TaggedError("FileHandlerError")<{
+  readonly message: string
+  readonly fileName?: string
+  readonly cause?: unknown
+}> {}
+
+export class StorageError extends Data.TaggedError("StorageError")<{
+  readonly message: string
+  readonly operation?: string
+  readonly fileName?: string
+  readonly cause?: unknown
+}> {}
+
 // Union types for different service error domains
 export type DicomProcessorError = ParseError | ValidationError | FileSystemError
 export type AnonymizerError = AnonymizationError | ConfigurationError | FileSystemError
 export type DicomSenderError = NetworkError | ValidationError | ConfigurationError
+export type FileHandlerErrorType = FileHandlerError | ValidationError | FileSystemError
+export type StorageErrorType = StorageError | ValidationError

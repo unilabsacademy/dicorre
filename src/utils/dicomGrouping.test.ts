@@ -1,18 +1,17 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { FileHandler } from '@/services/fileHandler'
-import { DicomProcessor } from '@/services/dicomProcessor'
+import { Effect } from 'effect'
+import { FileHandler, FileHandlerLive } from '@/services/fileHandler'
+import { DicomProcessor, DicomProcessorLive } from '@/services/dicomProcessor'
 import { groupDicomFilesByStudy, getDicomGroupingStats } from './dicomGrouping'
 
 describe('DICOM Grouping Utility', () => {
-  let fileHandler: FileHandler
-  let dicomProcessor: DicomProcessor
-
-  beforeEach(() => {
-    fileHandler = new FileHandler()
-    dicomProcessor = new DicomProcessor()
-  })
+  const runFileHandlerTest = <A, E>(effect: Effect.Effect<A, E, FileHandler>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(FileHandlerLive)))
+    
+  const runDicomProcessorTest = <A, E>(effect: Effect.Effect<A, E, DicomProcessor>) =>
+    Effect.runPromise(effect.pipe(Effect.provide(DicomProcessorLive)))
 
   it('should correctly group 3 cases with 3 series each (18 files total)', async () => {
     // Load and extract the test ZIP file
@@ -20,10 +19,16 @@ describe('DICOM Grouping Utility', () => {
     const zipFile = new File([readFileSync(zipPath)], '3_cases_each_with_3_series_6_images.zip')
     
     // Extract and parse DICOM files
-    const extractedFiles = await fileHandler.extractZipFile(zipFile)
+    const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
+      const fileHandler = yield* FileHandler
+      return yield* fileHandler.extractZipFile(zipFile)
+    }))
     expect(extractedFiles.length).toBe(18)
     
-    const parsedFiles = extractedFiles.map(file => dicomProcessor.parseDicomFile(file))
+    const parsedFiles = await runDicomProcessorTest(Effect.gen(function* () {
+      const processor = yield* DicomProcessor
+      return yield* processor.parseFiles(extractedFiles)
+    }))
     expect(parsedFiles.length).toBe(18)
     
     // Group files using our utility
@@ -62,10 +67,16 @@ describe('DICOM Grouping Utility', () => {
     const zipFile = new File([readFileSync(zipPath)], '1_case_3_series_6_images.zip')
     
     // Extract and parse DICOM files
-    const extractedFiles = await fileHandler.extractZipFile(zipFile)
+    const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
+      const fileHandler = yield* FileHandler
+      return yield* fileHandler.extractZipFile(zipFile)
+    }))
     expect(extractedFiles.length).toBe(6)
     
-    const parsedFiles = extractedFiles.map(file => dicomProcessor.parseDicomFile(file))
+    const parsedFiles = await runDicomProcessorTest(Effect.gen(function* () {
+      const processor = yield* DicomProcessor
+      return yield* processor.parseFiles(extractedFiles)
+    }))
     expect(parsedFiles.length).toBe(6)
     
     // Group files using our utility
