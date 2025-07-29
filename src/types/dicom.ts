@@ -10,6 +10,11 @@ export interface DicomFile {
 export interface DicomMetadata {
   patientName?: string
   patientId?: string
+  accessionNumber?: string
+  patientBirthDate?: string
+  patientSex?: string
+  patientHeight?: number
+  patientWeight?: number
   studyInstanceUID?: string
   studyDate?: string
   studyDescription?: string
@@ -17,6 +22,8 @@ export interface DicomMetadata {
   seriesDescription?: string
   modality?: string
   sopInstanceUID?: string
+  instanceNumber?: number
+  transferSyntaxUID?: string
 }
 
 export interface DicomStudy {

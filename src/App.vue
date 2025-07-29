@@ -31,7 +31,6 @@ const config = reactive<AnonymizationConfig>({
   dateJitterDays: 31
 })
 
-// For compatibility with existing template
 const studies = ref<DicomStudy[]>([])
 const isProcessing = workflow.loading
 const error = computed(() => workflow.errors.value[0]?.message || null)
@@ -79,22 +78,18 @@ async function handleFileInput(event: Event) {
   }
 }
 
-// Process files (parse + anonymize)
 async function processFiles() {
   if (selectedFiles.value.length === 0) return
 
   successMessage.value = ''
-
-  // Process each file and extract DICOM files from ZIP archives
   let dicomFiles: DicomFile[] = []
 
+  // Extract and read DICOM files
   for (const file of selectedFiles.value) {
     if (file.name.toLowerCase().endsWith('.zip')) {
-      // Extract DICOM files from ZIP archive
       const extractedFiles = await fileHandler.extractZipFile(file)
       dicomFiles.push(...extractedFiles)
     } else {
-      // Process single DICOM file
       const dicomFile = await fileHandler.readSingleDicomFile(file)
       dicomFiles.push(dicomFile)
     }

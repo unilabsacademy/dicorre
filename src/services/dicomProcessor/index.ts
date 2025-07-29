@@ -12,7 +12,7 @@ export class DicomProcessor extends Context.Tag("DicomProcessor")<
     readonly groupFilesByStudy: (files: DicomFile[]) => Effect.Effect<DicomStudy[], DicomProcessorError>
     readonly validateFile: (file: DicomFile) => Effect.Effect<void, ValidationError>
   }
->() {}
+>() { }
 
 /**
  * Internal implementation class
@@ -73,7 +73,7 @@ class DicomProcessorImpl {
       const result = yield* Effect.try({
         try: () => {
           console.log(`Parsing DICOM file: ${file.fileName}`)
-          
+
           // Parse with dcmjs
           const dataset = dcmjs.data.DicomMessage.readFile(file.arrayBuffer)
           const dict = dataset.dict
@@ -138,15 +138,15 @@ class DicomProcessorImpl {
    * Group files by patient/study/series
    */
   static groupFilesByStudy = (files: DicomFile[]): Effect.Effect<DicomStudy[], DicomProcessorError> =>
-    Effect.gen(function* () {
+    Effect.sync(() => {
       const studyMap = new Map<string, DicomStudy>()
-      
+
       for (const file of files) {
         if (!file.metadata) {
           console.warn(`File ${file.fileName} has no metadata, skipping`)
           continue
         }
-        
+
         const {
           patientId,
           patientName,
@@ -157,14 +157,14 @@ class DicomProcessorImpl {
           seriesDescription,
           modality
         } = file.metadata
-        
+
         // Create study key that includes both patient and study info
         const studyKey = `${patientId}|${studyInstanceUID}`
-        
+
         // Get or create study
         if (!studyMap.has(studyKey)) {
           studyMap.set(studyKey, {
-            studyInstanceUID,
+            studyInstanceUID: studyInstanceUID || '',
             patientName: patientName || 'Unknown',
             patientId: patientId || 'Unknown',
             studyDate: studyDate || new Date().toISOString().split('T')[0].replace(/-/g, ''),
@@ -172,40 +172,40 @@ class DicomProcessorImpl {
             series: []
           })
         }
-        
+
         const study = studyMap.get(studyKey)!
-        
+
         // Find or create series
         let series = study.series.find(s => s.seriesInstanceUID === seriesInstanceUID)
         if (!series) {
           series = {
-            seriesInstanceUID,
+            seriesInstanceUID: seriesInstanceUID || '',
             seriesDescription: seriesDescription || 'Unknown Series',
             modality: modality || 'Unknown',
             files: []
           }
           study.series.push(series)
         }
-        
+
         // Add file to series
         series.files.push(file)
       }
-      
+
       // Convert map to array and sort
       const studies = Array.from(studyMap.values())
-      
+
       // Sort studies by patient ID and study date
       studies.sort((a, b) => {
-        const patientCompare = a.patientId.localeCompare(b.patientId)
+        const patientCompare = a.patientId?.localeCompare(b.patientId || '') || 0
         if (patientCompare !== 0) return patientCompare
-        return a.studyDate.localeCompare(b.studyDate)
+        return a.studyDate?.localeCompare(b.studyDate || '') || 0
       })
-      
+
       // Sort series within each study
       studies.forEach(study => {
         study.series.sort((a, b) => a.seriesInstanceUID.localeCompare(b.seriesInstanceUID))
       })
-      
+
       return studies
     })
 }
