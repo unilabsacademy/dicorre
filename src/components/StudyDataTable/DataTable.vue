@@ -56,6 +56,7 @@ const table = useVueTable({
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
   enableRowSelection: true,
+  getRowId: (row: any) => row.studyInstanceUID, // Use stable ID based on study UID
   onSortingChange: sorting.value ? (updaterOrValue) => {
     sorting.value = typeof updaterOrValue === 'function'
       ? updaterOrValue(sorting.value)

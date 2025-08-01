@@ -17,7 +17,7 @@ const { getStudyProgress } = useAnonymizationProgress()
 const progressInfo = getStudyProgress(props.studyId)
 
 const status = computed(() => {
-  // Use real-time progress info from global state
+  // Use real-time progress info from global state (highest priority)
   if (progressInfo.value?.isProcessing) {
     return {
       showProgress: true,
@@ -26,7 +26,8 @@ const status = computed(() => {
     }
   }
   
-  if (props.anonymizedFiles === props.totalFiles) {
+  // Check if all files are anonymized (use actual file data, not stale props)
+  if (props.anonymizedFiles === props.totalFiles && props.anonymizedFiles > 0) {
     return {
       showProgress: false,
       text: 'Anonymized',
@@ -34,6 +35,7 @@ const status = computed(() => {
     }
   }
   
+  // Check if some files are anonymized
   if (props.anonymizedFiles > 0) {
     return {
       showProgress: false,

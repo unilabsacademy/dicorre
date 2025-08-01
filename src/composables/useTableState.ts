@@ -12,7 +12,7 @@ export function useTableState() {
   const getSelectedStudies = (data: DicomStudy[]) => {
     return Object.keys(rowSelection.value)
       .filter(key => rowSelection.value[key])
-      .map(index => data[parseInt(index)])
+      .map(studyUID => data.find(study => study.studyInstanceUID === studyUID))
       .filter(Boolean)
   }
 
