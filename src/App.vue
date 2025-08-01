@@ -19,6 +19,7 @@ import {
   DropdownMenuItem,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
+import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import {
   Shield,
   Send,
@@ -60,6 +61,16 @@ const restoreProgress = ref(0)
 const isDragOver = ref(false)
 const isGlobalDragOver = ref(false)
 const dragCounter = ref(0)
+
+// File processing progress state
+const fileProcessingState = ref<{
+  isProcessing: boolean
+  fileName: string
+  currentStep: string
+  progress: number
+  totalFiles?: number
+  currentFileIndex?: number
+} | null>(null)
 
 // Table state management
 const tableState = useTableState()
@@ -150,41 +161,162 @@ async function processNewFiles(newUploadedFiles: File[]) {
   successMessage.value = ''
   let dicomFiles: DicomFile[] = []
 
-  // Extract and read DICOM files
-  for (const file of newUploadedFiles) {
-    if (file.name.toLowerCase().endsWith('.zip')) {
-      const extractedFiles = await fileHandler.extractZipFile(file)
-      dicomFiles.push(...extractedFiles)
-    } else {
-      const dicomFile = await fileHandler.readSingleDicomFile(file)
-      dicomFiles.push(dicomFile)
+  try {
+    // Process each uploaded file with simulated progress tracking
+    for (let i = 0; i < newUploadedFiles.length; i++) {
+      const file = newUploadedFiles[i]
+      
+      // Initialize progress for this file
+      fileProcessingState.value = {
+        isProcessing: true,
+        fileName: file.name,
+        currentStep: file.name.toLowerCase().endsWith('.zip') ? 'Extracting ZIP archive...' : 'Reading DICOM file...',
+        progress: 0,
+        totalFiles: newUploadedFiles.length,
+        currentFileIndex: i
+      }
+
+      // Simulate progress for ZIP files (they take longer)
+      if (file.name.toLowerCase().endsWith('.zip')) {
+        // Simulate gradual progress up to 90%
+        const progressSteps = [10, 25, 40, 60, 75, 90]
+        const stepTexts = [
+          'Reading archive structure...',
+          'Extracting files...',
+          'Validating DICOM files...',
+          'Processing file headers...',
+          'Analyzing metadata...',
+          'Finalizing extraction...'
+        ]
+
+        for (let step = 0; step < progressSteps.length; step++) {
+          fileProcessingState.value = {
+            ...fileProcessingState.value,
+            currentStep: stepTexts[step],
+            progress: progressSteps[step]
+          }
+          
+          // Add small delay to show progress
+          await new Promise(resolve => setTimeout(resolve, 150))
+        }
+
+        // Now do the actual extraction
+        const extractedFiles = await fileHandler.extractZipFile(file)
+        dicomFiles.push(...extractedFiles)
+        
+        // Complete this file's progress
+        fileProcessingState.value = {
+          ...fileProcessingState.value,
+          currentStep: `Extracted ${extractedFiles.length} DICOM files`,
+          progress: 100
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 300))
+      } else {
+        // For single files, show quick progress
+        fileProcessingState.value = {
+          ...fileProcessingState.value,
+          progress: 50
+        }
+        
+        const dicomFile = await fileHandler.readSingleDicomFile(file)
+        dicomFiles.push(dicomFile)
+        
+        fileProcessingState.value = {
+          ...fileProcessingState.value,
+          currentStep: 'File processed',
+          progress: 100
+        }
+        
+        await new Promise(resolve => setTimeout(resolve, 200))
+      }
+    }
+
+    if (dicomFiles.length === 0) {
+      workflow.errors.value.push(new Error('No DICOM files found in the uploaded files.'))
+      fileProcessingState.value = null
+      return
+    }
+
+    console.log(`Extracted ${dicomFiles.length} new DICOM files from ${newUploadedFiles.length} uploaded files`)
+
+    // Parse files with simulated progress tracking
+    fileProcessingState.value = {
+      isProcessing: true,
+      fileName: `${dicomFiles.length} DICOM files`,
+      currentStep: 'Parsing DICOM metadata...',
+      progress: 0,
+      totalFiles: dicomFiles.length,
+      currentFileIndex: 0
+    }
+
+    // Simulate parsing progress
+    const parsingSteps = [20, 50, 80, 90]
+    const parsingTexts = [
+      'Reading DICOM headers...',
+      'Extracting metadata...',
+      'Validating file structure...',
+      'Processing complete...'
+    ]
+
+    for (let step = 0; step < parsingSteps.length - 1; step++) {
+      fileProcessingState.value = {
+        ...fileProcessingState.value,
+        currentStep: parsingTexts[step],
+        progress: parsingSteps[step]
+      }
+      await new Promise(resolve => setTimeout(resolve, 200))
+    }
+
+    // Do the actual parsing
+    const parsedFiles = await workflow.processor.parseFiles(dicomFiles, concurrency.value)
+    
+    if (parsedFiles.length === 0) {
+      fileProcessingState.value = null
+      return
+    }
+
+    // Update to 90% and wait there
+    fileProcessingState.value = {
+      ...fileProcessingState.value,
+      currentStep: 'Organizing into studies...',
+      progress: 90
+    }
+    
+    await new Promise(resolve => setTimeout(resolve, 300))
+
+    // Add to existing parsed files for later anonymization
+    parsedDicomFiles.value = [...parsedDicomFiles.value, ...parsedFiles]
+
+    // Update extracted files reference with parsed files (which have metadata)
+    extractedDicomFiles.value = [...extractedDicomFiles.value, ...parsedFiles]
+
+    // Group all parsed files so that the UI can display studies
+    const groupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
+    studies.value = groupedStudies
+
+    console.log(`Parsed ${parsedFiles.length} new files, total: ${parsedDicomFiles.value.length} files in ${groupedStudies.length} studies`)
+
+    // Complete progress
+    fileProcessingState.value = {
+      ...fileProcessingState.value,
+      fileName: `Processing complete`,
+      currentStep: `Successfully processed ${parsedFiles.length} files into ${groupedStudies.length} studies`,
+      progress: 100
+    }
+
+    // Hide progress after showing completion
+    setTimeout(() => {
+      fileProcessingState.value = null
+    }, 2000)
+
+  } catch (error) {
+    console.error('Error processing files:', error)
+    fileProcessingState.value = null
+    if (error instanceof Error) {
+      workflow.errors.value.push(error)
     }
   }
-
-  if (dicomFiles.length === 0) {
-    workflow.errors.value.push(new Error('No DICOM files found in the uploaded files.'))
-    return
-  }
-
-  console.log(`Extracted ${dicomFiles.length} new DICOM files from ${newUploadedFiles.length} uploaded files`)
-
-  // Parse files (no anonymization here)
-  const parsedFiles = await workflow.processor.parseFiles(dicomFiles, concurrency.value)
-  if (parsedFiles.length === 0) {
-    return
-  }
-
-  // Add to existing parsed files for later anonymization
-  parsedDicomFiles.value = [...parsedDicomFiles.value, ...parsedFiles]
-
-  // Update extracted files reference with parsed files (which have metadata)
-  extractedDicomFiles.value = [...extractedDicomFiles.value, ...parsedFiles]
-
-  // Group all parsed files so that the UI can display studies
-  const groupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
-  studies.value = groupedStudies
-
-  console.log(`Parsed ${parsedFiles.length} new files, total: ${parsedDicomFiles.value.length} files in ${groupedStudies.length} studies`)
 }
 
 async function processFiles() {
@@ -262,6 +394,7 @@ function clearFiles() {
   studies.value = []
   workflow.resetAll()
   successMessage.value = ''
+  fileProcessingState.value = null
   clearSession()
   tableState.clearSelection()
 }
@@ -369,7 +502,7 @@ onMounted(() => {
             </p>
             <Progress
               v-if="isRestoring && restoreProgress > 0"
-              :value="restoreProgress"
+              :model-value="restoreProgress"
               class="w-full"
             />
           </div>
@@ -456,6 +589,16 @@ onMounted(() => {
           </DropdownMenu>
         </div>
       </div>
+
+      <!-- File Processing Progress -->
+      <FileProcessingProgress
+        v-if="fileProcessingState?.isProcessing"
+        :file-name="fileProcessingState.fileName"
+        :current-step="fileProcessingState.currentStep"
+        :progress="fileProcessingState.progress"
+        :total-files="fileProcessingState.totalFiles"
+        :current-file-index="fileProcessingState.currentFileIndex"
+      />
 
       <!-- File Drop Zone -->
       <Card
