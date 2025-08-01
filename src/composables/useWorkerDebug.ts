@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
-import { getWorkerManager } from '@/services/workerManager'
-import type { WorkerDetail, DebugMessage } from '@/services/workerManager'
+import { getWorkerManager } from '@/workers/workerManager'
+import type { WorkerDetail, DebugMessage } from '@/workers/workerManager'
 
 // Global reactive state for worker debugging
 const workerStatus = ref({

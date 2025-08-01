@@ -4,7 +4,7 @@ import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { Anonymizer, AnonymizerLive, type AnonymizationProgress } from '@/services/anonymizer'
 import { DicomProcessor, DicomProcessorLive } from '@/services/dicomProcessor'
 import { ConfigServiceLive } from '@/services/config'
-import { getWorkerManager } from '@/services/workerManager'
+import { getWorkerManager } from '@/workers/workerManager'
 
 const anonymizerLayer = Layer.mergeAll(
   AnonymizerLive,
@@ -124,7 +124,7 @@ export function useAnonymizer() {
                     const opfsStorage = yield* Effect.succeed({
                       async loadFile(fileId: string) {
                         // Use the OPFSWorkerHelper to load the file
-                        const { OPFSWorkerHelper } = await import('@/services/opfsWorkerHelper')
+                        const { OPFSWorkerHelper } = await import('@/services/opfsStorage/opfsWorkerHelper')
                         return await OPFSWorkerHelper.loadFile(fileId)
                       }
                     })

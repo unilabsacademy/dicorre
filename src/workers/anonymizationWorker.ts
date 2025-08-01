@@ -8,7 +8,7 @@ import {
   BasicProfile,
 } from '@umessen/dicom-deidentifier'
 // AnonymizationConfig not needed - we create config in worker from simple options
-import { OPFSWorkerHelper } from '@/services/opfsWorkerHelper'
+import { OPFSWorkerHelper } from '@/services/opfsStorage/opfsWorkerHelper'
 
 // Simple config options that can be serialized
 interface AnonymizationOptions {

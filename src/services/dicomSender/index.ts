@@ -4,6 +4,8 @@ const { DICOMwebClient } = api
 import type { DicomFile, DicomStudy } from '@/types/dicom'
 import { NetworkError, ValidationError, type DicomSenderError } from '@/types/effects'
 import { ConfigService } from '../config'
+import { getSendingWorkerManager, type SendingJob } from '../../workers/workerManager'
+import { getTransmissionTracker } from './transmissionTracker'
 
 export interface DicomServerConfig {
   url: string
@@ -31,6 +33,9 @@ export class DicomSender extends Context.Tag("DicomSender")<
     readonly sendStudy: (study: DicomStudy, options?: { concurrency?: number; maxRetries?: number; onProgress?: (progress: SendingProgress) => void }) => Effect.Effect<DicomFile[], DicomSenderError>
     readonly updateConfig: (config: DicomServerConfig) => Effect.Effect<void, ValidationError>
     readonly getConfig: Effect.Effect<DicomServerConfig, never>
+    readonly getTransmissionState: (studyId: string) => Effect.Effect<any, never>
+    readonly getAllTransmissionStates: Effect.Effect<any[], never>
+    readonly isTransmitting: (studyId: string) => Effect.Effect<boolean, never>
   }
 >() {}
 
@@ -154,14 +159,15 @@ class DicomSenderImpl {
     })
 
   /**
-   * Send study with progress tracking and error handling
+   * Send study with progress tracking and error handling using worker pool
    */
   static sendStudy = (
     study: DicomStudy,
     options: { concurrency?: number; maxRetries?: number; onProgress?: (progress: SendingProgress) => void } = {}
   ): Effect.Effect<DicomFile[], DicomSenderError, ConfigService> =>
     Effect.gen(function* () {
-      const { concurrency = 2, maxRetries = 3, onProgress } = options
+      const { concurrency = 2, onProgress } = options
+      const config = yield* DicomSenderImpl.getConfigInternal()
 
       // Collect all files from the study
       const allFiles: DicomFile[] = []
@@ -174,53 +180,93 @@ class DicomSenderImpl {
         return []
       }
 
-      let completed = 0
-      const total = allFiles.length
+      console.log(`Sending study ${study.studyInstanceUID} with ${allFiles.length} files using worker pool`)
 
-      console.log(`Sending study ${study.studyInstanceUID} with ${total} files`)
+      // Get transmission tracker
+      const transmissionTracker = getTransmissionTracker()
+      
+      // Start tracking transmission
+      transmissionTracker.startTransmission(study.studyInstanceUID, allFiles.length)
 
-      // Create sending effects with progress tracking
-      const sendingEffects = allFiles.map((file) =>
-        Effect.gen(function* () {
-          if (onProgress) {
-            onProgress({
-              total,
-              completed,
-              percentage: Math.round((completed / total) * 100),
-              currentFile: file.fileName
+      // Convert to worker-compatible format
+      const workerManager = getSendingWorkerManager()
+      
+      // Create a promise that will be resolved when the worker completes
+      const sendingPromise = new Promise<DicomFile[]>((resolve, reject) => {
+        const sendingJob: SendingJob = {
+          studyId: study.studyInstanceUID,
+          files: allFiles,
+          serverConfig: {
+            url: config.url,
+            headers: config.headers,
+            auth: config.auth
+          },
+          concurrency,
+          onProgress: onProgress ? (progress) => {
+            // Update transmission tracker
+            transmissionTracker.updateProgress(study.studyInstanceUID, {
+              studyId: study.studyInstanceUID,
+              total: progress.total,
+              completed: progress.completed,
+              percentage: progress.percentage,
+              currentFile: progress.currentFile
             })
-          }
-
-          // Add retry logic
-          const sendWithRetry = Effect.retry(
-            DicomSenderImpl.sendFile(file),
-            {
-              times: maxRetries,
-              schedule: Effect.Schedule.exponential('100 millis')
-            }
-          )
-
-          yield* sendWithRetry
-          
-          completed++
-          if (onProgress) {
+            
+            // Convert worker progress format to DicomSender progress format
             onProgress({
-              total,
-              completed,
-              percentage: Math.round((completed / total) * 100),
-              currentFile: file.fileName
+              total: progress.total,
+              completed: progress.completed,
+              percentage: progress.percentage,
+              currentFile: progress.currentFile
             })
+          } : (progress) => {
+            // Always update transmission tracker even if no onProgress callback
+            transmissionTracker.updateProgress(study.studyInstanceUID, {
+              studyId: study.studyInstanceUID,
+              total: progress.total,
+              completed: progress.completed,
+              percentage: progress.percentage,
+              currentFile: progress.currentFile
+            })
+          },
+          onComplete: (sentFiles) => {
+            console.log(`Successfully sent study ${study.studyInstanceUID} via workers`)
+            // Mark transmission as completed
+            transmissionTracker.completeTransmission(study.studyInstanceUID)
+            resolve(sentFiles)
+          },
+          onError: (error) => {
+            console.error(`Failed to send study ${study.studyInstanceUID} via workers:`, error)
+            // Mark transmission as failed
+            transmissionTracker.failTransmission(study.studyInstanceUID, error.message)
+            reject(new NetworkError({
+              message: `Failed to send study via workers: ${error.message}`,
+              serverUrl: config.url,
+              cause: error
+            }))
           }
+        }
 
-          return file
-        })
-      )
+        // Queue the job with the worker manager
+        workerManager.sendStudy(sendingJob)
+      })
 
-      // Execute all sending operations concurrently
-      const results = yield* Effect.all(sendingEffects, { concurrency, batching: true })
+      // Convert promise to Effect
+      const result = yield* Effect.tryPromise({
+        try: () => sendingPromise,
+        catch: (error) => {
+          if (error instanceof NetworkError) {
+            return error
+          }
+          return new NetworkError({
+            message: `Failed to send study ${study.studyInstanceUID}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+            serverUrl: config.url,
+            cause: error
+          })
+        }
+      })
 
-      console.log(`Successfully sent ${results.length}/${total} files for study ${study.studyInstanceUID}`)
-      return results
+      return result
     })
 
   /**
@@ -257,6 +303,27 @@ class DicomSenderImpl {
     url: '',
     description: 'Default DICOM Server'
   })
+
+  /**
+   * Get transmission state for a study
+   */
+  static getTransmissionState = (studyId: string) => Effect.succeed(
+    getTransmissionTracker().getState(studyId)
+  )
+
+  /**
+   * Get all transmission states
+   */
+  static getAllTransmissionStates = Effect.succeed(
+    getTransmissionTracker().getAllStates()
+  )
+
+  /**
+   * Check if a study is currently being transmitted
+   */
+  static isTransmitting = (studyId: string) => Effect.succeed(
+    getTransmissionTracker().isTransmitting(studyId)
+  )
 }
 
 /**
@@ -269,6 +336,9 @@ export const DicomSenderLive = Layer.succeed(
     sendFile: DicomSenderImpl.sendFile,
     sendStudy: DicomSenderImpl.sendStudy,
     updateConfig: DicomSenderImpl.updateConfig,
-    getConfig: DicomSenderImpl.getConfig
+    getConfig: DicomSenderImpl.getConfig,
+    getTransmissionState: DicomSenderImpl.getTransmissionState,
+    getAllTransmissionStates: DicomSenderImpl.getAllTransmissionStates,
+    isTransmitting: DicomSenderImpl.isTransmitting
   })
 )
