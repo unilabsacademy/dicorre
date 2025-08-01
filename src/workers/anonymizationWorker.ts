@@ -105,10 +105,82 @@ function createDeidentifierConfig(options: AnonymizationOptions) {
         '00080080': options.replacements?.institution || 'ANONYMOUS_HOSPITAL'
       }
     },
-    keep: []
+    keep: [],
+    // Add custom getReferenceDate function to handle missing PatientBirthDate
+    getReferenceDate: (dictionary: any) => {
+      // Try to find a suitable reference date, fallback to StudyDate or a default date
+      const studyDate = dictionary['00080020']?.Value?.[0]
+      const acquisitionDate = dictionary['00080022']?.Value?.[0] 
+      const contentDate = dictionary['00080023']?.Value?.[0]
+      const patientBirthDate = dictionary['00100030']?.Value?.[0]
+      
+      if (patientBirthDate) {
+        // Parse DICOM date format YYYYMMDD
+        const year = parseInt(patientBirthDate.substring(0, 4))
+        const month = parseInt(patientBirthDate.substring(4, 6)) - 1 // JS months are 0-based
+        const day = parseInt(patientBirthDate.substring(6, 8))
+        return new Date(year, month, day)
+      }
+      
+      // Try other dates if PatientBirthDate is missing
+      const fallbackDate = studyDate || acquisitionDate || contentDate
+      if (fallbackDate) {
+        const year = parseInt(fallbackDate.substring(0, 4))
+        const month = parseInt(fallbackDate.substring(4, 6)) - 1
+        const day = parseInt(fallbackDate.substring(6, 8))
+        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
+          return new Date(year, month, day)
+        }
+      }
+      
+      // Fallback to a default date
+      console.log('[Worker] No valid date found, using default date 1970-01-01')
+      return new Date('1970-01-01')
+    },
+    // Add custom getReferenceTime function to handle missing StudyTime
+    getReferenceTime: (dictionary: any) => {
+      const studyTime = dictionary['00080030']?.Value?.[0]
+      const seriesTime = dictionary['00080031']?.Value?.[0]
+      const acquisitionTime = dictionary['00080032']?.Value?.[0]
+      
+      if (studyTime) {
+        // Parse DICOM time format HHMMSS.FFFFFF
+        const timeStr = studyTime.padEnd(6, '0') // Ensure at least HHMMSS
+        const hours = parseInt(timeStr.substring(0, 2))
+        const minutes = parseInt(timeStr.substring(2, 4))
+        const seconds = parseInt(timeStr.substring(4, 6))
+        
+        if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+          const date = new Date()
+          date.setHours(hours, minutes, seconds, 0)
+          return date
+        }
+      }
+      
+      // Try fallback times
+      const fallbackTime = seriesTime || acquisitionTime
+      if (fallbackTime) {
+        const timeStr = fallbackTime.padEnd(6, '0')
+        const hours = parseInt(timeStr.substring(0, 2))
+        const minutes = parseInt(timeStr.substring(2, 4))
+        const seconds = parseInt(timeStr.substring(4, 6))
+        
+        if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
+          const date = new Date()
+          date.setHours(hours, minutes, seconds, 0)
+          return date
+        }
+      }
+      
+      // Fallback to midnight
+      console.log('[Worker] No valid time found, using default time 00:00:00')
+      const date = new Date()
+      date.setHours(0, 0, 0, 0)
+      return date
+    }
   }
   
-  console.log('[Worker] Created deidentifier config:', config)
+  console.log('[Worker] Created deidentifier config with reference date/time handlers')
   return config
 }
 
