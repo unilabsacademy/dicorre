@@ -17,6 +17,12 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  worker: {
+    format: 'es',
+    plugins: () => [
+      // Ensure workers can use the same module resolution
+    ]
+  },
   server: {
     proxy: {
       // Proxy Orthanc API requests to avoid CORS issues

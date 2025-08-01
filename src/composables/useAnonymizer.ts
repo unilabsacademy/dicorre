@@ -4,6 +4,7 @@ import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { Anonymizer, AnonymizerLive, type AnonymizationProgress } from '@/services/anonymizer'
 import { DicomProcessorLive } from '@/services/dicomProcessor'
 import { ConfigServiceLive } from '@/services/config'
+import { getWorkerManager } from '@/services/workerManager'
 
 const anonymizerLayer = Layer.mergeAll(
   AnonymizerLive,
@@ -14,6 +15,19 @@ const anonymizerLayer = Layer.mergeAll(
 const run = <A>(effect: Effect.Effect<A, any, any>) =>
   // @ts-ignore – Typing clash between provide and env never
   Effect.runPromise(effect.pipe(Effect.provide(anonymizerLayer)))
+
+// Environment variable to control worker usage (can be toggled for debugging)
+let USE_WORKERS = import.meta.env.VITE_USE_WORKERS !== 'false'
+
+// Allow runtime toggling for debugging
+if (typeof window !== 'undefined') {
+  (window as any).toggleWorkers = (enabled?: boolean) => {
+    USE_WORKERS = enabled ?? !USE_WORKERS
+    console.log(`[useAnonymizer] Workers ${USE_WORKERS ? 'ENABLED' : 'DISABLED'}`)
+    return USE_WORKERS
+  }
+  console.log(`[useAnonymizer] Workers are ${USE_WORKERS ? 'ENABLED' : 'DISABLED'}. Use toggleWorkers() to change.`)
+}
 
 export function useAnonymizer() {
   const loading = ref(false)
@@ -50,30 +64,106 @@ export function useAnonymizer() {
     error.value = null
     progress.value = null
     results.value = []
+
     try {
-      const anonymizedFiles = await run(
-        Effect.gen(function* () {
-          const anonymizer = yield* Anonymizer
-          return yield* anonymizer.anonymizeFiles(files, config, {
-            concurrency,
-            onProgress: (p) => {
-              progress.value = p
-              // Call custom progress callback if provided
-              if (options?.onProgress) {
-                options.onProgress(p)
-              }
-            }
-          })
-        })
-      )
-      results.value = anonymizedFiles
-      return anonymizedFiles
+      // Use workers if enabled, otherwise fall back to Effect services
+      if (USE_WORKERS) {
+        console.log('[useAnonymizer] Using WorkerManager for anonymization')
+        return await anonymizeFilesWithWorkers(files, config, concurrency, options)
+      } else {
+        console.log('[useAnonymizer] Using Effect services for anonymization')
+        return await anonymizeFilesWithEffect(files, config, concurrency, options)
+      }
     } catch (e) {
       error.value = e as Error
       return []
     } finally {
       loading.value = false
     }
+  }
+
+  // Worker-based anonymization
+  const anonymizeFilesWithWorkers = async (
+    files: DicomFile[],
+    config: AnonymizationConfig,
+    concurrency: number,
+    options?: { onProgress?: (progress: AnonymizationProgress) => void }
+  ): Promise<DicomFile[]> => {
+    return new Promise((resolve, reject) => {
+      const workerManager = getWorkerManager()
+      const studyId = `study-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+
+      console.log(`[useAnonymizer] Starting OPFS-based worker anonymization for ${files.length} files`)
+      console.log(`[useAnonymizer] Study ID: ${studyId}`)
+
+      workerManager.anonymizeStudy({
+        studyId,
+        files,
+        config,
+        concurrency,
+        onProgress: (progressData) => {
+          const progressInfo: AnonymizationProgress = {
+            total: progressData.total,
+            completed: progressData.completed,
+            percentage: progressData.percentage,
+            currentFile: progressData.currentFile
+          }
+          progress.value = progressInfo
+          options?.onProgress?.(progressInfo)
+        },
+        onComplete: async (anonymizedFileRefs) => {
+          console.log(`[useAnonymizer] Worker anonymization completed: ${anonymizedFileRefs.length} file references`)
+          
+          // Create DicomFile objects with OPFS references - don't load data until needed
+          const anonymizedFiles = anonymizedFileRefs.map((fileRef: any) => {
+            // Find original file to preserve metadata
+            const originalFile = files.find(f => f.id === fileRef.id)
+            
+            return {
+              id: fileRef.id,
+              fileName: fileRef.fileName,
+              fileSize: originalFile?.fileSize || 0, // Preserve original size info
+              arrayBuffer: new ArrayBuffer(0), // Empty - will load from OPFS when needed
+              metadata: originalFile?.metadata,
+              anonymized: true, // Worker completed anonymization
+              opfsFileId: fileRef.opfsFileId // Reference to anonymized file in OPFS
+            }
+          })
+          
+          console.log(`[useAnonymizer] Created ${anonymizedFiles.length} file references to anonymized OPFS files`)
+          results.value = anonymizedFiles
+          resolve(anonymizedFiles)
+        },
+        onError: (err) => {
+          console.error('[useAnonymizer] Worker anonymization error:', err)
+          error.value = err
+          reject(err)
+        }
+      })
+    })
+  }
+
+  // Effect-based anonymization (fallback)
+  const anonymizeFilesWithEffect = async (
+    files: DicomFile[],
+    config: AnonymizationConfig,
+    concurrency: number,
+    options?: { onProgress?: (progress: AnonymizationProgress) => void }
+  ): Promise<DicomFile[]> => {
+    const anonymizedFiles = await run(
+      Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        return yield* anonymizer.anonymizeFiles(files, config, {
+          concurrency,
+          onProgress: (p) => {
+            progress.value = p
+            options?.onProgress?.(p)
+          }
+        })
+      })
+    )
+    results.value = anonymizedFiles
+    return anonymizedFiles
   }
 
   const anonymizeInBatches = async (
@@ -115,6 +205,8 @@ export function useAnonymizer() {
   }
 
   const progressPercentage = computed(() => progress.value?.percentage || 0)
+  
+  const isUsingWorkers = computed(() => USE_WORKERS)
 
   return {
     loading,
@@ -122,6 +214,7 @@ export function useAnonymizer() {
     progress,
     results,
     progressPercentage,
+    isUsingWorkers,
     anonymizeFile,
     anonymizeFiles,
     anonymizeInBatches,

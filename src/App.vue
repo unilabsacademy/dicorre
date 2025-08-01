@@ -21,6 +21,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
+import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import {
   Shield,
   Send,
@@ -472,7 +473,6 @@ onMounted(() => {
 </script>
 
 <template>
-  {{ studyProgressMap }}
   <div
     class="min-h-screen bg-background p-6 relative"
     @dragenter="handleGlobalDragEnter"
@@ -711,5 +711,8 @@ onMounted(() => {
         </CardContent>
       </Card>
     </div>
+
+    <!-- Worker Debug Panel -->
+    <WorkerDebugPanel />
   </div>
 </template>

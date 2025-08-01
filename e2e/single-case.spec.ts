@@ -26,8 +26,25 @@ test('uploads single case zip file and checks correct grouping', async ({ page }
   const anonymizedCountBefore = parseInt(anonymizedCountBeforeText?.match(/(\d+)/)?.[1] || '0');
   expect(anonymizedCountBefore).toBe(0);
 
-  // Click anonymize button
+  // Wait for studies table to appear
+  await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 10000 });
+
+  // Wait a moment for table to fully render
+  await page.waitForTimeout(1000);
+
+  // Select the study by clicking its checkbox (skip header checkbox at index 0)
+  const studyCheckboxes = page.getByRole('checkbox');
+  await studyCheckboxes.nth(1).click(); // Click the first (and only) study checkbox
+
+  // Wait for selection to propagate
+  await page.waitForTimeout(500);
+
+  // Verify that studies are selected - button should now show "Anonymize (1)" for 1 study
   const anonymizeButton = page.getByTestId('anonymize-button');
+  await expect(anonymizeButton).toContainText('Anonymize (1)', { timeout: 5000 });
+  await expect(anonymizeButton).toBeEnabled();
+
+  // Click anonymize button
   await anonymizeButton.click();
   
   // Wait for anonymization to complete - button should be disabled after all files are anonymized

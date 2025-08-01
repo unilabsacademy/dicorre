@@ -37,19 +37,35 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   const anonymizedCountBefore = parseInt(anonymizedCountTextBefore?.match(/(\d+)/)?.[1] || '0');
   expect(anonymizedCountBefore).toBe(0);
 
-  // The anonymize button should be enabled and show "Anonymize All" when no studies are selected
+  // Wait for studies table to appear
+  await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 10000 });
+
+  // Wait a moment for table to fully render
+  await page.waitForTimeout(1000);
+
+  // Select all studies by clicking each study's checkbox
+  const studyCheckboxes = page.getByRole('checkbox');
+  const checkboxCount = await studyCheckboxes.count();
+  
+  // Click all checkboxes except the first one (which is the header checkbox)
+  for (let i = 1; i < checkboxCount; i++) {
+    await studyCheckboxes.nth(i).click();
+  }
+
+  // Wait for selection to propagate
+  await page.waitForTimeout(500);
+
+  // Verify that studies are selected - button should now show "Anonymize (3)" for 3 studies
   const anonymizeButton = page.getByTestId('anonymize-button');
-  await expect(anonymizeButton).toContainText('Anonymize All');
+  await expect(anonymizeButton).toContainText('Anonymize (3)', { timeout: 5000 });
   await expect(anonymizeButton).toBeEnabled();
 
   // Trigger anonymization
   await anonymizeButton.click();
 
-  // Wait for anonymization to finish – wait until the button text changes
-  await expect(anonymizeButton).toContainText('Anonymize All', { timeout: 15000 });
-  
-  // After anonymization, verify button is disabled
-  await expect(anonymizeButton).toBeDisabled();
+  // Wait for anonymization to finish – wait until all studies are anonymized
+  // The button should become disabled when all selected studies are anonymized
+  await expect(anonymizeButton).toBeDisabled({ timeout: 15000 });
 
   // Re-fetch anonymized badge text now that processing is complete
   const anonymizedCountText = await page.getByTestId('anonymized-count-badge').textContent();
