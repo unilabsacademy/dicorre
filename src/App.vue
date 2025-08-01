@@ -336,12 +336,10 @@ async function anonymizeSelected() {
 
   console.log('anonymizeSelected called with', selected.length, 'studies')
 
-  // Process each study separately to track progress per study
-  for (const study of selected) {
+  // Initialize progress tracking for all studies
+  selected.forEach(study => {
     const studyFiles = study.series.flatMap(series => series.files)
     const totalFiles = studyFiles.length
-
-    // Initialize progress tracking for this study
     console.log('Starting anonymization for study:', study.studyInstanceUID, 'with', totalFiles, 'files')
     setStudyProgress(study.studyInstanceUID, {
       isProcessing: true,
@@ -349,11 +347,17 @@ async function anonymizeSelected() {
       totalFiles,
       currentFile: undefined
     })
+  })
+
+  // Process all studies in parallel to enable multiple workers
+  const studyPromises = selected.map(async (study) => {
+    const studyFiles = study.series.flatMap(series => series.files)
+    const totalFiles = studyFiles.length
 
     try {
       const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(studyFiles, config, concurrency.value, {
         onProgress: (progressInfo) => {
-          console.log('Progress callback called:', progressInfo)
+          console.log('Progress callback called for study', study.studyInstanceUID, ':', progressInfo)
           // Update progress for this specific study
           setStudyProgress(study.studyInstanceUID, {
             isProcessing: true,
@@ -393,19 +397,30 @@ async function anonymizeSelected() {
         removeStudyProgress(study.studyInstanceUID)
       }, 2000)
 
+      return anonymizedFiles
+
     } catch (error) {
       console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
       removeStudyProgress(study.studyInstanceUID)
+      throw error
     }
-  }
+  })
 
-  // Refresh study grouping after all anonymizations
-  console.log('Regrouping studies after anonymization...')
-  console.log('Total parsed files:', parsedDicomFiles.value.length)
-  const regroupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
-  console.log('Regrouped into', regroupedStudies.length, 'studies')
-  studies.value = regroupedStudies
-  successMessage.value = `Successfully anonymized ${selected.length} studies!`
+  try {
+    // Wait for all studies to complete
+    await Promise.all(studyPromises)
+
+    // Refresh study grouping after all anonymizations
+    console.log('Regrouping studies after anonymization...')
+    console.log('Total parsed files:', parsedDicomFiles.value.length)
+    const regroupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
+    console.log('Regrouped into', regroupedStudies.length, 'studies')
+    studies.value = regroupedStudies
+    successMessage.value = `Successfully anonymized ${selected.length} studies!`
+  } catch (error) {
+    console.error('Error in parallel anonymization:', error)
+    // Handle any remaining errors
+  }
 }
 
 // Test server connection - simple async/await

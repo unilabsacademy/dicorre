@@ -2,7 +2,7 @@ import { ref, computed } from 'vue'
 import { Effect, Layer } from 'effect'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { Anonymizer, AnonymizerLive, type AnonymizationProgress } from '@/services/anonymizer'
-import { DicomProcessorLive } from '@/services/dicomProcessor'
+import { DicomProcessor, DicomProcessorLive } from '@/services/dicomProcessor'
 import { ConfigServiceLive } from '@/services/config'
 import { getWorkerManager } from '@/services/workerManager'
 
@@ -114,23 +114,69 @@ export function useAnonymizer() {
         onComplete: async (anonymizedFileRefs) => {
           console.log(`[useAnonymizer] Worker anonymization completed: ${anonymizedFileRefs.length} file references`)
           
-          // Create DicomFile objects with OPFS references - don't load data until needed
-          const anonymizedFiles = anonymizedFileRefs.map((fileRef: any) => {
-            // Find original file to preserve metadata
-            const originalFile = files.find(f => f.id === fileRef.id)
-            
-            return {
-              id: fileRef.id,
-              fileName: fileRef.fileName,
-              fileSize: originalFile?.fileSize || 0, // Preserve original size info
-              arrayBuffer: new ArrayBuffer(0), // Empty - will load from OPFS when needed
-              metadata: originalFile?.metadata,
-              anonymized: true, // Worker completed anonymization
-              opfsFileId: fileRef.opfsFileId // Reference to anonymized file in OPFS
-            }
-          })
+          // Load anonymized files from OPFS and parse their metadata to update the UI
+          const anonymizedFiles = await Promise.all(
+            anonymizedFileRefs.map(async (fileRef: any) => {
+              try {
+                // Load the anonymized file data from OPFS
+                const arrayBuffer = await run(
+                  Effect.gen(function* () {
+                    const opfsStorage = yield* Effect.succeed({
+                      async loadFile(fileId: string) {
+                        // Use the OPFSWorkerHelper to load the file
+                        const { OPFSWorkerHelper } = await import('@/services/opfsWorkerHelper')
+                        return await OPFSWorkerHelper.loadFile(fileId)
+                      }
+                    })
+                    return yield* Effect.tryPromise(() => opfsStorage.loadFile(fileRef.opfsFileId))
+                  })
+                )
+
+                // Create a temporary DicomFile to parse metadata
+                const tempFile = {
+                  id: fileRef.id,
+                  fileName: fileRef.fileName,
+                  fileSize: arrayBuffer.byteLength,
+                  arrayBuffer,
+                  anonymized: true,
+                  opfsFileId: fileRef.opfsFileId
+                }
+
+                // Parse the anonymized file to get updated metadata
+                const parsedFile = await run(
+                  Effect.gen(function* () {
+                    const processor = yield* DicomProcessor
+                    return yield* processor.parseFile(tempFile)
+                  })
+                )
+
+                console.log(`[useAnonymizer] Parsed anonymized file ${fileRef.fileName} with updated metadata`)
+
+                return {
+                  ...parsedFile,
+                  arrayBuffer: new ArrayBuffer(0), // Empty - will load from OPFS when needed for performance
+                  anonymized: true,
+                  opfsFileId: fileRef.opfsFileId
+                }
+
+              } catch (error) {
+                console.error(`[useAnonymizer] Failed to parse anonymized file ${fileRef.fileName}:`, error)
+                // Fallback: use original file structure but mark as anonymized
+                const originalFile = files.find(f => f.id === fileRef.id)
+                return {
+                  id: fileRef.id,
+                  fileName: fileRef.fileName,
+                  fileSize: originalFile?.fileSize || 0,
+                  arrayBuffer: new ArrayBuffer(0),
+                  metadata: originalFile?.metadata,
+                  anonymized: true,
+                  opfsFileId: fileRef.opfsFileId
+                }
+              }
+            })
+          )
           
-          console.log(`[useAnonymizer] Created ${anonymizedFiles.length} file references to anonymized OPFS files`)
+          console.log(`[useAnonymizer] Created ${anonymizedFiles.length} parsed file references with updated metadata`)
           results.value = anonymizedFiles
           resolve(anonymizedFiles)
         },
