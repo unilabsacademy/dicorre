@@ -3,6 +3,7 @@ import type { DicomStudy } from '@/types/dicom'
 import { h } from 'vue'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import StudyProgressIndicator from '@/components/StudyProgressIndicator.vue'
 
 export const columns: ColumnDef<DicomStudy>[] = [
   {
@@ -79,16 +80,14 @@ export const columns: ColumnDef<DicomStudy>[] = [
     header: 'Status',
     cell: ({ row }) => {
       const study = row.original
-      const allAnonymized = study.series.every(s => s.files.every(f => f.anonymized))
-      const someAnonymized = study.series.some(s => s.files.some(f => f.anonymized))
+      const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)
+      const anonymizedFiles = study.series.reduce((sum, s) => sum + s.files.filter(f => f.anonymized).length, 0)
 
-      if (allAnonymized) {
-        return h(Badge, { variant: 'default' }, () => 'Anonymized')
-      } else if (someAnonymized) {
-        return h(Badge, { variant: 'secondary' }, () => 'Partial')
-      } else {
-        return h(Badge, { variant: 'destructive' }, () => 'Not Anonymized')
-      }
+      return h(StudyProgressIndicator, {
+        studyId: study.studyInstanceUID,
+        totalFiles,
+        anonymizedFiles
+      })
     },
   },
   {

@@ -13,6 +13,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
 import { useTableState } from '@/composables/useTableState'
+import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -31,6 +32,7 @@ import {
 // Initialize the workflow composable and file handler
 const workflow = useDicomWorkflow()
 const fileHandler = new FileHandlerWrapper()
+const { setStudyProgress, removeStudyProgress, clearAllProgress, studyProgressMap } = useAnonymizationProgress()
 
 // Component state
 const uploadedFiles = ref<File[]>([])
@@ -72,6 +74,7 @@ const fileProcessingState = ref<{
   currentFileIndex?: number
 } | null>(null)
 
+
 // Table state management
 const tableState = useTableState()
 
@@ -79,6 +82,7 @@ const tableState = useTableState()
 const selectedStudies = computed(() => {
   return tableState.getSelectedStudies(studies.value)
 })
+
 
 const isAllSelectedAnonymized = computed(() => {
   if (selectedStudies.value.length === 0) return false
@@ -135,7 +139,7 @@ async function handleGlobalDrop(event: DragEvent) {
   event.preventDefault()
   dragCounter.value = 0
   isGlobalDragOver.value = false
-  
+
   const files = event.dataTransfer?.files
   if (files && files.length > 0) {
     const fileArray = Array.from(files)
@@ -165,7 +169,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
     // Process each uploaded file with simulated progress tracking
     for (let i = 0; i < newUploadedFiles.length; i++) {
       const file = newUploadedFiles[i]
-      
+
       // Initialize progress for this file
       fileProcessingState.value = {
         isProcessing: true,
@@ -195,7 +199,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
             currentStep: stepTexts[step],
             progress: progressSteps[step]
           }
-          
+
           // Add small delay to show progress
           await new Promise(resolve => setTimeout(resolve, 150))
         }
@@ -203,14 +207,14 @@ async function processNewFiles(newUploadedFiles: File[]) {
         // Now do the actual extraction
         const extractedFiles = await fileHandler.extractZipFile(file)
         dicomFiles.push(...extractedFiles)
-        
+
         // Complete this file's progress
         fileProcessingState.value = {
           ...fileProcessingState.value,
           currentStep: `Extracted ${extractedFiles.length} DICOM files`,
           progress: 100
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, 300))
       } else {
         // For single files, show quick progress
@@ -218,16 +222,16 @@ async function processNewFiles(newUploadedFiles: File[]) {
           ...fileProcessingState.value,
           progress: 50
         }
-        
+
         const dicomFile = await fileHandler.readSingleDicomFile(file)
         dicomFiles.push(dicomFile)
-        
+
         fileProcessingState.value = {
           ...fileProcessingState.value,
           currentStep: 'File processed',
           progress: 100
         }
-        
+
         await new Promise(resolve => setTimeout(resolve, 200))
       }
     }
@@ -270,7 +274,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
 
     // Do the actual parsing
     const parsedFiles = await workflow.processor.parseFiles(dicomFiles, concurrency.value)
-    
+
     if (parsedFiles.length === 0) {
       fileProcessingState.value = null
       return
@@ -282,7 +286,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
       currentStep: 'Organizing into studies...',
       progress: 90
     }
-    
+
     await new Promise(resolve => setTimeout(resolve, 300))
 
     // Add to existing parsed files for later anonymization
@@ -324,27 +328,83 @@ async function processFiles() {
   await processNewFiles(uploadedFiles.value)
 }
 
-// Anonymize all parsed files – invoked manually from the toolbar
-async function anonymizeAllFiles() {
-  if (parsedDicomFiles.value.length === 0) return
+// Anonymize selected studies
+async function anonymizeSelected() {
+  const selected = selectedStudies.value
+  if (selected.length === 0) return
 
-  successMessage.value = ''
+  console.log('anonymizeSelected called with', selected.length, 'studies')
 
-  const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(
-    parsedDicomFiles.value,
-    config,
-    concurrency.value
-  )
+  // Process each study separately to track progress per study
+  for (const study of selected) {
+    const studyFiles = study.series.flatMap(series => series.files)
+    const totalFiles = studyFiles.length
 
-  if (anonymizedFiles.length > 0) {
-    successMessage.value = `Successfully anonymized ${anonymizedFiles.length} files!`
+    // Initialize progress tracking for this study
+    console.log('Starting anonymization for study:', study.studyInstanceUID, 'with', totalFiles, 'files')
+    setStudyProgress(study.studyInstanceUID, {
+      isProcessing: true,
+      progress: 0,
+      totalFiles,
+      currentFile: undefined
+    })
 
-    // Refresh study grouping to include anonymization status
-    const groupedStudies = groupDicomFilesByStudy(anonymizedFiles)
-    studies.value = groupedStudies
+    try {
+      const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(studyFiles, config, concurrency.value, {
+        onProgress: (progressInfo) => {
+          console.log('Progress callback called:', progressInfo)
+          // Update progress for this specific study
+          setStudyProgress(study.studyInstanceUID, {
+            isProcessing: true,
+            progress: progressInfo.percentage,
+            totalFiles,
+            currentFile: progressInfo.currentFile
+          })
+        }
+      })
 
-    console.log(`Grouped into ${groupedStudies.length} studies across ${new Set(groupedStudies.map(s => s.patientId)).size} patients after anonymization`)
+      console.log(`Successfully anonymized ${anonymizedFiles.length} files for study ${study.studyInstanceUID}`)
+
+      // Update both parsedDicomFiles and extractedDicomFiles with the anonymized versions
+      parsedDicomFiles.value = parsedDicomFiles.value.map(file => {
+        const anonymized = anonymizedFiles.find(af => af.id === file.id)
+        return anonymized || file
+      })
+
+      extractedDicomFiles.value = extractedDicomFiles.value.map(file => {
+        const anonymized = anonymizedFiles.find(af => af.id === file.id)
+        return anonymized || file
+      })
+
+      // Show completion for a brief moment
+      await new Promise(resolve => setTimeout(resolve, 500))
+
+      // Mark study as complete
+      setStudyProgress(study.studyInstanceUID, {
+        isProcessing: false,
+        progress: 100,
+        totalFiles,
+        currentFile: undefined
+      })
+
+      // Clean up after a delay
+      setTimeout(() => {
+        removeStudyProgress(study.studyInstanceUID)
+      }, 2000)
+
+    } catch (error) {
+      console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
+      removeStudyProgress(study.studyInstanceUID)
+    }
   }
+
+  // Refresh study grouping after all anonymizations
+  console.log('Regrouping studies after anonymization...')
+  console.log('Total parsed files:', parsedDicomFiles.value.length)
+  const regroupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
+  console.log('Regrouped into', regroupedStudies.length, 'studies')
+  studies.value = regroupedStudies
+  successMessage.value = `Successfully anonymized ${selected.length} studies!`
 }
 
 // Test server connection - simple async/await
@@ -368,18 +428,6 @@ async function sendStudy(study: DicomStudy) {
   }
 }
 
-function handleAnonymizeSelected(selectedStudies: DicomStudy[]) {
-  // Anonymize only the selected studies
-  const filesToAnonymize = selectedStudies.flatMap(study =>
-    study.series.flatMap(series => series.files)
-  )
-
-  workflow.anonymizer.anonymizeFiles(filesToAnonymize, config, concurrency.value).then(() => {
-    // Refresh grouping after selective anonymization
-    studies.value = groupDicomFilesByStudy(parsedDicomFiles.value)
-  })
-}
-
 function handleSendSelected(selectedStudies: DicomStudy[]) {
   // Send selected studies to PACS
   selectedStudies.forEach(study => {
@@ -395,6 +443,7 @@ function clearFiles() {
   workflow.resetAll()
   successMessage.value = ''
   fileProcessingState.value = null
+  clearAllProgress()
   clearSession()
   tableState.clearSelection()
 }
@@ -423,7 +472,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <div 
+  {{ studyProgressMap }}
+  <div
     class="min-h-screen bg-background p-6 relative"
     @dragenter="handleGlobalDragEnter"
     @dragleave="handleGlobalDragLeave"
@@ -536,14 +586,14 @@ onMounted(() => {
 
         <div class="flex items-center gap-2">
           <Button
-            @click="selectedStudies.length > 0 ? handleAnonymizeSelected(selectedStudies) : anonymizeAllFiles()"
-            :disabled="isProcessing || (selectedStudies.length > 0 ? isAllSelectedAnonymized : anonymizedFiles === totalFiles)"
+            @click="anonymizeSelected"
+            :disabled="isProcessing || selectedStudies.length === 0 || isAllSelectedAnonymized"
             variant="default"
             size="sm"
             data-testid="anonymize-button"
           >
             <Shield class="w-4 h-4 mr-2" />
-            {{ selectedStudies.length > 0 ? `Anonymize (${selectedStudies.length})` : 'Anonymize All' }}
+            Anonymize ({{ selectedStudies.length }})
           </Button>
 
           <Button

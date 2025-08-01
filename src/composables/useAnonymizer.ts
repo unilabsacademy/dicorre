@@ -43,7 +43,8 @@ export function useAnonymizer() {
   const anonymizeFiles = async (
     files: DicomFile[],
     config: AnonymizationConfig,
-    concurrency = 3
+    concurrency = 3,
+    options?: { onProgress?: (progress: AnonymizationProgress) => void }
   ): Promise<DicomFile[]> => {
     loading.value = true
     error.value = null
@@ -57,6 +58,10 @@ export function useAnonymizer() {
             concurrency,
             onProgress: (p) => {
               progress.value = p
+              // Call custom progress callback if provided
+              if (options?.onProgress) {
+                options.onProgress(p)
+              }
             }
           })
         })
