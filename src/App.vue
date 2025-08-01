@@ -58,6 +58,8 @@ const isRestoring = ref(false)
 const restoreProgress = ref(0)
 
 const isDragOver = ref(false)
+const isGlobalDragOver = ref(false)
+const dragCounter = ref(0)
 
 // Table state management
 const tableState = useTableState()
@@ -82,10 +84,10 @@ async function handleDrop(event: DragEvent) {
   const files = event.dataTransfer?.files
   if (files && files.length > 0) {
     const fileArray = Array.from(files)
-    uploadedFiles.value = fileArray
+    uploadedFiles.value = [...uploadedFiles.value, ...fileArray]
 
-    // Auto-process files when they're dropped
-    await processFiles()
+    // Auto-process only the new files
+    await processNewFiles(fileArray)
   }
 }
 
@@ -98,25 +100,58 @@ function handleDragLeave() {
   isDragOver.value = false
 }
 
+function handleGlobalDragEnter(event: DragEvent) {
+  event.preventDefault()
+  dragCounter.value++
+  if (event.dataTransfer?.types.includes('Files')) {
+    isGlobalDragOver.value = true
+  }
+}
+
+function handleGlobalDragLeave(event: DragEvent) {
+  event.preventDefault()
+  dragCounter.value--
+  if (dragCounter.value === 0) {
+    isGlobalDragOver.value = false
+  }
+}
+
+function handleGlobalDragOver(event: DragEvent) {
+  event.preventDefault()
+}
+
+async function handleGlobalDrop(event: DragEvent) {
+  event.preventDefault()
+  dragCounter.value = 0
+  isGlobalDragOver.value = false
+  
+  const files = event.dataTransfer?.files
+  if (files && files.length > 0) {
+    const fileArray = Array.from(files)
+    uploadedFiles.value = [...uploadedFiles.value, ...fileArray]
+    await processNewFiles(fileArray)
+  }
+}
+
 async function handleFileInput(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files) {
     const files = Array.from(target.files)
-    uploadedFiles.value = files
+    uploadedFiles.value = [...uploadedFiles.value, ...files]
 
-    // Auto-process files when they're selected
-    await processFiles()
+    // Auto-process only the new files
+    await processNewFiles(files)
   }
 }
 
-async function processFiles() {
-  if (uploadedFiles.value.length === 0) return
+async function processNewFiles(newUploadedFiles: File[]) {
+  if (newUploadedFiles.length === 0) return
 
   successMessage.value = ''
   let dicomFiles: DicomFile[] = []
 
   // Extract and read DICOM files
-  for (const file of uploadedFiles.value) {
+  for (const file of newUploadedFiles) {
     if (file.name.toLowerCase().endsWith('.zip')) {
       const extractedFiles = await fileHandler.extractZipFile(file)
       dicomFiles.push(...extractedFiles)
@@ -131,9 +166,7 @@ async function processFiles() {
     return
   }
 
-  // Store the extracted DICOM files for proper counting
-  extractedDicomFiles.value = dicomFiles
-  console.log(`Extracted ${dicomFiles.length} DICOM files from uploaded files`)
+  console.log(`Extracted ${dicomFiles.length} new DICOM files from ${newUploadedFiles.length} uploaded files`)
 
   // Parse files (no anonymization here)
   const parsedFiles = await workflow.processor.parseFiles(dicomFiles, concurrency.value)
@@ -141,17 +174,22 @@ async function processFiles() {
     return
   }
 
-  // Persist parsed files for later anonymization
-  parsedDicomFiles.value = parsedFiles
+  // Add to existing parsed files for later anonymization
+  parsedDicomFiles.value = [...parsedDicomFiles.value, ...parsedFiles]
 
-  // Update extracted files reference so that we store files with metadata
-  extractedDicomFiles.value = parsedFiles
+  // Update extracted files reference with parsed files (which have metadata)
+  extractedDicomFiles.value = [...extractedDicomFiles.value, ...parsedFiles]
 
-  // Group the parsed files so that the UI can display studies even before anonymization
-  const groupedStudies = groupDicomFilesByStudy(parsedFiles)
+  // Group all parsed files so that the UI can display studies
+  const groupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
   studies.value = groupedStudies
 
-  console.log(`Parsed ${parsedFiles.length} files, grouped into ${groupedStudies.length} studies`)
+  console.log(`Parsed ${parsedFiles.length} new files, total: ${parsedDicomFiles.value.length} files in ${groupedStudies.length} studies`)
+}
+
+async function processFiles() {
+  // Process all uploaded files (used for initial load or when called directly)
+  await processNewFiles(uploadedFiles.value)
 }
 
 // Anonymize all parsed files – invoked manually from the toolbar
@@ -252,7 +290,26 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-background p-6">
+  <div 
+    class="min-h-screen bg-background p-6 relative"
+    @dragenter="handleGlobalDragEnter"
+    @dragleave="handleGlobalDragLeave"
+    @dragover="handleGlobalDragOver"
+    @drop="handleGlobalDrop"
+  >
+    <!-- Global Drag Overlay -->
+    <div
+      v-if="isGlobalDragOver"
+      class="fixed inset-0 z-50 bg-primary/10 backdrop-blur-sm flex items-center justify-center"
+      data-testid="global-drag-overlay"
+    >
+      <div class="bg-background border-2 border-dashed border-primary rounded-lg p-12 text-center">
+        <div class="text-6xl text-primary mb-4">📁</div>
+        <p class="text-2xl font-semibold text-primary">Drop files to upload</p>
+        <p class="text-muted-foreground mt-2">Release to add DICOM files</p>
+      </div>
+    </div>
+
     <div class="mx-auto max-w-7xl space-y-6">
       <!-- Header -->
       <div class="text-center">

@@ -71,7 +71,7 @@ When testing the web app with Playwright MCP:
 
 ### File Upload Testing
 - **Issue**: File uploads require clicking the file label to trigger the browser's file chooser
-- **Solution**: 
+- **Solution**:
   1. Click the "Browse Files" label element to open file chooser
   2. Use `browser_file_upload` tool when modal state shows "[File chooser]"
   3. Example workflow:
@@ -91,3 +91,10 @@ When testing the web app with Playwright MCP:
 ### Console Monitoring
 - Use `browser_console_messages()` to monitor application logs and errors
 - Helpful for debugging DICOM processing and anonymization issues
+
+### Scripts
+- Use scripts when you need to examing data like dicom files
+- Scripts can be written in either python or typescript
+- You find examples of .py and .ts scripts in the /scripts folder
+- Delete scripts if only used temporarily but keet them if they can be useful for reference in the future
+- For python scripts use uv to run with requirements in header as in examples
