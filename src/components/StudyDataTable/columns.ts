@@ -8,24 +8,24 @@ export const columns: ColumnDef<DicomStudy>[] = [
   {
     id: 'select',
     header: ({ table }) => h(Checkbox, {
-      'checked': table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate'),
-      'onUpdate:checked': (value: boolean) => table.toggleAllPageRowsSelected(!!value),
+      'modelValue': table.getIsAllPageRowsSelected() || (table.getIsSomePageRowsSelected() && 'indeterminate'),
+      'onUpdate:modelValue': (value: boolean | 'indeterminate') => table.toggleAllPageRowsSelected(!!value),
       'ariaLabel': 'Select all',
     }),
     cell: ({ row }) => h(Checkbox, {
-      'checked': row.getIsSelected(),
-      'onUpdate:checked': (value: boolean) => row.toggleSelected(!!value),
+      'modelValue': row.getIsSelected(),
+      'onUpdate:modelValue': (value: boolean | 'indeterminate') => row.toggleSelected(!!value),
       'ariaLabel': 'Select row',
     }),
     enableSorting: false,
     enableHiding: false,
   },
   {
-    accessorKey: 'patientName',
-    header: 'Patient Name',
+    accessorKey: 'accessionNumber',
+    header: 'Accession Number',
     cell: ({ row }) => {
-      const patientName = row.getValue('patientName') as string
-      return h('div', { class: 'font-medium' }, patientName || 'Unknown Patient')
+      const accessionNumber = row.getValue('accessionNumber') as string
+      return h('div', { class: 'font-medium' }, accessionNumber || 'Unknown Accession Number')
     },
   },
   {

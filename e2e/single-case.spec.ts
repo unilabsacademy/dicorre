@@ -27,9 +27,11 @@ test('uploads single case zip file and checks correct grouping', async ({ page }
   expect(anonymizedCountBefore).toBe(0);
 
   // Click anonymize button
-  const anonymizeButton = page.getByTestId('anonymize-all-button');
+  const anonymizeButton = page.getByTestId('anonymize-button');
   await anonymizeButton.click();
-  await expect(anonymizeButton).toHaveText('All Anonymized', { timeout: 15000 });
+  
+  // Wait for anonymization to complete - button should be disabled after all files are anonymized
+  await expect(anonymizeButton).toBeDisabled({ timeout: 15000 });
 
   // Verify all 6 files were anonymized
   const anonymizedCountText = await page.getByTestId('anonymized-count-badge').textContent();

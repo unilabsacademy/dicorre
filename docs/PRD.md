@@ -99,3 +99,10 @@ https://github.com/dcmjs-org/dcmjs
 - We want to be able to simulate a real scenario with DICOM server
 - dcm4chee should be used in a Docker container as destination for development
 - DICOM files for testing various scenarios should be present in project
+
+
+## Notes to assess from meeting
+- Meta-data for alternative formats
+    - Best ui? Pre / post drop?
+- Mentor upload tracking (need backend?)
+- ICL (interesting case library), export as zip and drop in tool

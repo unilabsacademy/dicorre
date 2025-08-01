@@ -37,24 +37,24 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   const anonymizedCountBefore = parseInt(anonymizedCountTextBefore?.match(/(\d+)/)?.[1] || '0');
   expect(anonymizedCountBefore).toBe(0);
 
-  // The anonymize button should be enabled and show "Anonymize All"
-  const anonymizeButton = page.getByTestId('anonymize-all-button');
-  await expect(anonymizeButton).toHaveText('Anonymize All');
+  // The anonymize button should be enabled and show "Anonymize All" when no studies are selected
+  const anonymizeButton = page.getByTestId('anonymize-button');
+  await expect(anonymizeButton).toContainText('Anonymize All');
   await expect(anonymizeButton).toBeEnabled();
 
   // Trigger anonymization
   await anonymizeButton.click();
 
   // Wait for anonymization to finish – wait until the button text changes
-  await expect(anonymizeButton).toHaveText('All Anonymized', { timeout: 15000 });
+  await expect(anonymizeButton).toContainText('Anonymize All', { timeout: 15000 });
+  
+  // After anonymization, verify button is disabled
+  await expect(anonymizeButton).toBeDisabled();
 
   // Re-fetch anonymized badge text now that processing is complete
   const anonymizedCountText = await page.getByTestId('anonymized-count-badge').textContent();
   const anonymizedCount = parseInt(anonymizedCountText?.match(/(\d+)/)?.[1] || '0');
   expect(anonymizedCount).toBe(fileCount); // All files should now be anonymized
-
-  // Verify the anonymize button is disabled
-  await expect(anonymizeButton).toBeDisabled();
 
   // Verify studies table is displayed with anonymized data
   await expect(page.getByTestId('studies-table-card')).toBeVisible({ timeout: 5000 });

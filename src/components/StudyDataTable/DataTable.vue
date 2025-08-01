@@ -1,4 +1,5 @@
 <script setup lang="ts" generic="TData, TValue">
+import { useTableState } from '@/composables/useTableState'
 import type {
   ColumnDef,
   ColumnFiltersState,
@@ -14,7 +15,7 @@ import {
   useVueTable,
 } from '@tanstack/vue-table'
 
-import { ref, computed } from 'vue'
+import { computed, type Ref } from 'vue'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -31,16 +32,18 @@ interface DataTableProps {
   data: TData[]
 }
 
+const {
+  sorting,
+  columnFilters,
+  columnVisibility,
+  rowSelection,
+} = useTableState()
+
 const props = defineProps<DataTableProps>()
 const emit = defineEmits<{
   anonymizeSelected: [studies: TData[]]
   sendSelected: [studies: TData[]]
 }>()
-
-const sorting = ref<SortingState>([])
-const columnFilters = ref<ColumnFiltersState>([])
-const columnVisibility = ref<VisibilityState>({})
-const rowSelection = ref({})
 
 const table = useVueTable({
   get data() {
@@ -53,72 +56,40 @@ const table = useVueTable({
   getSortedRowModel: getSortedRowModel(),
   getFilteredRowModel: getFilteredRowModel(),
   enableRowSelection: true,
-  onSortingChange: updaterOrValue => {
-    sorting.value = typeof updaterOrValue === 'function' 
-      ? updaterOrValue(sorting.value) 
+  onSortingChange: sorting.value ? (updaterOrValue) => {
+    sorting.value = typeof updaterOrValue === 'function'
+      ? updaterOrValue(sorting.value)
       : updaterOrValue
-  },
-  onColumnFiltersChange: updaterOrValue => {
-    columnFilters.value = typeof updaterOrValue === 'function' 
-      ? updaterOrValue(columnFilters.value) 
+  } : undefined,
+  onColumnFiltersChange: columnFilters.value ? (updaterOrValue) => {
+    columnFilters.value = typeof updaterOrValue === 'function'
+      ? updaterOrValue(columnFilters.value)
       : updaterOrValue
-  },
-  onColumnVisibilityChange: updaterOrValue => {
-    columnVisibility.value = typeof updaterOrValue === 'function' 
-      ? updaterOrValue(columnVisibility.value) 
+  } : undefined,
+  onColumnVisibilityChange: columnVisibility.value ? (updaterOrValue) => {
+    columnVisibility.value = typeof updaterOrValue === 'function'
+      ? updaterOrValue(columnVisibility.value)
       : updaterOrValue
-  },
-  onRowSelectionChange: updaterOrValue => {
-    rowSelection.value = typeof updaterOrValue === 'function' 
-      ? updaterOrValue(rowSelection.value) 
+  } : undefined,
+  onRowSelectionChange: rowSelection.value ? (updaterOrValue) => {
+    rowSelection.value = typeof updaterOrValue === 'function'
+      ? updaterOrValue(rowSelection.value)
       : updaterOrValue
-  },
+  } : undefined,
   state: {
     get sorting() {
-      return sorting.value
+      return sorting.value ?? []
     },
     get columnFilters() {
-      return columnFilters.value
+      return columnFilters.value ?? []
     },
     get columnVisibility() {
-      return columnVisibility.value
+      return columnVisibility.value ?? {}
     },
     get rowSelection() {
-      return rowSelection.value
+      return rowSelection.value ?? {}
     },
   },
-})
-
-// Computed properties for button states
-const isAllSelectedAnonymized = computed(() => {
-  const selectedRows = table.getFilteredSelectedRowModel().rows
-  if (selectedRows.length === 0) return false
-  
-  return selectedRows.every(row => {
-    const study = row.original as any
-    return study.series.every((s: any) => s.files.every((f: any) => f.anonymized))
-  })
-})
-
-// Event handlers
-const anonymizeSelected = () => {
-  const selectedStudies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-  emit('anonymizeSelected', selectedStudies)
-}
-
-const sendSelected = () => {
-  const selectedStudies = table.getFilteredSelectedRowModel().rows.map(row => row.original)
-  emit('sendSelected', selectedStudies)
-}
-
-// Expose selected rows to parent
-defineExpose({
-  getSelectedRows: () => {
-    return table.getFilteredSelectedRowModel().rows.map(row => row.original)
-  },
-  clearSelection: () => {
-    rowSelection.value = {}
-  }
 })
 </script>
 
@@ -132,7 +103,8 @@ defineExpose({
         class="max-w-sm"
       />
       <div class="ml-auto text-sm text-muted-foreground">
-        {{ table.getFilteredSelectedRowModel().rows.length }} of {{ table.getFilteredRowModel().rows.length }} row(s) selected
+        {{ table.getFilteredSelectedRowModel().rows.length }} of {{ table.getFilteredRowModel().rows.length }} row(s)
+        selected
       </div>
     </div>
     <div class="rounded-md border">
@@ -183,29 +155,6 @@ defineExpose({
           </TableRow>
         </TableBody>
       </Table>
-    </div>
-    <div class="flex items-center justify-between py-4">
-      <div class="text-sm text-muted-foreground">
-        {{ table.getFilteredSelectedRowModel().rows.length }} of {{ table.getFilteredRowModel().rows.length }} row(s) selected
-      </div>
-      <div class="space-x-2" v-if="table.getFilteredSelectedRowModel().rows.length > 0">
-        <Button
-          @click="anonymizeSelected"
-          :disabled="isAllSelectedAnonymized"
-          variant="default"
-          size="sm"
-        >
-          Anonymize Selected
-        </Button>
-        <Button
-          @click="sendSelected"
-          :disabled="!isAllSelectedAnonymized"
-          variant="secondary"
-          size="sm"
-        >
-          Send Selected
-        </Button>
-      </div>
     </div>
   </div>
 </template>

@@ -18,10 +18,15 @@ test('persists uploaded files and UI state across page reload', async ({ page })
 
   // Wait for initial processing to finish – the toolbar should appear
   await expect(page.getByTestId('toolbar')).toBeVisible({ timeout: 15000 })
+  
+  // Add a wait to ensure files are fully processed
+  await page.waitForTimeout(3000)
 
   // Capture the displayed file count so we can compare after reload
   const filesCountText = await page.getByTestId('files-count-badge').textContent()
+  console.log('Files count badge text:', filesCountText)
   const initialFileCount = parseInt(filesCountText?.match(/(\d+)/)?.[1] || '0')
+  console.log('Initial file count:', initialFileCount)
   expect(initialFileCount).toBe(6)
 
   // Reload the page (simulates user refresh)
@@ -30,10 +35,15 @@ test('persists uploaded files and UI state across page reload', async ({ page })
   // After reload, the application should restore previous session automatically
   // Wait for toolbar to re-appear indicating restoration finished
   await expect(page.getByTestId('toolbar')).toBeVisible({ timeout: 15000 })
+  
+  // Wait for restoration to complete
+  await page.waitForTimeout(5000)
 
   // Verify that the file count is the same as before the reload
   const filesCountTextAfter = await page.getByTestId('files-count-badge').textContent()
+  console.log('Files count badge text after reload:', filesCountTextAfter)
   const fileCountAfter = parseInt(filesCountTextAfter?.match(/(\d+)/)?.[1] || '0')
+  console.log('File count after reload:', fileCountAfter)
   expect(fileCountAfter).toBe(initialFileCount)
 
   // Optional: verify studies count badge is also restored

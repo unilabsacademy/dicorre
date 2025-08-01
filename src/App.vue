@@ -12,13 +12,27 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
+import { useTableState } from '@/composables/useTableState'
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu'
+import {
+  Shield,
+  Send,
+  Trash2,
+  Settings2,
+  Wifi
+} from 'lucide-vue-next'
 
 // Initialize the workflow composable and file handler
 const workflow = useDicomWorkflow()
 const fileHandler = new FileHandlerWrapper()
 
 // Component state
-const selectedFiles = ref<File[]>([])
+const uploadedFiles = ref<File[]>([])
 const extractedDicomFiles = ref<DicomFile[]>([])
 const fileInput = ref<HTMLInputElement>()
 const successMessage = ref('')
@@ -40,13 +54,26 @@ const isProcessing = workflow.loading
 const error = computed(() => workflow.errors.value[0]?.message || null)
 const totalFiles = computed(() => extractedDicomFiles.value.length)
 const anonymizedFiles = computed(() => workflow.anonymizer.results.value.length)
-const hasFiles = computed(() => selectedFiles.value.length > 0)
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
 
-const dataTableRef = ref()
-
 const isDragOver = ref(false)
+
+// Table state management
+const tableState = useTableState()
+
+// Computed properties for selected studies
+const selectedStudies = computed(() => {
+  return tableState.getSelectedStudies(studies.value)
+})
+
+const isAllSelectedAnonymized = computed(() => {
+  if (selectedStudies.value.length === 0) return false
+
+  return selectedStudies.value.every(study =>
+    study.series.every(s => s.files.every(f => f.anonymized))
+  )
+})
 
 async function handleDrop(event: DragEvent) {
   event.preventDefault()
@@ -55,7 +82,7 @@ async function handleDrop(event: DragEvent) {
   const files = event.dataTransfer?.files
   if (files && files.length > 0) {
     const fileArray = Array.from(files)
-    selectedFiles.value = fileArray
+    uploadedFiles.value = fileArray
 
     // Auto-process files when they're dropped
     await processFiles()
@@ -75,7 +102,7 @@ async function handleFileInput(event: Event) {
   const target = event.target as HTMLInputElement
   if (target.files) {
     const files = Array.from(target.files)
-    selectedFiles.value = files
+    uploadedFiles.value = files
 
     // Auto-process files when they're selected
     await processFiles()
@@ -83,13 +110,13 @@ async function handleFileInput(event: Event) {
 }
 
 async function processFiles() {
-  if (selectedFiles.value.length === 0) return
+  if (uploadedFiles.value.length === 0) return
 
   successMessage.value = ''
   let dicomFiles: DicomFile[] = []
 
   // Extract and read DICOM files
-  for (const file of selectedFiles.value) {
+  for (const file of uploadedFiles.value) {
     if (file.name.toLowerCase().endsWith('.zip')) {
       const extractedFiles = await fileHandler.extractZipFile(file)
       dicomFiles.push(...extractedFiles)
@@ -192,17 +219,18 @@ function handleSendSelected(selectedStudies: DicomStudy[]) {
 
 // Clear all files
 function clearFiles() {
-  selectedFiles.value = []
+  uploadedFiles.value = []
   extractedDicomFiles.value = []
   studies.value = []
   workflow.resetAll()
   successMessage.value = ''
   clearSession()
+  tableState.clearSelection()
 }
 
 // Aliases for template compatibility
 const processZipFile = (file: File) => {
-  selectedFiles.value = [file]
+  uploadedFiles.value = [file]
   processFiles()
 }
 
@@ -235,46 +263,18 @@ onMounted(() => {
         <p class="text-muted-foreground mt-2">Drop DICOM files or ZIP archives to get started</p>
       </div>
 
-      <!-- File Drop Zone -->
-      <Card
-        v-if="!hasFiles"
-        data-testid="file-drop-zone"
-        class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
-        :class="{ 'border-primary bg-primary/5': isDragOver }"
-        @drop="handleDrop"
-        @dragover="handleDragOver"
-        @dragleave="handleDragLeave"
-      >
-        <CardContent class="flex flex-col items-center justify-center py-16">
-          <div class="text-center space-y-4">
-            <div class="text-6xl text-muted-foreground">📁</div>
-            <div>
-              <p
-                data-testid="drop-zone-text"
-                class="text-lg text-muted-foreground mb-4"
-              >Drop DICOM files here or</p>
-              <input
-                type="file"
-                accept=".dcm,.zip"
-                multiple
-                @change="handleFileInput"
-                class="hidden"
-                id="file-input"
-                data-testid="file-input"
-              >
-              <Button asChild>
-                <label
-                  for="file-input"
-                  class="cursor-pointer"
-                  data-testid="browse-files-button"
-                >
-                  Browse Files
-                </label>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
+      <!-- Debug -->
+      <!-- <pre class="text-xs">
+        isProcessing: {{ isProcessing }}
+        isRestoring: {{ isRestoring }}
+        restoreProgress: {{ restoreProgress }}
+        error: {{ error }}
+        totalFiles: {{ totalFiles }}
+        studies: {{ studies.length }}
+        parsedDicomFiles: {{ parsedDicomFiles.length }}
+        extractedDicomFiles: {{ extractedDicomFiles.length }}
+        tableState: {{ tableState }}
+       </pre> -->
 
       <!-- Error Display -->
       <Alert
@@ -321,7 +321,6 @@ onMounted(() => {
 
       <!-- Toolbar -->
       <div
-        v-if="hasFiles"
         class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border"
         data-testid="toolbar"
       >
@@ -338,26 +337,34 @@ onMounted(() => {
             variant="secondary"
             data-testid="studies-count-badge"
           >{{ studies.length }} Studies</Badge>
+          <Badge
+            v-if="selectedStudies.length > 0"
+            variant="default"
+            data-testid="selected-count-badge"
+          >{{ selectedStudies.length }} Selected</Badge>
         </div>
 
         <div class="flex items-center gap-2">
           <Button
-            @click="anonymizeAllFiles"
-            :disabled="isProcessing || anonymizedFiles === totalFiles"
+            @click="selectedStudies.length > 0 ? handleAnonymizeSelected(selectedStudies) : anonymizeAllFiles()"
+            :disabled="isProcessing || (selectedStudies.length > 0 ? isAllSelectedAnonymized : anonymizedFiles === totalFiles)"
             variant="default"
             size="sm"
-            data-testid="anonymize-all-button"
+            data-testid="anonymize-button"
           >
-            {{ anonymizedFiles === totalFiles ? 'All Anonymized' : 'Anonymize All' }}
+            <Shield class="w-4 h-4 mr-2" />
+            {{ selectedStudies.length > 0 ? `Anonymize (${selectedStudies.length})` : 'Anonymize All' }}
           </Button>
 
           <Button
-            @click="testConnection"
+            @click="handleSendSelected(selectedStudies)"
+            :disabled="isProcessing || selectedStudies.length === 0 || !isAllSelectedAnonymized"
             variant="secondary"
             size="sm"
-            data-testid="test-connection-button"
+            data-testid="send-button"
           >
-            Test Connection
+            <Send class="w-4 h-4 mr-2" />
+            Send{{ selectedStudies.length > 0 ? ` (${selectedStudies.length})` : '' }}
           </Button>
 
           <Button
@@ -366,10 +373,73 @@ onMounted(() => {
             size="sm"
             data-testid="clear-all-button"
           >
+            <Trash2 class="w-4 h-4 mr-2" />
             Clear All
           </Button>
+
+          <DropdownMenu>
+            <DropdownMenuTrigger asChild>
+              <Button
+                variant="outline"
+                size="sm"
+                data-testid="settings-menu-button"
+              >
+                <Settings2 class="w-4 h-4" />
+              </Button>
+            </DropdownMenuTrigger>
+            <DropdownMenuContent align="end">
+              <DropdownMenuItem
+                @click="testConnection"
+                data-testid="test-connection-menu-item"
+              >
+                <Wifi class="w-4 h-4 mr-2" />
+                Test Connection
+              </DropdownMenuItem>
+            </DropdownMenuContent>
+          </DropdownMenu>
         </div>
       </div>
+
+      <!-- File Drop Zone -->
+      <Card
+        v-if="studies.length === 0 && !isProcessing && !isRestoring"
+        data-testid="file-drop-zone"
+        class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
+        :class="{ 'border-primary bg-primary/5': isDragOver }"
+        @drop="handleDrop"
+        @dragover="handleDragOver"
+        @dragleave="handleDragLeave"
+      >
+        <CardContent class="flex flex-col items-center justify-center py-16">
+          <div class="text-center space-y-4">
+            <div class="text-6xl text-muted-foreground">📁</div>
+            <div>
+              <p
+                data-testid="drop-zone-text"
+                class="text-lg text-muted-foreground mb-4"
+              >Drop DICOM files here or</p>
+              <input
+                type="file"
+                accept=".dcm,.zip"
+                multiple
+                @change="handleFileInput"
+                class="hidden"
+                id="file-input"
+                data-testid="file-input"
+              >
+              <Button asChild>
+                <label
+                  for="file-input"
+                  class="cursor-pointer"
+                  data-testid="browse-files-button"
+                >
+                  Browse Files
+                </label>
+              </Button>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <!-- Studies Data Table -->
       <Card
@@ -384,11 +454,8 @@ onMounted(() => {
         </CardHeader>
         <CardContent>
           <DataTable
-            ref="dataTableRef"
             :columns="columns"
             :data="studies"
-            @anonymize-selected="handleAnonymizeSelected"
-            @send-selected="handleSendSelected"
             data-testid="studies-data-table"
           />
         </CardContent>

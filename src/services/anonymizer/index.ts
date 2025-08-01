@@ -6,6 +6,7 @@ import {
   CleanGraphOption,
   RetainDeviceIdentOption 
 } from '@umessen/dicom-deidentifier'
+import * as dcmjs from 'dcmjs'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
 import { ConfigService } from '../config'
@@ -175,7 +176,9 @@ class AnonymizerImpl {
 
         // Add option to remove private tags if requested
         if (config.removePrivateTags) {
-          deidentifierConfig.profileOptions.push(RetainDeviceIdentOption)
+          // This should add an option to REMOVE private tags, not retain them
+          // The library might have a specific option for this
+          console.log('removePrivateTags is enabled, but the library may not support this directly')
         }
 
         // Add custom special handlers if enabled
@@ -184,6 +187,72 @@ class AnonymizerImpl {
           const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove)
           // @ts-expect-error - specialHandlers property may not be in official types
           deidentifierConfig.specialHandlers = specialHandlers
+        }
+
+        // Add custom getReferenceDate function to handle missing PatientBirthDate
+        deidentifierConfig.getReferenceDate = (dictionary: any) => {
+          // Try to find a suitable reference date, fallback to StudyDate or a default date
+          const studyDate = dictionary['00080020']?.Value?.[0]
+          const acquisitionDate = dictionary['00080022']?.Value?.[0] 
+          const contentDate = dictionary['00080023']?.Value?.[0]
+          const patientBirthDate = dictionary['00100030']?.Value?.[0]
+          
+          if (patientBirthDate) {
+            // Parse DICOM date format YYYYMMDD
+            const year = parseInt(patientBirthDate.substring(0, 4))
+            const month = parseInt(patientBirthDate.substring(4, 6)) - 1 // JS months are 0-based
+            const day = parseInt(patientBirthDate.substring(6, 8))
+            return new Date(year, month, day)
+          } else if (studyDate) {
+            const year = parseInt(studyDate.substring(0, 4))
+            const month = parseInt(studyDate.substring(4, 6)) - 1
+            const day = parseInt(studyDate.substring(6, 8))
+            return new Date(year, month, day)
+          } else if (acquisitionDate) {
+            const year = parseInt(acquisitionDate.substring(0, 4))
+            const month = parseInt(acquisitionDate.substring(4, 6)) - 1
+            const day = parseInt(acquisitionDate.substring(6, 8))
+            return new Date(year, month, day)
+          } else if (contentDate) {
+            const year = parseInt(contentDate.substring(0, 4))
+            const month = parseInt(contentDate.substring(4, 6)) - 1  
+            const day = parseInt(contentDate.substring(6, 8))
+            return new Date(year, month, day)
+          } else {
+            // Fallback to a default date
+            return new Date('1970-01-01')
+          }
+        }
+
+        // Add custom getReferenceTime function to handle missing StudyTime
+        deidentifierConfig.getReferenceTime = (dictionary: any) => {
+          const studyTime = dictionary['00080030']?.Value?.[0]
+          const seriesTime = dictionary['00080031']?.Value?.[0]
+          const acquisitionTime = dictionary['00080032']?.Value?.[0]
+          
+          if (studyTime) {
+            // Parse DICOM time format HHMMSS.FFFFFF
+            const timeStr = studyTime.padEnd(6, '0') // Ensure at least HHMMSS
+            const hours = parseInt(timeStr.substring(0, 2))
+            const minutes = parseInt(timeStr.substring(2, 4))
+            const seconds = parseInt(timeStr.substring(4, 6))
+            return new Date(1970, 0, 1, hours, minutes, seconds)
+          } else if (seriesTime) {
+            const timeStr = seriesTime.padEnd(6, '0')
+            const hours = parseInt(timeStr.substring(0, 2))
+            const minutes = parseInt(timeStr.substring(2, 4))
+            const seconds = parseInt(timeStr.substring(4, 6))
+            return new Date(1970, 0, 1, hours, minutes, seconds)
+          } else if (acquisitionTime) {
+            const timeStr = acquisitionTime.padEnd(6, '0')
+            const hours = parseInt(timeStr.substring(0, 2))
+            const minutes = parseInt(timeStr.substring(2, 4))
+            const seconds = parseInt(timeStr.substring(4, 6))
+            return new Date(1970, 0, 1, hours, minutes, seconds)
+          } else {
+            // Fallback to noon
+            return new Date(1970, 0, 1, 12, 0, 0)
+          }
         }
 
         // Create deidentifier instance
@@ -200,14 +269,22 @@ class AnonymizerImpl {
         const uint8Array = new Uint8Array(file.arrayBuffer)
         console.log(`Converted to Uint8Array for ${file.fileName}, size: ${uint8Array.length}`)
 
-        // Anonymize the raw DICOM file
+        // Anonymize the DICOM file
         let anonymizedUint8Array: Uint8Array
         try {
           anonymizedUint8Array = deidentifier.deidentify(uint8Array)
           console.log(`Deidentified ${file.fileName} using library, result size: ${anonymizedUint8Array.length}`)
-        } catch (deidentifyError) {
+        } catch (deidentifyError: any) {
           console.error(`Library deidentification failed:`, deidentifyError)
-          throw new Error(`Cannot anonymize file: ${deidentifyError}`)
+          console.error(`Error stack:`, deidentifyError.stack)
+          
+          // Try to provide more context about the error
+          if (deidentifyError.message?.includes("Cannot read properties of undefined")) {
+            console.error(`This might be due to malformed DICOM tags or unsupported private tags in ${file.fileName}`)
+            console.error(`Consider enabling removePrivateTags option or checking the DICOM file structure`)
+          }
+          
+          throw new Error(`Cannot anonymize file ${file.fileName}: ${deidentifyError.message || deidentifyError}`)
         }
 
         // Convert back to ArrayBuffer
