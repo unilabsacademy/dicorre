@@ -381,6 +381,12 @@ async function anonymizeSelected() {
         return anonymized || file
       })
 
+      // Immediately refresh study grouping for this completed study to update UI
+      console.log(`Regrouping studies after ${study.studyInstanceUID} anonymization completion...`)
+      const regroupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
+      studies.value = regroupedStudies
+      console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
+
       // Show completion for a brief moment
       await new Promise(resolve => setTimeout(resolve, 500))
 
@@ -407,15 +413,10 @@ async function anonymizeSelected() {
   })
 
   try {
-    // Wait for all studies to complete
+    // Wait for all studies to complete (UI already updated per study)
     await Promise.all(studyPromises)
 
-    // Refresh study grouping after all anonymizations
-    console.log('Regrouping studies after anonymization...')
-    console.log('Total parsed files:', parsedDicomFiles.value.length)
-    const regroupedStudies = groupDicomFilesByStudy(parsedDicomFiles.value)
-    console.log('Regrouped into', regroupedStudies.length, 'studies')
-    studies.value = regroupedStudies
+    console.log(`All ${selected.length} studies completed anonymization`)
     successMessage.value = `Successfully anonymized ${selected.length} studies!`
   } catch (error) {
     console.error('Error in parallel anonymization:', error)
@@ -558,7 +559,7 @@ onMounted(() => {
       </Alert>
 
       <!-- Loading State -->
-      <Card v-if="isProcessing || isRestoring">
+      <Card v-if="isRestoring">
         <CardContent class="flex items-center justify-center py-8">
           <div class="text-center space-y-4 w-full max-w-md">
             <div class="animate-spin h-8 w-8 border-4 border-primary border-t-transparent rounded-full mx-auto"></div>
