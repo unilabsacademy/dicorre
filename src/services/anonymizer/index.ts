@@ -11,6 +11,7 @@ import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
 import { ConfigService } from '../config'
 import { getAllSpecialHandlers } from './handlers'
+import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
 import { AnonymizationError, ConfigurationError, type AnonymizerError } from '@/types/effects'
 
 export interface AnonymizationProgress {
@@ -23,7 +24,7 @@ export interface AnonymizationProgress {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig) => Effect.Effect<DicomFile, AnonymizerError>
+    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string) => Effect.Effect<DicomFile, AnonymizerError>
     readonly anonymizeFiles: (files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<DicomFile[], AnonymizerError>
     readonly anonymizeInBatches: (files: DicomFile[], config: AnonymizationConfig, batchSize?: number, onBatchComplete?: (batchIndex: number, totalBatches: number) => void) => Effect.Effect<DicomFile[], AnonymizerError>
     readonly validateConfig: (config: AnonymizationConfig) => Effect.Effect<void, ConfigurationError>
@@ -88,8 +89,9 @@ class AnonymizerImpl {
 
   /**
    * Effect-based file anonymization with service dependencies
+   * Optional sharedTimestamp parameter to ensure consistent values across multiple files
    */
-  static anonymizeFile = (file: DicomFile, config: AnonymizationConfig): Effect.Effect<DicomFile, AnonymizerError, DicomProcessor | ConfigService> =>
+  static anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string): Effect.Effect<DicomFile, AnonymizerError, DicomProcessor | ConfigService> =>
     Effect.gen(function* () {
       const configService = yield* ConfigService
       const dicomProcessor = yield* DicomProcessor
@@ -105,10 +107,11 @@ class AnonymizerImpl {
         }))
       }
 
-      // Get processed replacements from config service
+      // Get processed replacements from config service with optional shared timestamp
       console.log('Processing replacements from config:', config.replacements)
       const processedReplacements = yield* configService.processReplacements(
-        (config.replacements || {}) as Record<string, string>
+        (config.replacements || {}) as Record<string, string>,
+        sharedTimestamp
       )
       console.log('Processed replacements result:', processedReplacements)
 
@@ -192,71 +195,9 @@ class AnonymizerImpl {
           deidentifierConfig.specialHandlers = specialHandlers
         }
 
-        // Add custom getReferenceDate function to handle missing PatientBirthDate
-        deidentifierConfig.getReferenceDate = (dictionary: any) => {
-          // Try to find a suitable reference date, fallback to StudyDate or a default date
-          const studyDate = dictionary['00080020']?.Value?.[0]
-          const acquisitionDate = dictionary['00080022']?.Value?.[0]
-          const contentDate = dictionary['00080023']?.Value?.[0]
-          const patientBirthDate = dictionary['00100030']?.Value?.[0]
-
-          if (patientBirthDate) {
-            // Parse DICOM date format YYYYMMDD
-            const year = parseInt(patientBirthDate.substring(0, 4))
-            const month = parseInt(patientBirthDate.substring(4, 6)) - 1 // JS months are 0-based
-            const day = parseInt(patientBirthDate.substring(6, 8))
-            return new Date(year, month, day)
-          } else if (studyDate) {
-            const year = parseInt(studyDate.substring(0, 4))
-            const month = parseInt(studyDate.substring(4, 6)) - 1
-            const day = parseInt(studyDate.substring(6, 8))
-            return new Date(year, month, day)
-          } else if (acquisitionDate) {
-            const year = parseInt(acquisitionDate.substring(0, 4))
-            const month = parseInt(acquisitionDate.substring(4, 6)) - 1
-            const day = parseInt(acquisitionDate.substring(6, 8))
-            return new Date(year, month, day)
-          } else if (contentDate) {
-            const year = parseInt(contentDate.substring(0, 4))
-            const month = parseInt(contentDate.substring(4, 6)) - 1
-            const day = parseInt(contentDate.substring(6, 8))
-            return new Date(year, month, day)
-          } else {
-            // Fallback to a default date
-            return new Date('1970-01-01')
-          }
-        }
-
-        // Add custom getReferenceTime function to handle missing StudyTime
-        deidentifierConfig.getReferenceTime = (dictionary: any) => {
-          const studyTime = dictionary['00080030']?.Value?.[0]
-          const seriesTime = dictionary['00080031']?.Value?.[0]
-          const acquisitionTime = dictionary['00080032']?.Value?.[0]
-
-          if (studyTime) {
-            // Parse DICOM time format HHMMSS.FFFFFF
-            const timeStr = studyTime.padEnd(6, '0') // Ensure at least HHMMSS
-            const hours = parseInt(timeStr.substring(0, 2))
-            const minutes = parseInt(timeStr.substring(2, 4))
-            const seconds = parseInt(timeStr.substring(4, 6))
-            return new Date(1970, 0, 1, hours, minutes, seconds)
-          } else if (seriesTime) {
-            const timeStr = seriesTime.padEnd(6, '0')
-            const hours = parseInt(timeStr.substring(0, 2))
-            const minutes = parseInt(timeStr.substring(2, 4))
-            const seconds = parseInt(timeStr.substring(4, 6))
-            return new Date(1970, 0, 1, hours, minutes, seconds)
-          } else if (acquisitionTime) {
-            const timeStr = acquisitionTime.padEnd(6, '0')
-            const hours = parseInt(timeStr.substring(0, 2))
-            const minutes = parseInt(timeStr.substring(2, 4))
-            const seconds = parseInt(timeStr.substring(4, 6))
-            return new Date(1970, 0, 1, hours, minutes, seconds)
-          } else {
-            // Fallback to noon
-            return new Date(1970, 0, 1, 12, 0, 0)
-          }
-        }
+        // Add helper functions for handling missing DICOM dates/times
+        deidentifierConfig.getReferenceDate = getDicomReferenceDate
+        deidentifierConfig.getReferenceTime = getDicomReferenceTime
 
         // Create deidentifier instance
         let deidentifier: any
@@ -312,7 +253,7 @@ class AnonymizerImpl {
   }
 
   /**
-   * Anonymize multiple files concurrently
+   * Anonymize multiple files concurrently with shared timestamp for consistent grouping
    */
   static anonymizeFiles = (
     files: DicomFile[],
@@ -323,6 +264,10 @@ class AnonymizerImpl {
       const { concurrency = 3, onProgress } = options
       let completed = 0
       const total = files.length
+
+      // Generate shared timestamp for consistent replacements across all files
+      const sharedTimestamp = Date.now().toString().slice(-7)
+      console.log(`[Effect Anonymizer] Using shared timestamp for ${files.length} files: ${sharedTimestamp}`)
 
       // Create individual effects that update progress
       const effectsWithProgress = files.map((file, index) =>
@@ -336,7 +281,7 @@ class AnonymizerImpl {
             })
           }
 
-          const result = yield* AnonymizerImpl.anonymizeFile(file, config)
+          const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp)
 
           completed++
           if (onProgress) {
@@ -360,6 +305,7 @@ class AnonymizerImpl {
 
   /**
    * Anonymize files in batches (useful for very large datasets)
+   * Each batch gets its own shared timestamp for consistent grouping within the batch
    */
   static anonymizeInBatches = (
     files: DicomFile[],

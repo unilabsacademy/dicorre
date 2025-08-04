@@ -5,14 +5,6 @@
 
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { OPFSWorkerHelper } from '../services/opfsStorage/opfsWorkerHelper'
-import { Effect, Layer } from 'effect'
-import { ConfigService, ConfigServiceLive } from '../services/config'
-import { 
-  DicomDeidentifier,
-  BasicProfile,
-  CleanDescOption,
-  CleanGraphOption
-} from '@umessen/dicom-deidentifier'
 
 // Debug message interface
 export interface DebugMessage {
@@ -360,65 +352,40 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
       })
     )
 
-    // Process replacement patterns manually (simpler than using Effect in worker context)
-    const processedReplacements: Record<string, string> = {}
-    const timestamp = Date.now().toString().slice(-7) // Generate 7-digit timestamp
-    
-    if (job.config.replacements) {
-      for (const [key, value] of Object.entries(job.config.replacements)) {
-        if (typeof value === 'string') {
-          processedReplacements[key] = value.replace('{timestamp}', timestamp)
-        }
-      }
-    }
-    
-    this.logDebug('message', `Processed replacements: ${JSON.stringify(processedReplacements)}`, undefined, job.studyId)
-    
-    // Don't serialize complex profile objects - let worker handle them
-    // Just pass the profile name and let worker recreate the options
-    
-    // Create complete deidentifier configuration (serializable)
-    const deidentifierConfig = {
-      profile: job.config.profile, // Pass profile name instead of objects
-      dummies: {
-        default: processedReplacements.default || 'REMOVED',
-        lookup: {
-          '00100010': processedReplacements.patientName || 'ANONYMOUS', // Patient Name
-          '00100020': processedReplacements.patientId || 'ANON001', // Patient ID
-          '00100030': processedReplacements.patientBirthDate || '19000101', // Patient Birth Date
-          '00080080': processedReplacements.institution || 'ANONYMIZED', // Institution Name
-          '00080050': processedReplacements.accessionNumber || 'ACA0000000', // Accession Number
-          // Only add custom replacements if they're simple key-value pairs
-          ...(job.config.customReplacements && typeof job.config.customReplacements === 'object' 
-             ? Object.fromEntries(
-                 Object.entries(job.config.customReplacements).filter(([k, v]) => 
-                   typeof k === 'string' && typeof v === 'string'
-                 )
-               ) 
-             : {})
-        }
-      },
-      keep: Array.isArray(job.config.preserveTags) ? job.config.preserveTags.filter(tag => typeof tag === 'string') : [
-        // Default essential technical tags for image interpretation
-        '00080016', // SOP Class UID
-        '00080018', // SOP Instance UID
-        '0020000D', // Study Instance UID
-        '0020000E', // Series Instance UID
-        '00200013', // Instance Number
-      ]
-      // Note: Functions like getReferenceDate and getReferenceTime cannot be serialized to workers
-      // The worker will recreate these functions internally
+    this.logDebug('message', `Sending ${fileReferences.length} file references and config to worker`, undefined, job.studyId)
+
+    // Create serializable config - only include essential properties
+    const serializableConfig = {
+      profile: job.config.profile,
+      removePrivateTags: job.config.removePrivateTags,
+      useCustomHandlers: job.config.useCustomHandlers,
+      dateJitterDays: job.config.dateJitterDays,
+      organizationRoot: job.config.organizationRoot,
+      replacements: job.config.replacements ? 
+        Object.fromEntries(
+          Object.entries(job.config.replacements).filter(([k, v]) => 
+            typeof k === 'string' && typeof v === 'string'
+          )
+        ) : undefined,
+      preserveTags: Array.isArray(job.config.preserveTags) ? 
+        job.config.preserveTags.filter(tag => typeof tag === 'string') : undefined,
+      tagsToRemove: Array.isArray(job.config.tagsToRemove) ?
+        job.config.tagsToRemove.filter(tag => typeof tag === 'string') : undefined,
+      customReplacements: job.config.customReplacements ? 
+        Object.fromEntries(
+          Object.entries(job.config.customReplacements).filter(([k, v]) => 
+            typeof k === 'string' && typeof v === 'string'
+          )
+        ) : undefined
     }
 
-    this.logDebug('message', `Sending ${fileReferences.length} file references with complete deidentifier config to worker`, undefined, job.studyId)
-
-    // Send job to worker with file references and complete deidentifier configuration
+    // Send job to worker with file references and serializable configuration
     return {
       type: 'anonymize_study',
       data: {
         studyId: job.studyId,
         files: fileReferences,
-        deidentifierConfig, // Complete ready-to-use deidentifier configuration
+        config: serializableConfig, // Pass serializable config
         concurrency: job.concurrency
       }
     }

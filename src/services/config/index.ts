@@ -129,8 +129,9 @@ class ConfigServiceImpl {
 
   /**
    * Process replacement patterns (e.g., {timestamp} -> actual timestamp)
+   * Optional timestamp parameter ensures consistent values across multiple files
    */
-  static processReplacements = (replacements: Record<string, string>): Effect.Effect<Record<string, string>, ConfigurationErrorType> =>
+  static processReplacements = (replacements: Record<string, string>, sharedTimestamp?: string): Effect.Effect<Record<string, string>, ConfigurationErrorType> =>
     Effect.gen(function* () {
       if (!replacements || typeof replacements !== 'object') {
         return yield* Effect.fail(new ValidationError({
@@ -140,7 +141,8 @@ class ConfigServiceImpl {
       }
 
       const processed: Record<string, string> = {}
-      const timestamp = Date.now().toString().slice(-7)
+      // Use shared timestamp if provided, otherwise generate new one
+      const timestamp = sharedTimestamp || Date.now().toString().slice(-7)
       
       for (const [key, value] of Object.entries(replacements)) {
         if (typeof value !== 'string') {

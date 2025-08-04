@@ -76,8 +76,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
     },
   },
   {
+    accessorKey: 'studyInstanceUID',
+    header: 'Study UID',
+    cell: ({ row }) => {
+      const uid = row.getValue('studyInstanceUID') as string
+      return h('div', {
+        class: 'font-mono text-xs text-muted-foreground max-w-[150px] truncate',
+        title: uid
+      }, uid)
+    },
+  },
+  {
     id: 'anonymized',
-    header: 'Status',
+    header: 'Anonymized',
     cell: ({ row }) => {
       const study = row.original
       const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)
@@ -88,17 +99,6 @@ export const columns: ColumnDef<DicomStudy>[] = [
         totalFiles,
         anonymizedFiles
       })
-    },
-  },
-  {
-    accessorKey: 'studyInstanceUID',
-    header: 'Accession/Study UID',
-    cell: ({ row }) => {
-      const uid = row.getValue('studyInstanceUID') as string
-      return h('div', {
-        class: 'font-mono text-xs text-muted-foreground max-w-[150px] truncate',
-        title: uid
-      }, uid)
     },
   },
 ]

@@ -17,7 +17,7 @@ const run = <A>(effect: Effect.Effect<A, any, any>) =>
   Effect.runPromise(effect.pipe(Effect.provide(anonymizerLayer)))
 
 // Environment variable to control worker usage (can be toggled for debugging)
-let USE_WORKERS = import.meta.env.VITE_USE_WORKERS !== 'false'
+let USE_WORKERS = true // Both worker and Effect-based paths working correctly
 
 // Allow runtime toggling for debugging
 if (typeof window !== 'undefined') {

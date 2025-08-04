@@ -9,19 +9,13 @@ import {
   CleanDescOption,
   CleanGraphOption
 } from '@umessen/dicom-deidentifier'
-// Worker now just uses the complete config passed from main thread
 import { OPFSWorkerHelper } from '@/services/opfsStorage/opfsWorkerHelper'
+import type { AnonymizationConfig } from '@/types/dicom'
+import { getDicomReferenceDate, getDicomReferenceTime } from '@/services/anonymizer/dicomHelpers'
 
-// Complete deidentifier configuration (serializable)
-interface DeidentifierConfig {
-  profile: 'basic' | 'clean' | 'very-clean' // Profile name instead of objects
-  dummies: {
-    default: string
-    lookup: Record<string, string>
-  }
-  keep: string[]
-  [key: string]: any // Allow additional properties from the deidentifier library
-}
+// Load config in worker - import the config directly
+// In workers, we can't use Effect system, so we'll load the config directly
+import defaultConfig from '@/../app.config.json'
 
 // Types for worker communication - minimal data only
 interface WorkerMessage {
@@ -29,7 +23,7 @@ interface WorkerMessage {
   data: {
     studyId: string
     files: MinimalFileReference[]
-    deidentifierConfig: DeidentifierConfig  // Complete ready-to-use configuration
+    config: AnonymizationConfig  // Original configuration - worker processes it
     concurrency?: number
   }
 }
@@ -77,10 +71,86 @@ function postMessage(message: WorkerResponseMessage) {
   self.postMessage(message)
 }
 
-// Worker now uses the complete configuration passed from main thread - no internal logic needed
+/**
+ * Process replacement patterns in worker (e.g., {timestamp} -> actual timestamp)
+ * Uses shared timestamp to ensure consistent values across files in the same study
+ */
+function processReplacements(replacements: Record<string, string>, sharedTimestamp: string): Record<string, string> {
+  const processed: Record<string, string> = {}
+  
+  for (const [key, value] of Object.entries(replacements)) {
+    if (typeof value === 'string') {
+      processed[key] = value.replace('{timestamp}', sharedTimestamp)
+    }
+  }
+  
+  return processed
+}
+
+/**
+ * Create deidentifier configuration from AnonymizationConfig
+ */
+function createDeidentifierConfig(config: AnonymizationConfig, sharedTimestamp: string) {
+  // Use passed config, fallback to default config from app.config.json
+  const effectiveConfig = {
+    ...defaultConfig.anonymization,
+    ...config
+  }
+  
+  // Process replacement patterns with shared timestamp
+  const processedReplacements = processReplacements(effectiveConfig.replacements || {}, sharedTimestamp)
+  
+  // Select profile options based on config
+  let profileOptions: any[] = []
+  switch (effectiveConfig.profile) {
+    case 'clean':
+      profileOptions = CleanDescOption ? [CleanDescOption] : []
+      break
+    case 'very-clean':
+      profileOptions = CleanGraphOption ? [CleanGraphOption] : []
+      break
+    case 'basic':
+    default:
+      profileOptions = BasicProfile ? [BasicProfile] : []
+      break
+  }
+  
+  // Create complete deidentifier configuration using ONLY the configuration
+  const deidentifierConfig = {
+    profileOptions,
+    dummies: {
+      default: processedReplacements.default || effectiveConfig.replacements?.default || 'REMOVED',
+      lookup: {
+        // Use processed replacements - no hardcoded fallbacks
+        ...Object.fromEntries(
+          Object.entries(processedReplacements).map(([key, value]) => {
+            // Map semantic names to DICOM tags using configuration
+            switch (key) {
+              case 'patientName': return ['00100010', value]
+              case 'patientId': return ['00100020', value]
+              case 'patientBirthDate': return ['00100030', value]
+              case 'institution': return ['00080080', value]
+              case 'accessionNumber': return ['00080050', value]
+              default: return [key, value] // Direct tag mapping
+            }
+          })
+        ),
+        // Add any custom replacements from config
+        ...effectiveConfig.customReplacements
+      }
+    },
+    keep: effectiveConfig.preserveTags || [],
+    // Add helper functions for handling missing DICOM dates/times
+    getReferenceDate: getDicomReferenceDate,
+    getReferenceTime: getDicomReferenceTime
+  }
+  
+  console.log('[Worker] Created deidentifier config from configuration')
+  return deidentifierConfig
+}
 
 // OPFS-based file anonymization function - operates directly on OPFS files
-async function anonymizeFile(fileRef: MinimalFileReference, deidentifierConfig: DeidentifierConfig): Promise<MinimalFileReference> {
+async function anonymizeFile(fileRef: MinimalFileReference, config: AnonymizationConfig, sharedTimestamp: string): Promise<MinimalFileReference> {
   try {
     console.log(`[Worker] Loading file ${fileRef.fileName} from OPFS (${fileRef.opfsFileId})`)
     
@@ -88,93 +158,14 @@ async function anonymizeFile(fileRef: MinimalFileReference, deidentifierConfig: 
     const arrayBuffer = await OPFSWorkerHelper.loadFile(fileRef.opfsFileId)
     const uint8Array = new Uint8Array(arrayBuffer)
 
-    console.log(`[Worker] Anonymizing file ${fileRef.fileName} (${uint8Array.length} bytes) using provided config`)
+    console.log(`[Worker] Anonymizing file ${fileRef.fileName} (${uint8Array.length} bytes) using configuration`)
 
-    // Use the complete deidentifier configuration passed from main thread
-    // Need to recreate profile options and add functions that can't be serialized
-    
-    // Select profile options based on profile name
-    let profileOptions: any[] = []
-    switch (deidentifierConfig.profile) {
-      case 'clean':
-        profileOptions = CleanDescOption ? [CleanDescOption] : []
-        break
-      case 'very-clean':
-        profileOptions = CleanGraphOption ? [CleanGraphOption] : []
-        break
-      case 'basic':
-      default:
-        profileOptions = BasicProfile ? [BasicProfile] : []
-        break
-    }
-    
-    const configWithFunctions = {
-      ...deidentifierConfig,
-      profileOptions, // Add profile options back
-      // Add custom getReferenceDate function to handle missing PatientBirthDate
-      getReferenceDate: (dictionary: any) => {
-        const studyDate = dictionary['00080020']?.Value?.[0]
-        const acquisitionDate = dictionary['00080022']?.Value?.[0]
-        const contentDate = dictionary['00080023']?.Value?.[0]
-        const patientBirthDate = dictionary['00100030']?.Value?.[0]
-
-        if (patientBirthDate) {
-          const year = parseInt(patientBirthDate.substring(0, 4))
-          const month = parseInt(patientBirthDate.substring(4, 6)) - 1
-          const day = parseInt(patientBirthDate.substring(6, 8))
-          return new Date(year, month, day)
-        } else if (studyDate) {
-          const year = parseInt(studyDate.substring(0, 4))
-          const month = parseInt(studyDate.substring(4, 6)) - 1
-          const day = parseInt(studyDate.substring(6, 8))
-          return new Date(year, month, day)
-        } else if (acquisitionDate) {
-          const year = parseInt(acquisitionDate.substring(0, 4))
-          const month = parseInt(acquisitionDate.substring(4, 6)) - 1
-          const day = parseInt(acquisitionDate.substring(6, 8))
-          return new Date(year, month, day)
-        } else if (contentDate) {
-          const year = parseInt(contentDate.substring(0, 4))
-          const month = parseInt(contentDate.substring(4, 6)) - 1
-          const day = parseInt(contentDate.substring(6, 8))
-          return new Date(year, month, day)
-        } else {
-          return new Date('1970-01-01')
-        }
-      },
-      // Add custom getReferenceTime function to handle missing StudyTime
-      getReferenceTime: (dictionary: any) => {
-        const studyTime = dictionary['00080030']?.Value?.[0]
-        const seriesTime = dictionary['00080031']?.Value?.[0]
-        const acquisitionTime = dictionary['00080032']?.Value?.[0]
-
-        if (studyTime) {
-          const timeStr = studyTime.padEnd(6, '0')
-          const hours = parseInt(timeStr.substring(0, 2))
-          const minutes = parseInt(timeStr.substring(2, 4))
-          const seconds = parseInt(timeStr.substring(4, 6))
-          return new Date(1970, 0, 1, hours, minutes, seconds)
-        } else if (seriesTime) {
-          const timeStr = seriesTime.padEnd(6, '0')
-          const hours = parseInt(timeStr.substring(0, 2))
-          const minutes = parseInt(timeStr.substring(2, 4))
-          const seconds = parseInt(timeStr.substring(4, 6))
-          return new Date(1970, 0, 1, hours, minutes, seconds)
-        } else if (acquisitionTime) {
-          const timeStr = acquisitionTime.padEnd(6, '0')
-          const hours = parseInt(timeStr.substring(0, 2))
-          const minutes = parseInt(timeStr.substring(2, 4))
-          const seconds = parseInt(timeStr.substring(4, 6))
-          return new Date(1970, 0, 1, hours, minutes, seconds)
-        } else {
-          return new Date(1970, 0, 1, 12, 0, 0)
-        }
-      }
-    }
+    // Create deidentifier configuration from passed config with shared timestamp
+    const deidentifierConfig = createDeidentifierConfig(config, sharedTimestamp)
     
     let deidentifier
     try {
-      deidentifier = new DicomDeidentifier(configWithFunctions)
+      deidentifier = new DicomDeidentifier(deidentifierConfig)
       console.log(`[Worker] Created DicomDeidentifier for ${fileRef.fileName}`)
     } catch (e) {
       console.error(`[Worker] Failed to create DicomDeidentifier:`, e)
@@ -220,11 +211,15 @@ async function anonymizeFile(fileRef: MinimalFileReference, deidentifierConfig: 
 async function anonymizeStudy(
   studyId: string,
   files: MinimalFileReference[],
-  deidentifierConfig: DeidentifierConfig,
+  config: AnonymizationConfig,
   concurrency = 3
 ) {
   try {
     console.log(`[Worker] Starting anonymization of study ${studyId} with ${files.length} files`)
+    
+    // Generate shared timestamp for consistent replacements across all files in this study
+    const sharedTimestamp = Date.now().toString().slice(-7)
+    console.log(`[Worker] Using shared timestamp for study ${studyId}: ${sharedTimestamp}`)
     
     const anonymizedFiles: MinimalFileReference[] = []
     const total = files.length
@@ -248,7 +243,7 @@ async function anonymizeStudy(
         data: progressData
       })
 
-      const anonymizedFile = await anonymizeFile(fileRef, deidentifierConfig)
+      const anonymizedFile = await anonymizeFile(fileRef, config, sharedTimestamp)
       anonymizedFiles.push(anonymizedFile)
 
       // Send progress update after completion
@@ -304,8 +299,8 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   switch (type) {
     case 'anonymize_study':
       console.log(`[Worker] Starting anonymization for study ${data.studyId} with ${data.files.length} files`)
-      console.log(`[Worker] Using complete deidentifier config with ${Object.keys(data.deidentifierConfig.dummies.lookup).length} lookup entries`)
-      anonymizeStudy(data.studyId, data.files, data.deidentifierConfig, data.concurrency)
+      console.log(`[Worker] Using configuration profile: ${data.config.profile}`)
+      anonymizeStudy(data.studyId, data.files, data.config, data.concurrency)
       break
     default:
       console.warn('[Worker] Unknown message type:', type)
