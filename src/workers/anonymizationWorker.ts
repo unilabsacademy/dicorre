@@ -1,21 +1,36 @@
 /**
  * Web Worker for DICOM anonymization
- * Simplified version that directly uses the anonymization logic
+ * Uses Effect services for consistent anonymization logic
  */
 
-import {
-  DicomDeidentifier,
-  BasicProfile,
-  CleanDescOption,
-  CleanGraphOption
-} from '@umessen/dicom-deidentifier'
+import { Effect, Layer } from 'effect'
+import { Anonymizer, AnonymizerLive } from '@/services/anonymizer'
+import { ConfigService, ConfigServiceLive } from '@/services/config'
+import { DicomProcessor, DicomProcessorLive } from '@/services/dicomProcessor'
+import { OPFSStorage, OPFSStorageLive } from '@/services/opfsStorage'
+import { FileHandler, FileHandlerLive } from '@/services/fileHandler'
 import { OPFSWorkerHelper } from '@/services/opfsStorage/opfsWorkerHelper'
-import type { AnonymizationConfig } from '@/types/dicom'
-import { getDicomReferenceDate, getDicomReferenceTime } from '@/services/anonymizer/dicomHelpers'
+import type { AnonymizationConfig, DicomFile } from '@/types/dicom'
 
-// Load config in worker - import the config directly
-// In workers, we can't use Effect system, so we'll load the config directly
-import defaultConfig from '@/../app.config.json'
+// Worker-specific layer that excludes services requiring browser APIs like localStorage
+const WorkerServicesLayer = Layer.mergeAll(
+  ConfigServiceLive,
+  FileHandlerLive,
+  OPFSStorageLive,
+  DicomProcessorLive,
+  AnonymizerLive
+).pipe(
+  Layer.provide(Layer.mergeAll(
+    ConfigServiceLive,
+    FileHandlerLive,
+    OPFSStorageLive
+  ))
+)
+
+// Worker-specific runtime helper
+function runWithWorkerServices<A, E>(effect: Effect.Effect<A, E, any>): Promise<A> {
+  return Effect.runPromise(effect.pipe(Effect.provide(WorkerServicesLayer)))
+}
 
 // Types for worker communication - minimal data only
 interface WorkerMessage {
@@ -72,126 +87,57 @@ function postMessage(message: WorkerResponseMessage) {
 }
 
 /**
- * Process replacement patterns in worker (e.g., {timestamp} -> actual timestamp)
- * Uses shared timestamp to ensure consistent values across files in the same study
+ * Convert OPFS file reference to DicomFile for Effect services
+ * Parse metadata using DicomProcessor service
  */
-function processReplacements(replacements: Record<string, string>, sharedTimestamp: string): Record<string, string> {
-  const processed: Record<string, string> = {}
+async function createDicomFileFromReference(fileRef: MinimalFileReference): Promise<DicomFile> {
+  const arrayBuffer = await OPFSWorkerHelper.loadFile(fileRef.opfsFileId)
   
-  for (const [key, value] of Object.entries(replacements)) {
-    if (typeof value === 'string') {
-      processed[key] = value.replace('{timestamp}', sharedTimestamp)
-    }
+  // Create basic DicomFile first
+  const basicFile: DicomFile = {
+    id: fileRef.id,
+    fileName: fileRef.fileName,
+    fileSize: arrayBuffer.byteLength,
+    arrayBuffer,
+    anonymized: false
   }
   
-  return processed
+  // Parse metadata using DicomProcessor service
+  const parsedFile = await runWithWorkerServices(
+    Effect.gen(function* () {
+      const processor = yield* DicomProcessor
+      return yield* processor.parseFile(basicFile)
+    })
+  )
+  
+  return parsedFile
 }
 
-/**
- * Create deidentifier configuration from AnonymizationConfig
- */
-function createDeidentifierConfig(config: AnonymizationConfig, sharedTimestamp: string) {
-  // Use passed config, fallback to default config from app.config.json
-  const effectiveConfig = {
-    ...defaultConfig.anonymization,
-    ...config
-  }
-  
-  // Process replacement patterns with shared timestamp
-  const processedReplacements = processReplacements(effectiveConfig.replacements || {}, sharedTimestamp)
-  
-  // Select profile options based on config
-  let profileOptions: any[] = []
-  switch (effectiveConfig.profile) {
-    case 'clean':
-      profileOptions = CleanDescOption ? [CleanDescOption] : []
-      break
-    case 'very-clean':
-      profileOptions = CleanGraphOption ? [CleanGraphOption] : []
-      break
-    case 'basic':
-    default:
-      profileOptions = BasicProfile ? [BasicProfile] : []
-      break
-  }
-  
-  // Create complete deidentifier configuration using ONLY the configuration
-  const deidentifierConfig = {
-    profileOptions,
-    dummies: {
-      default: processedReplacements.default || effectiveConfig.replacements?.default || 'REMOVED',
-      lookup: {
-        // Use processed replacements - no hardcoded fallbacks
-        ...Object.fromEntries(
-          Object.entries(processedReplacements).map(([key, value]) => {
-            // Map semantic names to DICOM tags using configuration
-            switch (key) {
-              case 'patientName': return ['00100010', value]
-              case 'patientId': return ['00100020', value]
-              case 'patientBirthDate': return ['00100030', value]
-              case 'institution': return ['00080080', value]
-              case 'accessionNumber': return ['00080050', value]
-              default: return [key, value] // Direct tag mapping
-            }
-          })
-        ),
-        // Add any custom replacements from config
-        ...effectiveConfig.customReplacements
-      }
-    },
-    keep: effectiveConfig.preserveTags || [],
-    // Add helper functions for handling missing DICOM dates/times
-    getReferenceDate: getDicomReferenceDate,
-    getReferenceTime: getDicomReferenceTime
-  }
-  
-  console.log('[Worker] Created deidentifier config from configuration')
-  return deidentifierConfig
-}
-
-// OPFS-based file anonymization function - operates directly on OPFS files
+// Effect-based file anonymization using services
 async function anonymizeFile(fileRef: MinimalFileReference, config: AnonymizationConfig, sharedTimestamp: string): Promise<MinimalFileReference> {
   try {
     console.log(`[Worker] Loading file ${fileRef.fileName} from OPFS (${fileRef.opfsFileId})`)
     
-    // Load file data from OPFS (source of truth)
-    const arrayBuffer = await OPFSWorkerHelper.loadFile(fileRef.opfsFileId)
-    const uint8Array = new Uint8Array(arrayBuffer)
-
-    console.log(`[Worker] Anonymizing file ${fileRef.fileName} (${uint8Array.length} bytes) using configuration`)
-
-    // Create deidentifier configuration from passed config with shared timestamp
-    const deidentifierConfig = createDeidentifierConfig(config, sharedTimestamp)
+    // Create DicomFile from OPFS reference
+    const dicomFile = await createDicomFileFromReference(fileRef)
     
-    let deidentifier
-    try {
-      deidentifier = new DicomDeidentifier(deidentifierConfig)
-      console.log(`[Worker] Created DicomDeidentifier for ${fileRef.fileName}`)
-    } catch (e) {
-      console.error(`[Worker] Failed to create DicomDeidentifier:`, e)
-      throw new Error(`Failed to create deidentifier: ${e.message}`)
-    }
+    console.log(`[Worker] Anonymizing file ${fileRef.fileName} using Effect services`)
 
-    // Anonymize the DICOM file
-    let anonymizedUint8Array
-    try {
-      anonymizedUint8Array = deidentifier.deidentify(uint8Array)
-      console.log(`[Worker] Successfully deidentified ${fileRef.fileName}`)
-    } catch (e) {
-      console.error(`[Worker] Failed to deidentify file:`, e)
-      throw new Error(`Failed to deidentify: ${e.message}`)
-    }
+    // Use Effect services for anonymization
+    const anonymizedFile = await runWithWorkerServices(
+      Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        
+        // Use shared timestamp for consistent replacements across files
+        return yield* anonymizer.anonymizeFile(dicomFile, config, sharedTimestamp)
+      })
+    )
 
     // Create new OPFS file ID for anonymized version
     const anonymizedOpfsFileId = `${fileRef.opfsFileId}_anonymized`
 
-    // Convert back to ArrayBuffer and save to OPFS (new source of truth)
-    const anonymizedArrayBuffer = anonymizedUint8Array.buffer.slice(
-      anonymizedUint8Array.byteOffset,
-      anonymizedUint8Array.byteOffset + anonymizedUint8Array.byteLength
-    )
-
-    await OPFSWorkerHelper.saveFile(anonymizedOpfsFileId, anonymizedArrayBuffer)
+    // Save anonymized file to OPFS
+    await OPFSWorkerHelper.saveFile(anonymizedOpfsFileId, anonymizedFile.arrayBuffer)
 
     console.log(`[Worker] Successfully anonymized and saved ${fileRef.fileName} to OPFS`)
 
@@ -203,7 +149,8 @@ async function anonymizeFile(fileRef: MinimalFileReference, config: Anonymizatio
     }
   } catch (error) {
     console.error(`[Worker] Error anonymizing file ${fileRef.fileName}:`, error)
-    throw new Error(`Failed to anonymize file: ${fileRef.fileName} - ${error.message}`)
+    const message = error instanceof Error ? error.message : String(error)
+    throw new Error(`Failed to anonymize file: ${fileRef.fileName} - ${message}`)
   }
 }
 
@@ -278,13 +225,16 @@ async function anonymizeStudy(
 
   } catch (error) {
     console.error('Worker anonymization error:', error)
-    // Send error message
+    // Send error message with consistent Error handling
+    const errorMessage = error instanceof Error ? error.message : String(error)
+    const errorStack = error instanceof Error ? error.stack : undefined
+    
     postMessage({
       type: 'error',
       studyId,
       data: {
-        message: error instanceof Error ? error.message : 'Unknown error',
-        stack: error instanceof Error ? error.stack : undefined
+        message: errorMessage,
+        stack: errorStack
       }
     })
   }
