@@ -21,12 +21,20 @@ export interface AnonymizationProgress {
   currentFile?: string
 }
 
+export interface StudyAnonymizationResult {
+  studyId: string
+  anonymizedFiles: DicomFile[]
+  totalFiles: number
+  completedFiles: number
+}
+
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
     readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string) => Effect.Effect<DicomFile, AnonymizerError>
     readonly anonymizeFiles: (files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<DicomFile[], AnonymizerError>
     readonly anonymizeInBatches: (files: DicomFile[], config: AnonymizationConfig, batchSize?: number, onBatchComplete?: (batchIndex: number, totalBatches: number) => void) => Effect.Effect<DicomFile[], AnonymizerError>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
     readonly validateConfig: (config: AnonymizationConfig) => Effect.Effect<void, ConfigurationError>
   }
 >() { }
@@ -329,6 +337,79 @@ class AnonymizerImpl {
 
       return results
     })
+
+  /**
+   * Anonymize study with coordinated file processing
+   * This is the main orchestration method that should be used for study-level anonymization
+   */
+  static anonymizeStudy = (
+    studyId: string,
+    files: DicomFile[],
+    config: AnonymizationConfig,
+    options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void } = {}
+  ): Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor | ConfigService> =>
+    Effect.gen(function* () {
+      const { concurrency = 3, onProgress } = options
+      
+      console.log(`[Effect Anonymizer] Starting anonymization of study ${studyId} with ${files.length} files`)
+      
+      // Validate configuration first
+      yield* AnonymizerImpl.validateConfig(config)
+      
+      // Generate shared timestamp for consistent replacements across all files in this study
+      const sharedTimestamp = Date.now().toString().slice(-7)
+      console.log(`[Effect Anonymizer] Using shared timestamp for study ${studyId}: ${sharedTimestamp}`)
+      
+      let completed = 0
+      const total = files.length
+
+      // Create individual effects with progress tracking
+      const effectsWithProgress = files.map((file, index) =>
+        Effect.gen(function* () {
+          // Send progress update before processing
+          if (onProgress) {
+            onProgress({
+              total,
+              completed,
+              percentage: Math.round((completed / total) * 100),
+              currentFile: file.fileName
+            })
+          }
+
+          console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
+          
+          // Anonymize individual file with shared timestamp
+          const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp)
+
+          completed++
+          
+          // Send progress update after completion
+          if (onProgress) {
+            onProgress({
+              total,
+              completed,
+              percentage: Math.round((completed / total) * 100),
+              currentFile: file.fileName
+            })
+          }
+
+          console.log(`[Effect Anonymizer] Completed file ${index + 1}/${total}: ${file.fileName}`)
+          return result
+        })
+      )
+
+      // Run all effects concurrently with specified concurrency
+      const anonymizedFiles = yield* Effect.all(effectsWithProgress, { concurrency, batching: true })
+
+      console.log(`[Effect Anonymizer] Study ${studyId} anonymization completed: ${anonymizedFiles.length} files processed`)
+      
+      return {
+        studyId,
+        anonymizedFiles,
+        totalFiles: total,
+        completedFiles: anonymizedFiles.length
+      }
+    })
 }
 
 /**
@@ -340,6 +421,7 @@ export const AnonymizerLive = Layer.succeed(
     anonymizeFile: AnonymizerImpl.anonymizeFile,
     anonymizeFiles: AnonymizerImpl.anonymizeFiles,
     anonymizeInBatches: AnonymizerImpl.anonymizeInBatches,
+    anonymizeStudy: AnonymizerImpl.anonymizeStudy,
     validateConfig: AnonymizerImpl.validateConfig
   })
 )

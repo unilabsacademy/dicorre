@@ -113,48 +113,8 @@ async function createDicomFileFromReference(fileRef: MinimalFileReference): Prom
   return parsedFile
 }
 
-// Effect-based file anonymization using services
-async function anonymizeFile(fileRef: MinimalFileReference, config: AnonymizationConfig, sharedTimestamp: string): Promise<MinimalFileReference> {
-  try {
-    console.log(`[Worker] Loading file ${fileRef.fileName} from OPFS (${fileRef.opfsFileId})`)
-    
-    // Create DicomFile from OPFS reference
-    const dicomFile = await createDicomFileFromReference(fileRef)
-    
-    console.log(`[Worker] Anonymizing file ${fileRef.fileName} using Effect services`)
 
-    // Use Effect services for anonymization
-    const anonymizedFile = await runWithWorkerServices(
-      Effect.gen(function* () {
-        const anonymizer = yield* Anonymizer
-        
-        // Use shared timestamp for consistent replacements across files
-        return yield* anonymizer.anonymizeFile(dicomFile, config, sharedTimestamp)
-      })
-    )
-
-    // Create new OPFS file ID for anonymized version
-    const anonymizedOpfsFileId = `${fileRef.opfsFileId}_anonymized`
-
-    // Save anonymized file to OPFS
-    await OPFSWorkerHelper.saveFile(anonymizedOpfsFileId, anonymizedFile.arrayBuffer)
-
-    console.log(`[Worker] Successfully anonymized and saved ${fileRef.fileName} to OPFS`)
-
-    // Return minimal reference to anonymized file
-    return {
-      id: fileRef.id,
-      fileName: fileRef.fileName,
-      opfsFileId: anonymizedOpfsFileId
-    }
-  } catch (error) {
-    console.error(`[Worker] Error anonymizing file ${fileRef.fileName}:`, error)
-    const message = error instanceof Error ? error.message : String(error)
-    throw new Error(`Failed to anonymize file: ${fileRef.fileName} - ${message}`)
-  }
-}
-
-// Main anonymization function that runs in worker
+// Study anonymization using Effect service (pure I/O layer)
 async function anonymizeStudy(
   studyId: string,
   files: MinimalFileReference[],
@@ -162,69 +122,68 @@ async function anonymizeStudy(
   concurrency = 3
 ) {
   try {
-    console.log(`[Worker] Starting anonymization of study ${studyId} with ${files.length} files`)
+    console.log(`[Worker] Starting I/O operations for study ${studyId} with ${files.length} files`)
     
-    // Generate shared timestamp for consistent replacements across all files in this study
-    const sharedTimestamp = Date.now().toString().slice(-7)
-    console.log(`[Worker] Using shared timestamp for study ${studyId}: ${sharedTimestamp}`)
+    // Convert OPFS file references to DicomFiles
+    const dicomFiles: DicomFile[] = []
+    for (const fileRef of files) {
+      const dicomFile = await createDicomFileFromReference(fileRef)
+      dicomFiles.push(dicomFile)
+    }
     
-    const anonymizedFiles: MinimalFileReference[] = []
-    const total = files.length
-
-    // Process files with concurrency limit
-    const processFile = async (fileRef: MinimalFileReference, index: number) => {
-      console.log(`[Worker] Starting file ${index + 1}/${total}: ${fileRef.fileName}`)
-      
-      // Send progress update
-      const progressData = {
-        total,
-        completed: index,
-        percentage: Math.round((index / total) * 100),
-        currentFile: fileRef.fileName
-      }
-      console.log(`[Worker] Sending progress update:`, progressData)
-      
-      postMessage({
-        type: 'progress',
-        studyId,
-        data: progressData
+    console.log(`[Worker] Loaded ${dicomFiles.length} DICOM files from OPFS`)
+    
+    // Use Effect service for study anonymization
+    const result = await runWithWorkerServices(
+      Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        
+        return yield* anonymizer.anonymizeStudy(studyId, dicomFiles, config, {
+          concurrency,
+          onProgress: (progress) => {
+            // Forward progress updates to main thread
+            postMessage({
+              type: 'progress',
+              studyId,
+              data: progress
+            })
+          }
+        })
       })
-
-      const anonymizedFile = await anonymizeFile(fileRef, config, sharedTimestamp)
-      anonymizedFiles.push(anonymizedFile)
-
-      // Send progress update after completion
-      const completedProgressData = {
-        total,
-        completed: index + 1,
-        percentage: Math.round(((index + 1) / total) * 100),
-        currentFile: fileRef.fileName
-      }
-      console.log(`[Worker] Sending completion progress:`, completedProgressData)
+    )
+    
+    console.log(`[Worker] Effect service completed anonymization: ${result.anonymizedFiles.length} files`)
+    
+    // Save anonymized files back to OPFS and create references
+    const anonymizedFileRefs: MinimalFileReference[] = []
+    for (let i = 0; i < result.anonymizedFiles.length; i++) {
+      const anonymizedFile = result.anonymizedFiles[i]
+      const originalRef = files[i]
       
-      postMessage({
-        type: 'progress',
-        studyId,
-        data: completedProgressData
+      // Create new OPFS file ID for anonymized version
+      const anonymizedOpfsFileId = `${originalRef.opfsFileId}_anonymized`
+      
+      // Save to OPFS
+      await OPFSWorkerHelper.saveFile(anonymizedOpfsFileId, anonymizedFile.arrayBuffer)
+      
+      anonymizedFileRefs.push({
+        id: originalRef.id,
+        fileName: originalRef.fileName,
+        opfsFileId: anonymizedOpfsFileId
       })
     }
 
-    // Process files in batches to respect concurrency
-    for (let i = 0; i < files.length; i += concurrency) {
-      const batch = files.slice(i, i + concurrency)
-      await Promise.all(batch.map((file, batchIndex) => processFile(file, i + batchIndex)))
-    }
-
+    console.log(`[Worker] Saved ${anonymizedFileRefs.length} anonymized files to OPFS`)
+    
     // Send completion message
-    console.log(`[Worker] Anonymization completed for study ${studyId}. Sending ${anonymizedFiles.length} files back to main thread`)
     postMessage({
       type: 'complete',
       studyId,
-      data: { anonymizedFiles }
+      data: { anonymizedFiles: anonymizedFileRefs }
     })
 
   } catch (error) {
-    console.error('Worker anonymization error:', error)
+    console.error('Worker I/O error:', error)
     // Send error message with consistent Error handling
     const errorMessage = error instanceof Error ? error.message : String(error)
     const errorStack = error instanceof Error ? error.stack : undefined
