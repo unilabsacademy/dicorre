@@ -150,6 +150,7 @@ class DicomProcessorImpl {
         }
 
         const {
+          accessionNumber,
           patientId,
           patientName,
           studyInstanceUID,
@@ -166,6 +167,7 @@ class DicomProcessorImpl {
         // Get or create study
         if (!studyMap.has(studyKey)) {
           studyMap.set(studyKey, {
+            accessionNumber: accessionNumber || '',
             studyInstanceUID: studyInstanceUID || '',
             patientName: patientName || 'Unknown',
             patientId: patientId || 'Unknown',

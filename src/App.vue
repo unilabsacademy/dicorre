@@ -33,15 +33,13 @@ import {
 // Initialize the workflow composable and file handler
 const workflow = useDicomWorkflow()
 const fileHandler = new FileHandlerWrapper()
-const { setStudyProgress, removeStudyProgress, clearAllProgress, studyProgressMap } = useAnonymizationProgress()
+const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
 
 // Component state
 const uploadedFiles = ref<File[]>([])
 const dicomFiles = ref<DicomFile[]>([])
-const fileInput = ref<HTMLInputElement>()
 const successMessage = ref('')
 const concurrency = ref(3)
-
 
 // Anonymization configuration
 const config = reactive<AnonymizationConfig>({
@@ -72,7 +70,6 @@ const fileProcessingState = ref<{
   totalFiles?: number
   currentFileIndex?: number
 } | null>(null)
-
 
 // Table state management
 const tableState = useTableState()
@@ -377,7 +374,7 @@ async function anonymizeSelected() {
         }
         return anonymized || file
       })
-      
+
       // Replace entire array to break references to old data
       dicomFiles.value = updatedFiles
 
@@ -459,7 +456,7 @@ function clearFiles() {
     // Clear metadata to reduce memory usage
     if (file.metadata) file.metadata = undefined
   })
-  
+
   uploadedFiles.value = []
   dicomFiles.value = []
   studies.value = []

@@ -1,21 +1,14 @@
 <script setup lang="ts" generic="TData, TValue">
 import { useTableState } from '@/composables/useTableState'
-import type {
-  ColumnDef,
-  ColumnFiltersState,
-  SortingState,
-  VisibilityState,
-} from '@tanstack/vue-table'
+import type { ColumnDef } from '@tanstack/vue-table'
 import {
   FlexRender,
   getCoreRowModel,
   getFilteredRowModel,
-  getPaginationRowModel,
   getSortedRowModel,
   useVueTable,
 } from '@tanstack/vue-table'
 
-import { computed, type Ref } from 'vue'
 import { Input } from '@/components/ui/input'
 import {
   Table,
@@ -25,7 +18,6 @@ import {
   TableHeader,
   TableRow,
 } from '@/components/ui/table'
-import { Button } from '@/components/ui/button'
 
 interface DataTableProps {
   columns: ColumnDef<TData, TValue>[]
@@ -98,9 +90,9 @@ const table = useVueTable({
   <div class="w-full">
     <div class="flex items-center py-4">
       <Input
-        placeholder="Search by accession number or study UID..."
-        :model-value="(table.getColumn('studyInstanceUID')?.getFilterValue() as string) ?? ''"
-        @update:model-value="table.getColumn('studyInstanceUID')?.setFilterValue($event)"
+        placeholder="Search by accession number..."
+        :model-value="(table.getColumn('accessionNumber')?.getFilterValue() as string) ?? ''"
+        @update:model-value="table.getColumn('accessionNumber')?.setFilterValue($event)"
         class="max-w-sm"
       />
       <div class="ml-auto text-sm text-muted-foreground">

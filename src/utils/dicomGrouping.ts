@@ -14,6 +14,7 @@ export function groupDicomFilesByStudy(files: DicomFile[]): DicomStudy[] {
     }
     
     const {
+      accessionNumber,
       patientId,
       patientName,
       studyInstanceUID,
@@ -30,6 +31,7 @@ export function groupDicomFilesByStudy(files: DicomFile[]): DicomStudy[] {
     // Get or create study
     if (!studyMap.has(studyKey)) {
       studyMap.set(studyKey, {
+        accessionNumber: accessionNumber || '',
         studyInstanceUID,
         patientName: patientName || 'Unknown',
         patientId: patientId || 'Unknown',
