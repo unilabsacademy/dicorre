@@ -10,17 +10,6 @@ import { AppLayer } from './layers'
 /**
  * Run an Effect with all application services provided
  */
-export function runWithServices<A, E>(effect: Effect.Effect<A, E, any>): Promise<A> {
+export function runWithServices<A, E>(effect: Effect.Effect<A, E, never>): Promise<A> {
   return Effect.runPromise(effect.pipe(Effect.provide(AppLayer)))
-}
-
-/**
- * Create a Promise-based wrapper for a service method
- */
-export function createServiceMethod<Args extends any[], A, E, R>(
-  effectFn: (...args: Args) => Effect.Effect<A, E, R>
-) {
-  return (...args: Args): Promise<A> => {
-    return runWithServices(effectFn(...args))
-  }
 }

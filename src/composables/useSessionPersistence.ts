@@ -1,7 +1,9 @@
 import { ref, watch, type Ref } from 'vue'
 import { useStorage } from '@vueuse/core'
+import { Effect, Layer } from 'effect'
 import { opfsStorage } from '@/services/runtime/opfsStorage'
-import { groupDicomFilesByStudy } from '@/utils/dicomGrouping'
+import { DicomProcessor, DicomProcessorLive } from '@/services/dicomProcessor'
+import { ConfigServiceLive } from '@/services/config'
 import type { DicomFile, DicomFileMetadata, DicomStudy } from '@/types/dicom'
 
 interface PersistedSession {
@@ -9,6 +11,17 @@ interface PersistedSession {
 }
 
 const STORAGE_KEY = 'dicom-session'
+
+// Create the Effect layer for DicomProcessor
+const processorLayer = Layer.mergeAll(
+  DicomProcessorLive,
+  ConfigServiceLive
+)
+
+// Helper to execute an Effect with the processor environment
+const runProcessor = <A>(effect: Effect.Effect<A, any, any>) =>
+  // @ts-ignore – Effect typing for provideLayer narrows env to never which conflicts with Vue TS config
+  Effect.runPromise(effect.pipe(Effect.provide(processorLayer)))
 
 export function useSessionPersistence(
   extractedDicomFiles: Ref<DicomFile[]>,
@@ -90,7 +103,16 @@ export function useSessionPersistence(
     }
 
     extractedDicomFiles.value = restored
-    studies.value = groupDicomFilesByStudy(restored)
+    
+    // Group files using the DicomProcessor service
+    const groupedStudies = await runProcessor(
+      Effect.gen(function* () {
+        const processor = yield* DicomProcessor
+        return yield* processor.groupFilesByStudy(restored)
+      })
+    )
+    
+    studies.value = groupedStudies
     isRestoring.value = false
   }
 

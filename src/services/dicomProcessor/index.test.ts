@@ -109,5 +109,150 @@ describe('DicomProcessor Service (Effect Service Testing)', () => {
       expect(result).toHaveLength(1)
       expect(result[0].series).toBeDefined()
     })
+
+    it('should correctly group 3 cases with 3 series each (18 files total)', async () => {
+      // Load test ZIP file containing 3 cases x 3 series x 2 images each
+      const { readFileSync } = await import('fs')
+      const { FileHandler, FileHandlerLive } = await import('@/services/fileHandler')
+      
+      const runFileHandlerTest = <A, E>(effect: Effect.Effect<A, E, FileHandler>) =>
+        Effect.runPromise(effect.pipe(Effect.provide(FileHandlerLive)))
+      
+      const zipPath = join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip')
+      const zipFile = new File([readFileSync(zipPath)], '3_cases_each_with_3_series_6_images.zip')
+      
+      // Extract and parse DICOM files
+      const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
+        const fileHandler = yield* FileHandler
+        return yield* fileHandler.extractZipFile(zipFile)
+      }))
+      expect(extractedFiles.length).toBe(18)
+      
+      const result = await runTest(Effect.gen(function* () {
+        const processor = yield* DicomProcessor
+        const parsedFiles = yield* processor.parseFiles(extractedFiles, 3)
+        const studies = yield* processor.groupFilesByStudy(parsedFiles)
+        return studies
+      }))
+      
+      // Validate grouping results
+      expect(result.length).toBe(3) // 3 studies (1 per patient)
+      
+      // Count total series and files
+      let totalSeries = 0
+      let totalFiles = 0
+      const patientIds = new Set<string>()
+      
+      for (const study of result) {
+        patientIds.add(study.patientId)
+        totalSeries += study.series.length
+        expect(study.series.length).toBe(3) // Each study should have 3 series
+        
+        for (const series of study.series) {
+          totalFiles += series.files.length
+          expect(series.files.length).toBe(2) // Each series should have 2 files
+          
+          // All files in the series should have the same series UID
+          const firstSeriesUID = series.files[0].metadata?.seriesInstanceUID
+          series.files.forEach(file => {
+            expect(file.metadata?.seriesInstanceUID).toBe(firstSeriesUID)
+          })
+        }
+      }
+      
+      expect(patientIds.size).toBe(3) // 3 different patients
+      expect(totalSeries).toBe(9) // 9 series total (3 per study)
+      expect(totalFiles).toBe(18) // 18 files total
+    })
+
+    it('should correctly group 1 case with 3 series (6 files total)', async () => {
+      // Load test ZIP file containing 1 case with 3 series x 2 images each
+      const { readFileSync } = await import('fs')
+      const { FileHandler, FileHandlerLive } = await import('@/services/fileHandler')
+      
+      const runFileHandlerTest = <A, E>(effect: Effect.Effect<A, E, FileHandler>) =>
+        Effect.runPromise(effect.pipe(Effect.provide(FileHandlerLive)))
+      
+      const zipPath = join(process.cwd(), 'test-data/CASES/1_case_3_series_6_images.zip')
+      const zipFile = new File([readFileSync(zipPath)], '1_case_3_series_6_images.zip')
+      
+      // Extract and parse DICOM files
+      const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
+        const fileHandler = yield* FileHandler
+        return yield* fileHandler.extractZipFile(zipFile)
+      }))
+      expect(extractedFiles.length).toBe(6)
+      
+      const result = await runTest(Effect.gen(function* () {
+        const processor = yield* DicomProcessor
+        const parsedFiles = yield* processor.parseFiles(extractedFiles)
+        const studies = yield* processor.groupFilesByStudy(parsedFiles)
+        return studies
+      }))
+      
+      // Validate grouping results
+      expect(result.length).toBe(1) // 1 study
+      
+      const study = result[0]
+      expect(study.series.length).toBe(3) // 3 series
+      
+      let totalFiles = 0
+      for (const series of study.series) {
+        totalFiles += series.files.length
+        expect(series.files.length).toBe(2) // Each series should have 2 files
+      }
+      
+      expect(totalFiles).toBe(6) // 6 files total
+    })
+
+    it('should handle files with missing metadata gracefully', async () => {
+      const filesWithMissingMetadata: DicomFile[] = [
+        {
+          id: '1',
+          fileName: 'valid.dcm',
+          fileSize: 1000,
+          arrayBuffer: new ArrayBuffer(1000),
+          anonymized: false,
+          parsed: true,
+          metadata: {
+            accessionNumber: 'ACC1',
+            patientId: 'PAT1',
+            patientName: 'Patient One',
+            patientBirthDate: '',
+            patientSex: '',
+            patientWeight: 0,
+            patientHeight: 0,
+            studyInstanceUID: 'STUDY1',
+            studyDate: '20241201',
+            studyDescription: 'Test Study',
+            seriesInstanceUID: 'SERIES1',
+            seriesDescription: 'Test Series',
+            modality: 'CT',
+            sopInstanceUID: 'SOP1',
+            instanceNumber: 1,
+            transferSyntaxUID: '1.2.840.10008.1.2'
+          }
+        },
+        {
+          id: '2',
+          fileName: 'invalid.dcm',
+          fileSize: 500,
+          arrayBuffer: new ArrayBuffer(500),
+          anonymized: false,
+          parsed: false
+          // No metadata
+        }
+      ]
+      
+      const result = await runTest(Effect.gen(function* () {
+        const processor = yield* DicomProcessor
+        return yield* processor.groupFilesByStudy(filesWithMissingMetadata)
+      }))
+      
+      // Should only process the file with valid metadata
+      expect(result.length).toBe(1)
+      expect(result[0].series.length).toBe(1)
+      expect(result[0].series[0].files.length).toBe(1)
+    })
   })
 })

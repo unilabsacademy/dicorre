@@ -76,12 +76,32 @@ export function useDicomProcessor() {
     }
   }
 
+  const groupFilesByStudy = async (files: DicomFile[]) => {
+    loading.value = true
+    error.value = null
+    try {
+      const results = await run(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.groupFilesByStudy(files)
+        })
+      )
+      return results
+    } catch (e) {
+      error.value = e as Error
+      return []
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
     loading,
     error,
     lastResult,
     parseFile,
     parseFiles,
-    validateFile
+    validateFile,
+    groupFilesByStudy
   }
 }

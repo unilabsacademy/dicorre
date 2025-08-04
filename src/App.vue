@@ -5,7 +5,7 @@ import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
 import { useAppConfig } from '@/composables/useAppConfig'
 import { FileHandlerWrapper } from '@/services/runtime/fileHandler'
-import { groupDicomFilesByStudy } from '@/utils/dicomGrouping'
+import { useDicomProcessor } from '@/composables/useDicomProcessor'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -35,6 +35,7 @@ import {
 // Initialize the workflow composable and file handler
 const workflow = useDicomWorkflow()
 const fileHandler = new FileHandlerWrapper()
+const dicomProcessor = useDicomProcessor()
 const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
 const { setStudySendingProgress, removeStudySendingProgress, clearAllSendingProgress } = useSendingProgress()
 const { config: loadedConfig, loading: configLoading, error: configError } = useAppConfig()
@@ -309,7 +310,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
     dicomFiles.value = [...dicomFiles.value, ...parsedFiles]
 
     // Group all DICOM files so that the UI can display studies
-    const groupedStudies = groupDicomFilesByStudy(dicomFiles.value)
+    const groupedStudies = await dicomProcessor.groupFilesByStudy(dicomFiles.value)
     studies.value = groupedStudies
 
     console.log(`Parsed ${parsedFiles.length} new files, total: ${dicomFiles.value.length} files in ${groupedStudies.length} studies`)
@@ -405,7 +406,7 @@ async function anonymizeSelected() {
 
       // Immediately refresh study grouping for this completed study to update UI
       console.log(`Regrouping studies after ${study.studyInstanceUID} anonymization completion...`)
-      const regroupedStudies = groupDicomFilesByStudy(dicomFiles.value)
+      const regroupedStudies = await dicomProcessor.groupFilesByStudy(dicomFiles.value)
       studies.value = regroupedStudies
       console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
 
@@ -510,7 +511,7 @@ async function handleSendSelected(selectedStudies: DicomStudy[]) {
 
         // Immediately refresh study grouping for this completed study to update UI
         console.log(`Regrouping studies after ${study.studyInstanceUID} sending completion...`)
-        const regroupedStudies = groupDicomFilesByStudy(dicomFiles.value)
+        const regroupedStudies = await dicomProcessor.groupFilesByStudy(dicomFiles.value)
         studies.value = regroupedStudies
         console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
 

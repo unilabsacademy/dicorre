@@ -6,9 +6,9 @@ import { Effect, Layer } from "effect"
 import { ConfigService, ConfigServiceLive } from '../config'
 import { FileHandler, FileHandlerLive } from '../fileHandler'
 import { OPFSStorage, OPFSStorageLive } from '../opfsStorage'
-import { DicomProcessor, DicomProcessorLive } from '../dicomProcessor'
-import { Anonymizer, AnonymizerLive } from '../anonymizer'
-import { DicomSender, DicomSenderLive } from '../dicomSender'
+import { DicomProcessorLive } from '../dicomProcessor'
+import { AnonymizerLive } from '../anonymizer'
+import { DicomSenderLive } from '../dicomSender'
 import { ConfigurationError } from '@/types/effects'
 
 /**
