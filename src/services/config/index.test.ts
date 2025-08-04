@@ -112,8 +112,8 @@ describe('ConfigService (Effect Service Testing)', () => {
         return yield* configService.processReplacements(replacements)
       }))
       
-      expect(result.patientName).toMatch(/^PATIENT_\d{6}$/)
-      expect(result.studyDate).toMatch(/^2024\d{6}$/)
+      expect(result.patientName).toMatch(/^PATIENT_\d{7}$/)
+      expect(result.studyDate).toMatch(/^2024\d{7}$/)
     })
 
     it('should handle missing presets gracefully', async () => {

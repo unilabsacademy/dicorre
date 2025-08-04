@@ -106,9 +106,11 @@ class AnonymizerImpl {
       }
 
       // Get processed replacements from config service
+      console.log('Processing replacements from config:', config.replacements)
       const processedReplacements = yield* configService.processReplacements(
         (config.replacements || {}) as Record<string, string>
       )
+      console.log('Processed replacements result:', processedReplacements)
 
       // Perform anonymization using the existing legacy method
       const result = yield* Effect.tryPromise({
@@ -160,6 +162,7 @@ class AnonymizerImpl {
               '00100020': processedReplacements.patientId || 'ANON001', // Patient ID
               '00100030': processedReplacements.patientBirthDate || '19000101', // Patient Birth Date
               '00080080': processedReplacements.institution || 'ANONYMIZED', // Institution Name
+              '00080050': processedReplacements.accessionNumber || 'ACA0000000', // Accession Number
               // Add any custom replacements
               ...config.customReplacements
             }

@@ -140,7 +140,7 @@ class ConfigServiceImpl {
       }
 
       const processed: Record<string, string> = {}
-      const timestamp = Date.now().toString().slice(-6)
+      const timestamp = Date.now().toString().slice(-7)
       
       for (const [key, value] of Object.entries(replacements)) {
         if (typeof value !== 'string') {

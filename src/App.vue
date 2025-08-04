@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { ref, computed, reactive, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import type { DicomFile } from '@/types/dicom'
 import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import { useAppConfig } from '@/composables/useAppConfig'
 import { FileHandlerWrapper } from '@/services/runtime/fileHandler'
 import { groupDicomFilesByStudy } from '@/utils/dicomGrouping'
 import { DataTable, columns } from '@/components/StudyDataTable'
@@ -34,6 +35,7 @@ import {
 const workflow = useDicomWorkflow()
 const fileHandler = new FileHandlerWrapper()
 const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
+const { config: loadedConfig, loading: configLoading, error: configError } = useAppConfig()
 
 // Component state
 const uploadedFiles = ref<File[]>([])
@@ -41,17 +43,24 @@ const dicomFiles = ref<DicomFile[]>([])
 const successMessage = ref('')
 const concurrency = ref(3)
 
-// Anonymization configuration
-const config = reactive<AnonymizationConfig>({
-  profile: 'basic',
-  removePrivateTags: true,
-  useCustomHandlers: true,
-  dateJitterDays: 31
+// Use loaded configuration from app.config.json
+const config = computed<AnonymizationConfig>(() => {
+  return loadedConfig.value || {
+    profile: 'basic',
+    removePrivateTags: true,
+    useCustomHandlers: true,
+    dateJitterDays: 31
+  }
 })
 
 const studies = ref<DicomStudy[]>([])
 const isProcessing = workflow.loading
-const error = computed(() => workflow.errors.value[0]?.message || null)
+const error = computed(() => {
+  if (configError.value) {
+    return `Configuration Error: ${configError.value.message}`
+  }
+  return workflow.errors.value[0]?.message || null
+})
 const totalFiles = computed(() => dicomFiles.value.length)
 const anonymizedFilesCount = computed(() => workflow.anonymizer.results.value.length)
 const isRestoring = ref(false)
@@ -86,6 +95,10 @@ const isAllSelectedAnonymized = computed(() => {
   return selectedStudies.value.every(study =>
     study?.series.every(s => s.files.every(f => f.anonymized)) ?? false
   )
+})
+
+const isAppReady = computed(() => {
+  return !configLoading.value && !configError.value && loadedConfig.value !== null
 })
 
 async function handleDrop(event: DragEvent) {
@@ -156,6 +169,11 @@ async function handleFileInput(event: Event) {
 }
 
 async function processNewFiles(newUploadedFiles: File[]) {
+  if (!isAppReady.value) {
+    console.error('Cannot process files: Configuration not loaded')
+    return
+  }
+  
   if (newUploadedFiles.length === 0) return
 
   successMessage.value = ''
@@ -323,6 +341,11 @@ async function processFiles() {
 
 // Anonymize selected studies
 async function anonymizeSelected() {
+  if (!isAppReady.value) {
+    console.error('Cannot anonymize: Configuration not loaded')
+    return
+  }
+  
   const selected = selectedStudies.value
   if (selected.length === 0) return
 
@@ -343,7 +366,7 @@ async function anonymizeSelected() {
     })
 
     try {
-      const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(studyFiles, config, concurrency.value, {
+      const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(studyFiles, config.value, concurrency.value, {
         onProgress: (progressInfo) => {
           console.log('Progress callback called for study', study.studyInstanceUID, ':', progressInfo)
           // Update progress for this specific study
@@ -548,8 +571,20 @@ onMounted(() => {
         </AlertDescription>
       </Alert>
 
-      <!-- Loading State -->
-      <Card v-if="isRestoring">
+      <!-- Configuration Loading State -->
+      <Card v-if="configLoading">
+        <CardContent class="flex items-center justify-center py-8">
+          <div class="text-center space-y-4 w-full max-w-md">
+            <p class="text-muted-foreground">
+              Loading configuration...
+            </p>
+            <Progress :model-value="50" class="w-full" />
+          </div>
+        </CardContent>
+      </Card>
+
+      <!-- Session Restore Loading State -->
+      <Card v-else-if="isRestoring">
         <CardContent class="flex items-center justify-center py-8">
           <div class="text-center space-y-4 w-full max-w-md">
             <p class="text-muted-foreground">
@@ -566,6 +601,7 @@ onMounted(() => {
 
       <!-- Toolbar -->
       <div
+        v-if="isAppReady"
         class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border"
         data-testid="toolbar"
       >
@@ -657,7 +693,7 @@ onMounted(() => {
 
       <!-- File Drop Zone -->
       <Card
-        v-if="studies.length === 0 && !isProcessing && !isRestoring"
+        v-if="isAppReady && studies.length === 0 && !isProcessing && !isRestoring"
         data-testid="file-drop-zone"
         class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
         :class="{ 'border-primary bg-primary/5': isDragOver }"
@@ -698,7 +734,7 @@ onMounted(() => {
 
       <!-- Studies Data Table -->
       <Card
-        v-if="studies.length > 0"
+        v-if="isAppReady && studies.length > 0"
         data-testid="studies-table-card"
       >
         <CardHeader>

@@ -6,21 +6,21 @@
 import {
   DicomDeidentifier,
   BasicProfile,
+  CleanDescOption,
+  CleanGraphOption
 } from '@umessen/dicom-deidentifier'
-// AnonymizationConfig not needed - we create config in worker from simple options
+// Worker now just uses the complete config passed from main thread
 import { OPFSWorkerHelper } from '@/services/opfsStorage/opfsWorkerHelper'
 
-// Simple config options that can be serialized
-interface AnonymizationOptions {
-  profile: 'basic' | 'clean' | 'very-clean'
-  removePrivateTags: boolean
-  dateJitterDays?: number
-  replacements?: {
-    patientName?: string
-    patientId?: string
-    patientBirthDate?: string
-    institution?: string
+// Complete deidentifier configuration (serializable)
+interface DeidentifierConfig {
+  profile: 'basic' | 'clean' | 'very-clean' // Profile name instead of objects
+  dummies: {
+    default: string
+    lookup: Record<string, string>
   }
+  keep: string[]
+  [key: string]: any // Allow additional properties from the deidentifier library
 }
 
 // Types for worker communication - minimal data only
@@ -29,7 +29,7 @@ interface WorkerMessage {
   data: {
     studyId: string
     files: MinimalFileReference[]
-    options: AnonymizationOptions  // Simple serializable options
+    deidentifierConfig: DeidentifierConfig  // Complete ready-to-use configuration
     concurrency?: number
   }
 }
@@ -77,115 +77,10 @@ function postMessage(message: WorkerResponseMessage) {
   self.postMessage(message)
 }
 
-// Create deidentifier configuration based on simple options
-function createDeidentifierConfig(options: AnonymizationOptions) {
-  // Check if BasicProfile.options exists and handle accordingly
-  let profileOptions = []
-  
-  try {
-    if (options.profile === 'basic' && BasicProfile && BasicProfile.options) {
-      profileOptions = BasicProfile.options
-      console.log(`[Worker] Using BasicProfile with ${profileOptions.length} options`)
-    } else {
-      console.log(`[Worker] BasicProfile.options not available or profile is ${options.profile}, using empty options`)
-    }
-  } catch (e) {
-    console.error('[Worker] Error accessing BasicProfile:', e)
-    profileOptions = []
-  }
-
-  const config = {
-    profileOptions,
-    dummies: {
-      default: 'ANONYMOUS',
-      lookup: {
-        '00100010': options.replacements?.patientName || 'ANONYMOUS',
-        '00100020': options.replacements?.patientId || 'ANON001',
-        '00100030': options.replacements?.patientBirthDate || '19700101',
-        '00080080': options.replacements?.institution || 'ANONYMOUS_HOSPITAL'
-      }
-    },
-    keep: [],
-    // Add custom getReferenceDate function to handle missing PatientBirthDate
-    getReferenceDate: (dictionary: any) => {
-      // Try to find a suitable reference date, fallback to StudyDate or a default date
-      const studyDate = dictionary['00080020']?.Value?.[0]
-      const acquisitionDate = dictionary['00080022']?.Value?.[0] 
-      const contentDate = dictionary['00080023']?.Value?.[0]
-      const patientBirthDate = dictionary['00100030']?.Value?.[0]
-      
-      if (patientBirthDate) {
-        // Parse DICOM date format YYYYMMDD
-        const year = parseInt(patientBirthDate.substring(0, 4))
-        const month = parseInt(patientBirthDate.substring(4, 6)) - 1 // JS months are 0-based
-        const day = parseInt(patientBirthDate.substring(6, 8))
-        return new Date(year, month, day)
-      }
-      
-      // Try other dates if PatientBirthDate is missing
-      const fallbackDate = studyDate || acquisitionDate || contentDate
-      if (fallbackDate) {
-        const year = parseInt(fallbackDate.substring(0, 4))
-        const month = parseInt(fallbackDate.substring(4, 6)) - 1
-        const day = parseInt(fallbackDate.substring(6, 8))
-        if (!isNaN(year) && !isNaN(month) && !isNaN(day)) {
-          return new Date(year, month, day)
-        }
-      }
-      
-      // Fallback to a default date
-      console.log('[Worker] No valid date found, using default date 1970-01-01')
-      return new Date('1970-01-01')
-    },
-    // Add custom getReferenceTime function to handle missing StudyTime
-    getReferenceTime: (dictionary: any) => {
-      const studyTime = dictionary['00080030']?.Value?.[0]
-      const seriesTime = dictionary['00080031']?.Value?.[0]
-      const acquisitionTime = dictionary['00080032']?.Value?.[0]
-      
-      if (studyTime) {
-        // Parse DICOM time format HHMMSS.FFFFFF
-        const timeStr = studyTime.padEnd(6, '0') // Ensure at least HHMMSS
-        const hours = parseInt(timeStr.substring(0, 2))
-        const minutes = parseInt(timeStr.substring(2, 4))
-        const seconds = parseInt(timeStr.substring(4, 6))
-        
-        if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
-          const date = new Date()
-          date.setHours(hours, minutes, seconds, 0)
-          return date
-        }
-      }
-      
-      // Try fallback times
-      const fallbackTime = seriesTime || acquisitionTime
-      if (fallbackTime) {
-        const timeStr = fallbackTime.padEnd(6, '0')
-        const hours = parseInt(timeStr.substring(0, 2))
-        const minutes = parseInt(timeStr.substring(2, 4))
-        const seconds = parseInt(timeStr.substring(4, 6))
-        
-        if (!isNaN(hours) && !isNaN(minutes) && !isNaN(seconds)) {
-          const date = new Date()
-          date.setHours(hours, minutes, seconds, 0)
-          return date
-        }
-      }
-      
-      // Fallback to midnight
-      console.log('[Worker] No valid time found, using default time 00:00:00')
-      const date = new Date()
-      date.setHours(0, 0, 0, 0)
-      return date
-    }
-  }
-  
-  console.log('[Worker] Created deidentifier config with reference date/time handlers')
-  return config
-}
+// Worker now uses the complete configuration passed from main thread - no internal logic needed
 
 // OPFS-based file anonymization function - operates directly on OPFS files
-async function anonymizeFile(fileRef: MinimalFileReference, options: AnonymizationOptions): Promise<MinimalFileReference> {
+async function anonymizeFile(fileRef: MinimalFileReference, deidentifierConfig: DeidentifierConfig): Promise<MinimalFileReference> {
   try {
     console.log(`[Worker] Loading file ${fileRef.fileName} from OPFS (${fileRef.opfsFileId})`)
     
@@ -193,14 +88,93 @@ async function anonymizeFile(fileRef: MinimalFileReference, options: Anonymizati
     const arrayBuffer = await OPFSWorkerHelper.loadFile(fileRef.opfsFileId)
     const uint8Array = new Uint8Array(arrayBuffer)
 
-    console.log(`[Worker] Anonymizing file ${fileRef.fileName} (${uint8Array.length} bytes)`)
+    console.log(`[Worker] Anonymizing file ${fileRef.fileName} (${uint8Array.length} bytes) using provided config`)
 
-    // Create deidentifier configuration from simple options
-    const deidentifierConfig = createDeidentifierConfig(options)
+    // Use the complete deidentifier configuration passed from main thread
+    // Need to recreate profile options and add functions that can't be serialized
+    
+    // Select profile options based on profile name
+    let profileOptions: any[] = []
+    switch (deidentifierConfig.profile) {
+      case 'clean':
+        profileOptions = CleanDescOption ? [CleanDescOption] : []
+        break
+      case 'very-clean':
+        profileOptions = CleanGraphOption ? [CleanGraphOption] : []
+        break
+      case 'basic':
+      default:
+        profileOptions = BasicProfile ? [BasicProfile] : []
+        break
+    }
+    
+    const configWithFunctions = {
+      ...deidentifierConfig,
+      profileOptions, // Add profile options back
+      // Add custom getReferenceDate function to handle missing PatientBirthDate
+      getReferenceDate: (dictionary: any) => {
+        const studyDate = dictionary['00080020']?.Value?.[0]
+        const acquisitionDate = dictionary['00080022']?.Value?.[0]
+        const contentDate = dictionary['00080023']?.Value?.[0]
+        const patientBirthDate = dictionary['00100030']?.Value?.[0]
+
+        if (patientBirthDate) {
+          const year = parseInt(patientBirthDate.substring(0, 4))
+          const month = parseInt(patientBirthDate.substring(4, 6)) - 1
+          const day = parseInt(patientBirthDate.substring(6, 8))
+          return new Date(year, month, day)
+        } else if (studyDate) {
+          const year = parseInt(studyDate.substring(0, 4))
+          const month = parseInt(studyDate.substring(4, 6)) - 1
+          const day = parseInt(studyDate.substring(6, 8))
+          return new Date(year, month, day)
+        } else if (acquisitionDate) {
+          const year = parseInt(acquisitionDate.substring(0, 4))
+          const month = parseInt(acquisitionDate.substring(4, 6)) - 1
+          const day = parseInt(acquisitionDate.substring(6, 8))
+          return new Date(year, month, day)
+        } else if (contentDate) {
+          const year = parseInt(contentDate.substring(0, 4))
+          const month = parseInt(contentDate.substring(4, 6)) - 1
+          const day = parseInt(contentDate.substring(6, 8))
+          return new Date(year, month, day)
+        } else {
+          return new Date('1970-01-01')
+        }
+      },
+      // Add custom getReferenceTime function to handle missing StudyTime
+      getReferenceTime: (dictionary: any) => {
+        const studyTime = dictionary['00080030']?.Value?.[0]
+        const seriesTime = dictionary['00080031']?.Value?.[0]
+        const acquisitionTime = dictionary['00080032']?.Value?.[0]
+
+        if (studyTime) {
+          const timeStr = studyTime.padEnd(6, '0')
+          const hours = parseInt(timeStr.substring(0, 2))
+          const minutes = parseInt(timeStr.substring(2, 4))
+          const seconds = parseInt(timeStr.substring(4, 6))
+          return new Date(1970, 0, 1, hours, minutes, seconds)
+        } else if (seriesTime) {
+          const timeStr = seriesTime.padEnd(6, '0')
+          const hours = parseInt(timeStr.substring(0, 2))
+          const minutes = parseInt(timeStr.substring(2, 4))
+          const seconds = parseInt(timeStr.substring(4, 6))
+          return new Date(1970, 0, 1, hours, minutes, seconds)
+        } else if (acquisitionTime) {
+          const timeStr = acquisitionTime.padEnd(6, '0')
+          const hours = parseInt(timeStr.substring(0, 2))
+          const minutes = parseInt(timeStr.substring(2, 4))
+          const seconds = parseInt(timeStr.substring(4, 6))
+          return new Date(1970, 0, 1, hours, minutes, seconds)
+        } else {
+          return new Date(1970, 0, 1, 12, 0, 0)
+        }
+      }
+    }
     
     let deidentifier
     try {
-      deidentifier = new DicomDeidentifier(deidentifierConfig)
+      deidentifier = new DicomDeidentifier(configWithFunctions)
       console.log(`[Worker] Created DicomDeidentifier for ${fileRef.fileName}`)
     } catch (e) {
       console.error(`[Worker] Failed to create DicomDeidentifier:`, e)
@@ -246,7 +220,7 @@ async function anonymizeFile(fileRef: MinimalFileReference, options: Anonymizati
 async function anonymizeStudy(
   studyId: string,
   files: MinimalFileReference[],
-  options: AnonymizationOptions,
+  deidentifierConfig: DeidentifierConfig,
   concurrency = 3
 ) {
   try {
@@ -274,7 +248,7 @@ async function anonymizeStudy(
         data: progressData
       })
 
-      const anonymizedFile = await anonymizeFile(fileRef, options)
+      const anonymizedFile = await anonymizeFile(fileRef, deidentifierConfig)
       anonymizedFiles.push(anonymizedFile)
 
       // Send progress update after completion
@@ -330,7 +304,8 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   switch (type) {
     case 'anonymize_study':
       console.log(`[Worker] Starting anonymization for study ${data.studyId} with ${data.files.length} files`)
-      anonymizeStudy(data.studyId, data.files, data.options, data.concurrency)
+      console.log(`[Worker] Using complete deidentifier config with ${Object.keys(data.deidentifierConfig.dummies.lookup).length} lookup entries`)
+      anonymizeStudy(data.studyId, data.files, data.deidentifierConfig, data.concurrency)
       break
     default:
       console.warn('[Worker] Unknown message type:', type)

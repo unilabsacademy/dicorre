@@ -52,6 +52,7 @@ export interface AnonymizationConfig {
     default?: string
     patientName?: string
     patientId?: string
+    accessionNumber?: string
     patientBirthDate?: string
     institution?: string
     [key: string]: string | undefined

@@ -71,6 +71,75 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
     })
   })
 
+  describe('Configuration integration', () => {
+    it('should process timestamp patterns from config correctly', async () => {
+      const configWithTimestamps: AnonymizationConfig = {
+        profile: 'basic',
+        removePrivateTags: true,
+        useCustomHandlers: true,
+        replacements: {
+          accessionNumber: 'ACA{timestamp}',
+          patientId: 'PAT{timestamp}',
+          patientName: 'ANONYMOUS'
+        }
+      }
+
+      const result = await runTest(Effect.gen(function* () {
+        const configService = yield* ConfigService
+        return yield* configService.processReplacements(configWithTimestamps.replacements!)
+      }))
+
+      expect(result.accessionNumber).toMatch(/^ACA\d{7}$/)
+      expect(result.patientId).toMatch(/^PAT\d{7}$/)
+      expect(result.patientName).toBe('ANONYMOUS')
+    })
+
+    it('should anonymize file using config-based replacements', async () => {
+      const dicomFile = loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      
+      // First parse the file
+      const parsedFile = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFile(dicomFile)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+      
+      const configWithReplacements: AnonymizationConfig = {
+        profile: 'basic',
+        removePrivateTags: true,
+        useCustomHandlers: true,
+        replacements: {
+          accessionNumber: 'ACA{timestamp}',
+          patientId: 'PAT{timestamp}',
+          patientName: 'ANONYMOUS'
+        }
+      }
+
+      const result = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        return yield* anonymizer.anonymizeFile(parsedFile, configWithReplacements)
+      }))
+      
+      expect(result.anonymized).toBe(true)
+      expect(result.metadata).toBeDefined()
+      
+      // Verify that the anonymized metadata contains expected patterns
+      if (result.metadata) {
+        console.log('Anonymized metadata:', result.metadata)
+        // These should be replaced with the processed timestamp patterns
+        expect(result.metadata.accessionNumber).toMatch(/^ACA\d{7}$/)
+        expect(result.metadata.patientId).toMatch(/^PAT\d{7}$/)
+        // PatientName in DICOM can be a structured object
+        if (typeof result.metadata.patientName === 'string') {
+          expect(result.metadata.patientName).toBe('ANONYMOUS')
+        } else if (result.metadata.patientName && typeof result.metadata.patientName === 'object') {
+          expect((result.metadata.patientName as any).Alphabetic).toBe('ANONYMOUS')
+        }
+      }
+    })
+  })
+
   describe('File anonymization', () => {
     it('should anonymize DICOM file', async () => {
       const dicomFile = loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
