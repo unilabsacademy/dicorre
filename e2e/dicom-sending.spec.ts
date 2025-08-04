@@ -45,9 +45,25 @@ test.describe('DICOM Sending E2E Tests', () => {
     // Check send button state and try to enable it
     const sendButton = page.getByTestId('send-button')
     
-    // Debug: Check button state
+    // Debug: Check button state and the reasons it might be disabled
     const isEnabled = await sendButton.isEnabled()
     console.log('Send button enabled:', isEnabled)
+    
+    // Debug: Check current anonymized count to verify files were anonymized
+    const anonymizedCountText = await page.getByTestId('anonymized-count-badge').textContent()
+    const anonymizedCount = parseInt(anonymizedCountText?.match(/(\d+)/)?.[1] || '0')
+    console.log('Anonymized files count:', anonymizedCount)
+    
+    // Debug: Check if any studies are selected  
+    const allCheckboxes = page.getByRole('checkbox')
+    const checkboxCount = await allCheckboxes.count()
+    console.log('Number of checkboxes:', checkboxCount)
+    
+    // Check which studies are selected
+    for (let i = 1; i < checkboxCount; i++) {
+      const isChecked = await allCheckboxes.nth(i).isChecked()
+      console.log(`Study ${i} selected:`, isChecked)
+    }
     
     // If disabled, may need DICOM server settings configured
     if (!isEnabled) {

@@ -1,10 +1,10 @@
 import { Effect, Context, Layer } from "effect"
-import { 
-  DicomDeidentifier, 
-  BasicProfile, 
+import {
+  DicomDeidentifier,
+  BasicProfile,
   CleanDescOption,
   CleanGraphOption,
-  RetainDeviceIdentOption 
+  RetainDeviceIdentOption
 } from '@umessen/dicom-deidentifier'
 import * as dcmjs from 'dcmjs'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
@@ -28,7 +28,7 @@ export class Anonymizer extends Context.Tag("Anonymizer")<
     readonly anonymizeInBatches: (files: DicomFile[], config: AnonymizationConfig, batchSize?: number, onBatchComplete?: (batchIndex: number, totalBatches: number) => void) => Effect.Effect<DicomFile[], AnonymizerError>
     readonly validateConfig: (config: AnonymizationConfig) => Effect.Effect<void, ConfigurationError>
   }
->() {}
+>() { }
 
 /**
  * Internal implementation class
@@ -133,7 +133,7 @@ class AnonymizerImpl {
     return new Promise((resolve, reject) => {
       try {
         console.log(`Starting anonymization of file: ${file.fileName}`)
-        
+
         // Select profile based on config
         let profileOptions: any[] = []
         switch (config.profile) {
@@ -157,7 +157,7 @@ class AnonymizerImpl {
             lookup: {
               // Use config replacements with fallbacks
               '00100010': processedReplacements.patientName || 'ANONYMOUS', // Patient Name
-              '00100020': processedReplacements.patientId || 'ANON001', // Patient ID  
+              '00100020': processedReplacements.patientId || 'ANON001', // Patient ID
               '00100030': processedReplacements.patientBirthDate || '19000101', // Patient Birth Date
               '00080080': processedReplacements.institution || 'ANONYMIZED', // Institution Name
               // Add any custom replacements
@@ -193,10 +193,10 @@ class AnonymizerImpl {
         deidentifierConfig.getReferenceDate = (dictionary: any) => {
           // Try to find a suitable reference date, fallback to StudyDate or a default date
           const studyDate = dictionary['00080020']?.Value?.[0]
-          const acquisitionDate = dictionary['00080022']?.Value?.[0] 
+          const acquisitionDate = dictionary['00080022']?.Value?.[0]
           const contentDate = dictionary['00080023']?.Value?.[0]
           const patientBirthDate = dictionary['00100030']?.Value?.[0]
-          
+
           if (patientBirthDate) {
             // Parse DICOM date format YYYYMMDD
             const year = parseInt(patientBirthDate.substring(0, 4))
@@ -215,7 +215,7 @@ class AnonymizerImpl {
             return new Date(year, month, day)
           } else if (contentDate) {
             const year = parseInt(contentDate.substring(0, 4))
-            const month = parseInt(contentDate.substring(4, 6)) - 1  
+            const month = parseInt(contentDate.substring(4, 6)) - 1
             const day = parseInt(contentDate.substring(6, 8))
             return new Date(year, month, day)
           } else {
@@ -229,7 +229,7 @@ class AnonymizerImpl {
           const studyTime = dictionary['00080030']?.Value?.[0]
           const seriesTime = dictionary['00080031']?.Value?.[0]
           const acquisitionTime = dictionary['00080032']?.Value?.[0]
-          
+
           if (studyTime) {
             // Parse DICOM time format HHMMSS.FFFFFF
             const timeStr = studyTime.padEnd(6, '0') // Ensure at least HHMMSS
@@ -277,13 +277,13 @@ class AnonymizerImpl {
         } catch (deidentifyError: any) {
           console.error(`Library deidentification failed:`, deidentifyError)
           console.error(`Error stack:`, deidentifyError.stack)
-          
+
           // Try to provide more context about the error
           if (deidentifyError.message?.includes("Cannot read properties of undefined")) {
             console.error(`This might be due to malformed DICOM tags or unsupported private tags in ${file.fileName}`)
             console.error(`Consider enabling removePrivateTags option or checking the DICOM file structure`)
           }
-          
+
           throw new Error(`Cannot anonymize file ${file.fileName}: ${deidentifyError.message || deidentifyError}`)
         }
 
@@ -334,7 +334,7 @@ class AnonymizerImpl {
           }
 
           const result = yield* AnonymizerImpl.anonymizeFile(file, config)
-          
+
           completed++
           if (onProgress) {
             onProgress({

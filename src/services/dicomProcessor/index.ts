@@ -2,7 +2,6 @@ import { Effect, Context, Layer } from "effect"
 import * as dcmjs from 'dcmjs'
 import type { DicomFile, DicomMetadata, DicomStudy } from '@/types/dicom'
 import { ParseError, ValidationError, type DicomProcessorError } from '@/types/effects'
-import { ConfigService } from '../config'
 
 export class DicomProcessor extends Context.Tag("DicomProcessor")<
   DicomProcessor,
@@ -55,9 +54,8 @@ class DicomProcessorImpl {
         }
       } catch (error) {
         return yield* Effect.fail(new ValidationError({
-          message: `Error reading DICOM magic number in ${file.fileName}`,
+          message: `Error reading DICOM magic number in ${file.fileName} - ${error}`,
           fileName: file.fileName,
-          cause: error
         }))
       }
     })
@@ -80,9 +78,13 @@ class DicomProcessorImpl {
 
           // Extract metadata
           const metadata: DicomMetadata = {
+            accessionNumber: dict['00080050']?.Value?.[0] || '',
             patientName: dict['00100010']?.Value?.[0] || 'Unknown',
             patientId: dict['00100020']?.Value?.[0] || 'Unknown',
             patientBirthDate: dict['00100030']?.Value?.[0] || '',
+            patientSex: dict['00100040']?.Value?.[0] || '',
+            patientWeight: dict['00101030']?.Value?.[0] || 0,
+            patientHeight: dict['00101020']?.Value?.[0] || 0,
             studyInstanceUID: dict['0020000D']?.Value?.[0] || '',
             studyDate: dict['00080020']?.Value?.[0] || '',
             studyDescription: dict['00081030']?.Value?.[0] || '',
@@ -94,7 +96,7 @@ class DicomProcessorImpl {
             transferSyntaxUID: dict['00020010']?.Value?.[0] || '1.2.840.10008.1.2'
           }
 
-          console.log(`Successfully parsed ${file.fileName}: Patient ${metadata.patientId}, Study ${metadata.studyInstanceUID}`)
+          console.log(`Successfully parsed ${file.fileName}: Patient ${metadata.patientId}, Study ${metadata.accessionNumber}`)
 
           return {
             ...file,

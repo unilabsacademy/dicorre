@@ -9,11 +9,11 @@ const rowSelection = ref<Record<string, boolean>>({})
 
 export function useTableState() {
 
-  const getSelectedStudies = (data: DicomStudy[]) => {
+  const getSelectedStudies = (data: DicomStudy[]): DicomStudy[] => {
     return Object.keys(rowSelection.value)
       .filter(key => rowSelection.value[key])
       .map(studyUID => data.find(study => study.studyInstanceUID === studyUID))
-      .filter(Boolean)
+      .filter((study): study is DicomStudy => study !== undefined)
   }
 
   const clearSelection = () => {
