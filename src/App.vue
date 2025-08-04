@@ -1,10 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
+import { Effect, Layer } from 'effect'
 import type { DicomFile } from '@/types/dicom'
 import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
 import { useAppConfig } from '@/composables/useAppConfig'
-import { FileHandlerWrapper } from '@/services/runtime/fileHandler'
+import { FileHandler, FileHandlerLive } from '@/services/fileHandler'
 import { useDicomProcessor } from '@/composables/useDicomProcessor'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
@@ -32,10 +33,17 @@ import {
   Wifi
 } from 'lucide-vue-next'
 
-// Initialize the workflow composable and file handler
+// Initialize the workflow composable
 const workflow = useDicomWorkflow()
-const fileHandler = new FileHandlerWrapper()
 const dicomProcessor = useDicomProcessor()
+
+// Create the Effect layer for FileHandler
+const fileHandlerLayer = FileHandlerLive
+
+// Helper to execute an Effect with the file handler environment
+const runFileHandler = <A>(effect: Effect.Effect<A, any, any>) =>
+  // @ts-ignore – Effect typing for provideLayer narrows env to never which conflicts with Vue TS config
+  Effect.runPromise(effect.pipe(Effect.provide(fileHandlerLayer)))
 const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
 const { setStudySendingProgress, removeStudySendingProgress, clearAllSendingProgress } = useSendingProgress()
 const { config: loadedConfig, loading: configLoading, error: configError } = useAppConfig()
@@ -217,12 +225,15 @@ async function processNewFiles(newUploadedFiles: File[]) {
             progress: progressSteps[step]
           }
 
-          // Add small delay to show progress
-          await new Promise(resolve => setTimeout(resolve, 150))
         }
 
         // Now do the actual extraction
-        const extractedFiles = await fileHandler.extractZipFile(file)
+        const extractedFiles = await runFileHandler(
+          Effect.gen(function* () {
+            const handler = yield* FileHandler
+            return yield* handler.extractZipFile(file)
+          })
+        )
         localDicomFiles.push(...extractedFiles)
 
         // Complete this file's progress
@@ -230,27 +241,26 @@ async function processNewFiles(newUploadedFiles: File[]) {
           ...fileProcessingState.value,
           currentStep: `Extracted ${extractedFiles.length} DICOM files`,
           progress: 100
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 300))
-      } else {
+        }      } else {
         // For single files, show quick progress
         fileProcessingState.value = {
           ...fileProcessingState.value,
           progress: 50
         }
 
-        const dicomFile = await fileHandler.readSingleDicomFile(file)
+        const dicomFile = await runFileHandler(
+          Effect.gen(function* () {
+            const handler = yield* FileHandler
+            return yield* handler.readSingleDicomFile(file)
+          })
+        )
         localDicomFiles.push(dicomFile)
 
         fileProcessingState.value = {
           ...fileProcessingState.value,
           currentStep: 'File processed',
           progress: 100
-        }
-
-        await new Promise(resolve => setTimeout(resolve, 200))
-      }
+        }      }
     }
 
     if (localDicomFiles.length === 0) {
@@ -286,7 +296,6 @@ async function processNewFiles(newUploadedFiles: File[]) {
         currentStep: parsingTexts[step],
         progress: parsingSteps[step]
       }
-      await new Promise(resolve => setTimeout(resolve, 200))
     }
 
     // Do the actual parsing
@@ -304,7 +313,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
       progress: 90
     }
 
-    await new Promise(resolve => setTimeout(resolve, 300))
+    // No artificial delay needed
 
     // Add to existing DICOM files (single source of truth)
     dicomFiles.value = [...dicomFiles.value, ...parsedFiles]
@@ -326,7 +335,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
     // Hide progress after showing completion
     setTimeout(() => {
       fileProcessingState.value = null
-    }, 2000)
+    }, 500)
 
   } catch (error) {
     console.error('Error processing files:', error)
@@ -410,8 +419,6 @@ async function anonymizeSelected() {
       studies.value = regroupedStudies
       console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
 
-      // Show completion for a brief moment
-      await new Promise(resolve => setTimeout(resolve, 500))
 
       // Mark study as complete
       setStudyProgress(study.studyInstanceUID, {
@@ -421,10 +428,7 @@ async function anonymizeSelected() {
         currentFile: undefined
       })
 
-      // Clean up after a delay
-      setTimeout(() => {
-        removeStudyProgress(study.studyInstanceUID)
-      }, 2000)
+      removeStudyProgress(study.studyInstanceUID)
 
       return anonymizedFiles
 
@@ -514,10 +518,6 @@ async function handleSendSelected(selectedStudies: DicomStudy[]) {
         const regroupedStudies = await dicomProcessor.groupFilesByStudy(dicomFiles.value)
         studies.value = regroupedStudies
         console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
-
-        // Show completion for a brief moment
-        await new Promise(resolve => setTimeout(resolve, 500))
-
         // Mark study as complete
         setStudySendingProgress(study.studyInstanceUID, {
           isProcessing: false,
@@ -526,10 +526,7 @@ async function handleSendSelected(selectedStudies: DicomStudy[]) {
           currentFile: undefined
         })
 
-        // Clean up after a delay
-        setTimeout(() => {
           removeStudySendingProgress(study.studyInstanceUID)
-        }, 2000)
         
         console.log(`Successfully sent study ${study.studyInstanceUID}`)
       } else {

@@ -1,7 +1,7 @@
 import { ref, watch, type Ref } from 'vue'
 import { useStorage } from '@vueuse/core'
 import { Effect, Layer } from 'effect'
-import { opfsStorage } from '@/services/runtime/opfsStorage'
+import { OPFSStorage, OPFSStorageLive } from '@/services/opfsStorage'
 import { DicomProcessor, DicomProcessorLive } from '@/services/dicomProcessor'
 import { ConfigServiceLive } from '@/services/config'
 import type { DicomFile, DicomFileMetadata, DicomStudy } from '@/types/dicom'
@@ -12,16 +12,23 @@ interface PersistedSession {
 
 const STORAGE_KEY = 'dicom-session'
 
-// Create the Effect layer for DicomProcessor
+// Create the Effect layers for DicomProcessor and OPFSStorage
 const processorLayer = Layer.mergeAll(
   DicomProcessorLive,
   ConfigServiceLive
 )
 
+const storageLayer = OPFSStorageLive
+
 // Helper to execute an Effect with the processor environment
 const runProcessor = <A>(effect: Effect.Effect<A, any, any>) =>
   // @ts-ignore – Effect typing for provideLayer narrows env to never which conflicts with Vue TS config
   Effect.runPromise(effect.pipe(Effect.provide(processorLayer)))
+
+// Helper to execute an Effect with the storage environment
+const runStorage = <A>(effect: Effect.Effect<A, any, any>) =>
+  // @ts-ignore – Effect typing for provideLayer narrows env to never which conflicts with Vue TS config
+  Effect.runPromise(effect.pipe(Effect.provide(storageLayer)))
 
 export function useSessionPersistence(
   extractedDicomFiles: Ref<DicomFile[]>,
@@ -44,7 +51,12 @@ export function useSessionPersistence(
     for (const file of extractedDicomFiles.value) {
       if (!existingIds.has(file.id)) {
         try {
-          await opfsStorage.saveFile(file.id, file.arrayBuffer)
+          await runStorage(
+            Effect.gen(function* () {
+              const storage = yield* OPFSStorage
+              return yield* storage.saveFile(file.id, file.arrayBuffer)
+            })
+          )
         } catch (e) {
           console.warn('Failed to save file to OPFS', file.id, e)
         }
@@ -78,7 +90,12 @@ export function useSessionPersistence(
     for (let idx = 0; idx < persisted.value.files.length; idx++) {
       const meta = persisted.value.files[idx]
       try {
-        const arrayBuffer = await opfsStorage.loadFile(meta.id)
+        const arrayBuffer = await runStorage(
+          Effect.gen(function* () {
+            const storage = yield* OPFSStorage
+            return yield* storage.loadFile(meta.id)
+          })
+        )
         restored.push({
           id: meta.id,
           fileName: meta.fileName,
@@ -122,7 +139,12 @@ export function useSessionPersistence(
   async function clear() {
     persisted.value = { files: [] }
     try {
-      await opfsStorage.clearAllFiles()
+      await runStorage(
+        Effect.gen(function* () {
+          const storage = yield* OPFSStorage
+          return yield* storage.clearAllFiles
+        })
+      )
     } catch (e) {
       console.warn('Failed to clear OPFS', e)
     }
