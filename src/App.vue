@@ -15,6 +15,7 @@ import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
 import { useTableState } from '@/composables/useTableState'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
+import { useSendingProgress } from '@/composables/useSendingProgress'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -35,6 +36,7 @@ import {
 const workflow = useDicomWorkflow()
 const fileHandler = new FileHandlerWrapper()
 const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
+const { setStudySendingProgress, removeStudySendingProgress, clearAllSendingProgress } = useSendingProgress()
 const { config: loadedConfig, loading: configLoading, error: configError } = useAppConfig()
 
 // Component state
@@ -449,25 +451,128 @@ async function testConnection() {
   await workflow.sender.testConnection()
 }
 
-// Send files to server
-async function sendStudy(study: DicomStudy) {
+// Send selected studies with progress tracking
+async function handleSendSelected(selectedStudies: DicomStudy[]) {
   successMessage.value = ''
+  
+  console.log(`Starting to send ${selectedStudies.length} selected studies`)
+  
+  // Process each study in parallel with progress tracking
+  const studyPromises = selectedStudies.map(async (study) => {
+    const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)
+    
+    try {
+      console.log(`Starting to send study ${study.studyInstanceUID} with ${totalFiles} files`)
+      
+      // Set initial sending progress
+      setStudySendingProgress(study.studyInstanceUID, {
+        isProcessing: true,
+        progress: 0,
+        totalFiles,
+        currentFile: undefined
+      })
 
-  const success = await workflow.sender.sendStudyWithProgress(study, {
-    concurrency: concurrency.value,
-    maxRetries: 2
+      // Create a progress callback to update the UI
+      const onProgress = (completed: number, total: number, currentFile?: string) => {
+        const progress = Math.round((completed / total) * 100)
+        console.log(`Sending progress for study ${study.studyInstanceUID}: ${completed}/${total} (${progress}%)`)
+        
+        setStudySendingProgress(study.studyInstanceUID, {
+          isProcessing: true,
+          progress,
+          totalFiles: total,
+          currentFile
+        })
+      }
+
+      // Send the study using the worker-based approach
+      const success = await sendStudyViaWorkers(study, onProgress)
+      
+      if (success) {
+        // Mark all files as sent in the main data
+        study.series.forEach(series => {
+          series.files.forEach(file => {
+            file.sent = true
+          })
+        })
+        
+        // Update the global dicomFiles array to reflect sent status
+        const updatedFiles = dicomFiles.value.map(file => {
+          const studyFile = study.series.find(s => s.files.find(f => f.id === file.id))?.files.find(f => f.id === file.id)
+          if (studyFile) {
+            return { ...file, sent: true }
+          }
+          return file
+        })
+        
+        // Replace entire array to break references to old data
+        dicomFiles.value = updatedFiles
+
+        // Immediately refresh study grouping for this completed study to update UI
+        console.log(`Regrouping studies after ${study.studyInstanceUID} sending completion...`)
+        const regroupedStudies = groupDicomFilesByStudy(dicomFiles.value)
+        studies.value = regroupedStudies
+        console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
+
+        // Show completion for a brief moment
+        await new Promise(resolve => setTimeout(resolve, 500))
+
+        // Mark study as complete
+        setStudySendingProgress(study.studyInstanceUID, {
+          isProcessing: false,
+          progress: 100,
+          totalFiles,
+          currentFile: undefined
+        })
+
+        // Clean up after a delay
+        setTimeout(() => {
+          removeStudySendingProgress(study.studyInstanceUID)
+        }, 2000)
+        
+        console.log(`Successfully sent study ${study.studyInstanceUID}`)
+      } else {
+        throw new Error('Failed to send study')
+      }
+
+    } catch (error) {
+      console.error(`Error sending study ${study.studyInstanceUID}:`, error)
+      removeStudySendingProgress(study.studyInstanceUID)
+      throw error
+    }
   })
 
-  if (success) {
-    successMessage.value = 'Files sent successfully to server!'
+  try {
+    // Wait for all studies to complete (UI already updated per study)
+    await Promise.all(studyPromises)
+
+    console.log(`All ${selectedStudies.length} studies completed sending`)
+    successMessage.value = `Successfully sent ${selectedStudies.length} studies!`
+  } catch (error) {
+    console.error('Error in parallel sending:', error)
+    // Handle any remaining errors
   }
 }
 
-function handleSendSelected(selectedStudies: DicomStudy[]) {
-  // Send selected studies to PACS
-  selectedStudies.forEach(study => {
-    sendStudy(study)
-  })
+// Send study via workers (similar to anonymization)
+async function sendStudyViaWorkers(study: DicomStudy, onProgress: (completed: number, total: number, currentFile?: string) => void): Promise<boolean> {
+  try {
+    const success = await workflow.sender.sendStudyWithProgress(study, {
+      concurrency: concurrency.value,
+      maxRetries: 2,
+      onProgress: (progress) => {
+        // Convert the progress format to the expected callback format
+        if (progress && typeof progress.completed === 'number' && typeof progress.total === 'number') {
+          onProgress(progress.completed, progress.total, progress.currentFile)
+        }
+      }
+    })
+    
+    return success
+  } catch (error) {
+    console.error('Error sending study via workers:', error)
+    return false
+  }
 }
 
 // Clear all files

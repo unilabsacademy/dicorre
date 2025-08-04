@@ -5,6 +5,7 @@ export interface DicomFile {
   arrayBuffer: ArrayBuffer
   metadata?: DicomMetadata
   anonymized?: boolean
+  sent?: boolean
   // Optional OPFS file ID for worker-based processing
   opfsFileId?: string
 }

@@ -43,7 +43,7 @@ export function useDicomSender() {
 
   const sendStudyWithProgress = async (
     study: DicomStudy,
-    options: { concurrency?: number; maxRetries?: number } = {}
+    options: { concurrency?: number; maxRetries?: number; onProgress?: (progress: SendingProgress) => void } = {}
   ): Promise<boolean> => {
     loading.value = true
     error.value = null
@@ -56,6 +56,10 @@ export function useDicomSender() {
             ...options,
             onProgress: (p) => {
               progress.value = p
+              // Also call the external callback if provided
+              if (options.onProgress) {
+                options.onProgress(p)
+              }
             }
           })
         })

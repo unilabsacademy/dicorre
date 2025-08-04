@@ -97,7 +97,24 @@ export const columns: ColumnDef<DicomStudy>[] = [
       return h(StudyProgressIndicator, {
         studyId: study.studyInstanceUID,
         totalFiles,
-        anonymizedFiles
+        anonymizedFiles,
+        showOnly: 'anonymization'
+      })
+    },
+  },
+  {
+    id: 'sent',
+    header: 'Sent',
+    cell: ({ row }) => {
+      const study = row.original
+      const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)
+      const sentFiles = study.series.reduce((sum, s) => sum + s.files.filter(f => f.sent).length, 0)
+
+      return h(StudyProgressIndicator, {
+        studyId: study.studyInstanceUID,
+        totalFiles,
+        sentFiles,
+        showOnly: 'sending'
       })
     },
   },
