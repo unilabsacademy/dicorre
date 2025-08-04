@@ -2,7 +2,7 @@ version: "3.8"
 
 services:
   orthanc:
-    image: jodogne/orthanc:1.12.4
+    image: jodogne/orthanc-plugins:1.12.4
     ports:
       - "8080:8042"     # Web UI and RESTful services
       - "4242:4242"     # DICOM port

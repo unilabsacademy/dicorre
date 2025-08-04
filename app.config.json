@@ -1,6 +1,6 @@
 {
   "dicomServer": {
-    "url": "/api/orthanc",
+    "url": "/api/orthanc/dicom-web",
     "headers": {},
     "timeout": 30000,
     "auth": null,

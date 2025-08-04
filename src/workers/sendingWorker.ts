@@ -3,8 +3,8 @@
  * Handles concurrent transmission of DICOM files to a server using dicomweb-client
  */
 
-import { api } from 'dicomweb-client'
-const { DICOMwebClient } = api
+// Custom STOW-RS implementation for web workers
+// dicomweb-client doesn't work reliably in worker contexts
 import { OPFSWorkerHelper } from '@/services/opfsStorage/opfsWorkerHelper'
 
 // Server configuration for DICOM transmission
@@ -112,20 +112,45 @@ async function sendFile(fileRef: FileReferenceWithMetadata, serverConfig: Server
       }
     }
 
-    // Create DICOMweb client
-    const client = new DICOMwebClient({
-      url: serverConfig.url,
-      singlepart: false,
-      headers
-    })
-
-    // Convert ArrayBuffer to Uint8Array for dicomweb-client
+    // Custom STOW-RS implementation using fetch
     const uint8Array = new Uint8Array(arrayBuffer)
     
-    // Store instance using DICOM web STOW-RS
-    await client.storeInstances({
-      datasets: [uint8Array]
+    // Create multipart boundary
+    const boundary = 'boundary_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9)
+    
+    // Create multipart body
+    const multipartHeader = [
+      `--${boundary}`,
+      'Content-Type: application/dicom',
+      'Content-Transfer-Encoding: binary',
+      '',
+    ].join('\r\n') + '\r\n'
+    
+    // Combine text and binary parts
+    const textPart = new TextEncoder().encode(multipartHeader)
+    const endBoundary = new TextEncoder().encode(`\r\n--${boundary}--\r\n`)
+    
+    // Create final body
+    const finalBody = new Uint8Array(textPart.length + uint8Array.length + endBoundary.length)
+    finalBody.set(textPart, 0)
+    finalBody.set(uint8Array, textPart.length)
+    finalBody.set(endBoundary, textPart.length + uint8Array.length)
+    
+    // Send STOW-RS request
+    const response = await fetch(`${serverConfig.url}/studies`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': `multipart/related; type="application/dicom"; boundary=${boundary}`,
+        'Accept': 'application/dicom+json',
+        ...headers
+      },
+      body: finalBody
     })
+    
+    if (!response.ok) {
+      const errorText = await response.text()
+      throw new Error(`STOW-RS request failed: ${response.status} ${response.statusText} - ${errorText}`)
+    }
 
     console.log(`[SendingWorker] Successfully sent ${fileRef.fileName} to DICOM server`)
     

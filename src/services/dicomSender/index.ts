@@ -75,10 +75,10 @@ class DicomSenderImpl {
 
     const result = yield* Effect.tryPromise({
       try: async () => {
-        const testUrl = `${config.url}/studies?limit=1`
+        const testUrl = `${config.url}/studies`
         const response = await fetch(testUrl, {
           method: 'GET',
-          headers: { 'Accept': 'application/json', ...config.headers }
+          headers: { 'Accept': 'application/dicom+json', ...config.headers }
         })
         return response.ok
       },

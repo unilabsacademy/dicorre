@@ -173,7 +173,7 @@ async function processNewFiles(newUploadedFiles: File[]) {
     console.error('Cannot process files: Configuration not loaded')
     return
   }
-  
+
   if (newUploadedFiles.length === 0) return
 
   successMessage.value = ''
@@ -345,7 +345,7 @@ async function anonymizeSelected() {
     console.error('Cannot anonymize: Configuration not loaded')
     return
   }
-  
+
   const selected = selectedStudies.value
   if (selected.length === 0) return
 
@@ -451,8 +451,6 @@ async function testConnection() {
 
 // Send files to server
 async function sendStudy(study: DicomStudy) {
-  if (workflow.anonymizer.results.value.length === 0) return
-
   successMessage.value = ''
 
   const success = await workflow.sender.sendStudyWithProgress(study, {
@@ -578,7 +576,10 @@ onMounted(() => {
             <p class="text-muted-foreground">
               Loading configuration...
             </p>
-            <Progress :model-value="50" class="w-full" />
+            <Progress
+              :model-value="50"
+              class="w-full"
+            />
           </div>
         </CardContent>
       </Card>

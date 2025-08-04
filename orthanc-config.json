@@ -18,6 +18,6 @@
     "StowMaxSeries": 10
   },
   "Plugins": [
-    "/usr/share/orthanc/plugins"
+    "/usr/local/share/orthanc/plugins"
   ]
 }
