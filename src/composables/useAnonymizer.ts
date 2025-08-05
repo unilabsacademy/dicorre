@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { Effect } from 'effect'
-import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
+import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
 import { Anonymizer, type AnonymizationProgress } from '@/services/anonymizer'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { getWorkerManager } from '@/workers/workerManager'
@@ -198,6 +198,111 @@ export function useAnonymizer() {
       return anonymizedFiles
     })
 
+  // Effect program for anonymizing multiple selected studies with progress tracking
+  const anonymizeSelectedEffect = (
+    selectedStudies: DicomStudy[],
+    config: AnonymizationConfig,
+    options: {
+      concurrency?: number
+      isAppReady: boolean
+      dicomFiles: DicomFile[]
+      onUpdateFiles?: (updatedFiles: DicomFile[]) => void
+      onUpdateStudies?: (updatedStudies: DicomStudy[]) => void
+      onSetStudyProgress?: (studyId: string, progress: any) => void
+      onRemoveStudyProgress?: (studyId: string) => void
+      onSuccessMessage?: (message: string) => void
+    }
+  ) =>
+    Effect.gen(function* () {
+      if (!options.isAppReady) {
+        return yield* Effect.fail(new Error('Configuration not loaded'))
+      }
+
+      if (selectedStudies.length === 0) {
+        return yield* Effect.succeed([])
+      }
+
+      const anonymizer = yield* Anonymizer
+      const processor = yield* DicomProcessor
+
+      console.log('anonymizeSelected called with', selectedStudies.length, 'studies')
+
+      // Process all studies in parallel
+      const anonymizeStudy = (study: DicomStudy) =>
+        Effect.gen(function* () {
+          const studyFiles = study.series.flatMap(series => series.files)
+          const totalFiles = studyFiles.length
+
+          // Initialize progress tracking
+          options.onSetStudyProgress?.(study.studyInstanceUID, {
+            isProcessing: true,
+            progress: 0,
+            totalFiles,
+            currentFile: undefined
+          })
+
+          try {
+            const anonymizedFiles = yield* anonymizer.anonymizeFiles(studyFiles, config, {
+              concurrency: options.concurrency || 3,
+              onProgress: (progressInfo: any) => {
+                console.log('Progress callback called for study', study.studyInstanceUID, ':', progressInfo)
+                options.onSetStudyProgress?.(study.studyInstanceUID, {
+                  isProcessing: true,
+                  progress: progressInfo.percentage,  
+                  totalFiles,
+                  currentFile: progressInfo.currentFile
+                })
+              }
+            })
+
+            console.log(`Successfully anonymized ${anonymizedFiles.length} files for study ${study.studyInstanceUID}`)
+
+            // Update DICOM files with anonymized versions
+            const updatedFiles = options.dicomFiles.map(file => {
+              const anonymized = anonymizedFiles.find((af: any) => af.id === file.id)
+              if (anonymized) {
+                if (file.metadata && file.metadata !== anonymized.metadata) {
+                  file.metadata = undefined
+                }
+              }
+              return anonymized || file
+            })
+
+            options.onUpdateFiles?.(updatedFiles)
+
+            // Refresh study grouping
+            console.log(`Regrouping studies after ${study.studyInstanceUID} anonymization completion...`)
+            const regroupedStudies = yield* processor.groupFilesByStudy(updatedFiles)
+            options.onUpdateStudies?.(regroupedStudies)
+            console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
+
+            // Mark study as complete
+            options.onSetStudyProgress?.(study.studyInstanceUID, {
+              isProcessing: false,
+              progress: 100,
+              totalFiles,
+              currentFile: undefined
+            })
+
+            options.onRemoveStudyProgress?.(study.studyInstanceUID)
+
+            return anonymizedFiles
+          } catch (error) {
+            console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
+            options.onRemoveStudyProgress?.(study.studyInstanceUID)
+            return yield* Effect.fail(error as Error)
+          }
+        })
+
+      // Process all studies in parallel
+      const results = yield* Effect.all(selectedStudies.map(anonymizeStudy), { concurrency: 'unbounded' })
+      
+      console.log(`All ${selectedStudies.length} studies completed anonymization`)
+      options.onSuccessMessage?.(`Successfully anonymized ${selectedStudies.length} studies!`)
+      
+      return results
+    })
+
   const reset = () => {
     loading.value = false
     error.value = null
@@ -221,6 +326,7 @@ export function useAnonymizer() {
     anonymizeFile,
     anonymizeFiles,
     anonymizeInBatches,
+    anonymizeSelectedEffect,
     reset
   }
 }
