@@ -1,14 +1,11 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { Effect } from 'effect'
+import { ManagedRuntime } from 'effect'
 import type { DicomFile } from '@/types/dicom'
 import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
 import { useAppConfig } from '@/composables/useAppConfig'
-import { FileHandler } from '@/services/fileHandler'
-import { DicomProcessor } from '@/services/dicomProcessor'
-import { Anonymizer } from '@/services/anonymizer'
-import { DicomSender } from '@/services/dicomSender'
+import { useAppState } from '@/composables/useAppState'
 import { AppLayer } from '@/services/shared/layers'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
@@ -17,13 +14,6 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
-import { useTableState } from '@/composables/useTableState'
-import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
-import { useSendingProgress } from '@/composables/useSendingProgress'
-import { useFileProcessing } from '@/composables/useFileProcessing'
-import { useDragAndDrop } from '@/composables/useDragAndDrop'
-import { useAnonymizer } from '@/composables/useAnonymizer'
-import { useDicomSender } from '@/composables/useDicomSender'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -40,84 +30,31 @@ import {
   Wifi
 } from 'lucide-vue-next'
 
-// Initialize composables
+const runtime = ManagedRuntime.make(AppLayer)
 const workflow = useDicomWorkflow()
-const fileProcessing = useFileProcessing()
-const dragAndDrop = useDragAndDrop()
-const anonymizer = useAnonymizer()
-const dicomSender = useDicomSender()
+const appState = useAppState(runtime)
+const {
+  config: loadedConfig,
+  loading: configLoading,
+  error: configError
+} = useAppConfig()
 
-// Main Effect program services (will be initialized in onMounted)
-const appServices = ref<{
-  fileHandler: any
-  processor: any
-  anonymizer: any
-  sender: any
-} | null>(null)
 
-// Main Effect program for the application
-const mainProgram = Effect.gen(function* () {
-  const fileHandler = yield* FileHandler
-  const processor = yield* DicomProcessor
-  const anonymizer = yield* Anonymizer
-  const sender = yield* DicomSender
-  
-  return { fileHandler, processor, anonymizer, sender }
-})
-
-// Helper to run Effect programs with the application layer
-const runWithAppLayer = <A, E>(effect: Effect.Effect<A, E, any>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(AppLayer)) as Effect.Effect<A, E, never>)
-
-const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
-const { setStudySendingProgress, removeStudySendingProgress, clearAllSendingProgress } = useSendingProgress()
-const { config: loadedConfig, loading: configLoading, error: configError } = useAppConfig()
-
-// Component state
-const uploadedFiles = ref<File[]>([])
-const dicomFiles = ref<DicomFile[]>([])
-const successMessage = ref('')
-const concurrency = ref(3)
-
-// Use loaded configuration from app.config.json
-const config = computed<AnonymizationConfig>(() => {
-  return loadedConfig.value || {
-    profile: 'basic',
-    removePrivateTags: true,
-    useCustomHandlers: true,
-    dateJitterDays: 31
-  }
-})
-
-const studies = ref<DicomStudy[]>([])
 const isProcessing = workflow.loading
 const error = computed(() => {
   if (configError.value) {
     return `Configuration Error: ${configError.value.message}`
   }
-  return workflow.errors.value[0]?.message || null
+  return workflow.errors.value[0]?.message || appState.appError.value
 })
+const config = computed<AnonymizationConfig>(() => loadedConfig.value!)
 
-// Application-level error handling
-const appError = ref<string | null>(null)
-const setAppError = (err: Error | string) => {
-  appError.value = typeof err === 'string' ? err : err.message
-  console.error('App Error:', err)
-}
-
-const clearAppError = () => {
-  appError.value = null
-}
-const totalFiles = computed(() => dicomFiles.value.length)
-const anonymizedFilesCount = computed(() => dicomFiles.value.filter(file => file.anonymized).length)
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
 
-// Use drag and drop state from composable
-const { 
-  isDragOver, 
-  isGlobalDragOver, 
-  dragCounter,
+const {
+  isDragOver,
+  isGlobalDragOver,
   handleDrop,
   handleDragOver,
   handleDragLeave,
@@ -126,193 +63,72 @@ const {
   handleGlobalDragOver,
   handleGlobalDrop,
   handleFileInput
-} = dragAndDrop
+} = appState.dragAndDrop
 
-// Use file processing state from composable
-const { fileProcessingState } = fileProcessing
-
-// Table state management
-const tableState = useTableState()
-
-// Computed properties for selected studies
-const selectedStudies = computed(() => {
-  return tableState.getSelectedStudies(studies.value)
-})
-
-
-const isAllSelectedAnonymized = computed(() => {
-  if (selectedStudies.value.length === 0) return false
-
-  return selectedStudies.value.every(study =>
-    study?.series.every(s => s.files.every(f => f.anonymized)) ?? false
-  )
-})
+const { fileProcessingState } = appState.fileProcessing
 
 const isAppReady = computed(() => {
   return !configLoading.value && !configError.value && loadedConfig.value !== null
 })
 
-// File processing handler to use with drag and drop composable
+const showFileDropZone = computed(() => {
+  return isAppReady.value &&
+    (!appState.studies.value || appState.studies.value.length === 0) &&
+    !isProcessing.value &&
+    !isRestoring.value
+})
+
+const showStudiesTable = computed(() => {
+  return isAppReady.value && appState.studies.value && appState.studies.value.length > 0
+})
+
+const studiesData = computed(() => {
+  return appState.studies.value || []
+})
+
 async function processNewFiles(newFiles: File[]) {
-  try {
-    await runWithAppLayer(
-      fileProcessing.processNewFilesEffect(newFiles, {
-        isAppReady: isAppReady.value,
-        concurrency: concurrency.value,
-        dicomFiles: dicomFiles.value,
-        onUpdateFiles: (updatedFiles) => {
-          dicomFiles.value = updatedFiles
-        },
-        onUpdateStudies: (updatedStudies) => {
-          studies.value = updatedStudies
-        }
-      })
-    )
-    successMessage.value = ''
-  } catch (error) {
-    console.error('Error processing files:', error)
-    fileProcessing.clearProcessingState()
-    if (error instanceof Error) {
-      setAppError(error)
-      workflow.errors.value.push(error)
-    }
-  }
+  await appState.processNewFiles(newFiles, isAppReady.value)
 }
 
-// File addition handler for drag and drop composable
 function addFilesToUploaded(newFiles: File[]) {
-  uploadedFiles.value = [...uploadedFiles.value, ...newFiles]
+  appState.addFilesToUploaded(newFiles)
 }
 
-async function processFiles() {
-  // Process all uploaded files (used for initial load or when called directly)
-  await processNewFiles(uploadedFiles.value)
-}
-
-// Anonymization handler using composable
 async function anonymizeSelected() {
-  try {
-    await runWithAppLayer(
-      anonymizer.anonymizeSelectedEffect(selectedStudies.value, config.value, {
-        concurrency: concurrency.value,
-        isAppReady: isAppReady.value,
-        dicomFiles: dicomFiles.value,
-        onUpdateFiles: (updatedFiles) => {
-          dicomFiles.value = updatedFiles
-        },
-        onUpdateStudies: (updatedStudies) => {
-          studies.value = updatedStudies
-        },
-        onSetStudyProgress: setStudyProgress,
-        onRemoveStudyProgress: removeStudyProgress,
-        onSuccessMessage: (message) => {
-          successMessage.value = message
-        }
-      })
-    )
-  } catch (error) {
-    console.error('Error in anonymization:', error)
-    setAppError(error as Error)
-  }
+  await appState.anonymizeSelected(config.value, isAppReady.value)
 }
 
-// Test connection handler using composable
 async function testConnection() {
-  try {
-    await runWithAppLayer(dicomSender.testConnection())
-  } catch (error) {
-    console.error('Connection test failed:', error)
-    setAppError(error as Error)
-  }
+  await appState.testConnection()
 }
 
-// Sending handler using composable
 async function handleSendSelected(selectedStudiesToSend: DicomStudy[]) {
-  try {
-    successMessage.value = ''
-    await runWithAppLayer(
-      dicomSender.handleSendSelectedEffect(selectedStudiesToSend, {
-        concurrency: concurrency.value,
-        dicomFiles: dicomFiles.value,
-        onUpdateFiles: (updatedFiles) => {
-          dicomFiles.value = updatedFiles
-        },
-        onUpdateStudies: (updatedStudies) => {
-          studies.value = updatedStudies
-        },
-        onSetSendingProgress: setStudySendingProgress,
-        onRemoveSendingProgress: removeStudySendingProgress,
-        onSuccessMessage: (message) => {
-          successMessage.value = message
-        }
-      })
-    )
-  } catch (error) {
-    console.error('Error in sending:', error)
-    setAppError(error as Error)
-  }
+  await appState.handleSendSelected(selectedStudiesToSend)
 }
 
-// Legacy function removed - now handled by Effect-based workflow
-
-// Clear all files
 function clearFiles() {
-  // Clear file data explicitly to help garbage collection
-  dicomFiles.value.forEach(file => {
-    // Clear metadata to reduce memory usage
-    if (file.metadata) file.metadata = undefined
-  })
-
-  uploadedFiles.value = []
-  dicomFiles.value = []
-  studies.value = []
+  appState.clearFiles()
   workflow.resetAll()
-  successMessage.value = ''
-  fileProcessingState.value = null
-  clearAllProgress()
   clearSession()
-  tableState.clearSelection()
 }
 
-// Aliases for template compatibility
-const processZipFile = (file: File) => {
-  uploadedFiles.value = [file]
-  processFiles()
-}
-
-// Session persistence
 const {
   restore: restoreSession,
   clear: clearSession,
   isRestoring: persistenceRestoring,
   restoreProgress: persistenceProgress
-} = useSessionPersistence(dicomFiles, studies)
+} = useSessionPersistence(appState.dicomFiles, appState.studies)
 
-// Bridge persistence state to local refs used in template
 watch(persistenceRestoring, (v) => (isRestoring.value = v))
 watch(persistenceProgress, (v) => (restoreProgress.value = v))
 
-// Initialize application services on mount
-onMounted(async () => {
-  try {
-    // Initialize main Effect program and services
-    const services = await runWithAppLayer(mainProgram)
-    appServices.value = services
-    console.log('Application services initialized:', services)
-    
-    // Restore session after services are available
-    restoreSession()
-  } catch (error) {
-    console.error('Failed to initialize application services:', error)
-    setAppError(error as Error)
-  }
+onMounted(() => {
+  restoreSession()
 })
 
-// Cleanup on unmount
 onUnmounted(() => {
-  // Clear any running Effect programs
-  clearAppError()
-  appServices.value = null
+  runtime.dispose()
+  appState.clearAppError()
 })
 </script>
 
@@ -349,22 +165,22 @@ onUnmounted(() => {
 
       <!-- Error Display -->
       <Alert
-        v-if="error || appError"
-        :variant="(error || appError)?.includes('browser') ? 'default' : 'destructive'"
+        v-if="error"
+        :variant="error?.includes('browser') ? 'default' : 'destructive'"
       >
         <AlertDescription>
-          {{ error || appError }}
+          {{ error }}
           <Button
-            v-if="!(error || appError)?.includes('browser')"
+            v-if="!error?.includes('browser')"
             variant="ghost"
             size="sm"
-            @click="error ? (error = null) : clearAppError()"
+            @click="error ? (error = null) : appState.clearAppError()"
             class="ml-2 h-auto p-1"
           >
             ×
           </Button>
           <div
-            v-if="(error || appError)?.includes('browser')"
+            v-if="error?.includes('browser')"
             class="mt-2 text-sm"
           >
             <p>This application requires modern browser features for optimal performance.</p>
@@ -414,43 +230,43 @@ onUnmounted(() => {
           <Badge
             variant="outline"
             data-testid="files-count-badge"
-          >{{ totalFiles }} Files</Badge>
+          >{{ appState.totalFiles }} Files</Badge>
           <Badge
             variant="default"
             data-testid="anonymized-count-badge"
-          >{{ anonymizedFilesCount }} Anonymized</Badge>
+          >{{ appState.anonymizedFilesCount }} Anonymized</Badge>
           <Badge
             variant="secondary"
             data-testid="studies-count-badge"
-          >{{ studies.length }} Studies</Badge>
+          >{{ appState.studies.value.length }} Studies</Badge>
           <Badge
-            v-if="selectedStudies.length > 0"
+            v-if="appState.selectedStudiesCount.value > 0"
             variant="default"
             data-testid="selected-count-badge"
-          >{{ selectedStudies.length }} Selected</Badge>
+          >{{ appState.selectedStudiesCount }} Selected</Badge>
         </div>
 
         <div class="flex items-center gap-2">
           <Button
             @click="anonymizeSelected"
-            :disabled="selectedStudies.length === 0 || isAllSelectedAnonymized"
+            :disabled="appState.selectedStudiesCount.value === 0"
             variant="default"
             size="sm"
             data-testid="anonymize-button"
           >
             <Shield class="w-4 h-4 mr-2" />
-            Anonymize ({{ selectedStudies.length }})
+            Anonymize ({{ appState.selectedStudiesCount }})
           </Button>
 
           <Button
-            @click="handleSendSelected(selectedStudies)"
-            :disabled="isProcessing || selectedStudies.length === 0 || !isAllSelectedAnonymized"
+            @click="handleSendSelected(appState.selectedStudies.value)"
+            :disabled="isProcessing || appState.selectedStudiesCount.value === 0"
             variant="secondary"
             size="sm"
             data-testid="send-button"
           >
             <Send class="w-4 h-4 mr-2" />
-            Send{{ selectedStudies.length > 0 ? ` (${selectedStudies.length})` : '' }}
+            Send ({{ appState.selectedStudiesCount }})
           </Button>
 
           <Button
@@ -498,7 +314,7 @@ onUnmounted(() => {
 
       <!-- File Drop Zone -->
       <Card
-        v-if="isAppReady && studies.length === 0 && !isProcessing && !isRestoring"
+        v-if="showFileDropZone"
         data-testid="file-drop-zone"
         class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
         :class="{ 'border-primary bg-primary/5': isDragOver }"
@@ -539,7 +355,7 @@ onUnmounted(() => {
 
       <!-- Studies Data Table -->
       <Card
-        v-if="isAppReady && studies.length > 0"
+        v-if="showStudiesTable"
         data-testid="studies-table-card"
       >
         <CardHeader>
@@ -551,7 +367,7 @@ onUnmounted(() => {
         <CardContent>
           <DataTable
             :columns="columns"
-            :data="studies"
+            :data="studiesData"
             data-testid="studies-data-table"
           />
         </CardContent>

@@ -19,10 +19,10 @@ import {
   TableRow,
 } from '@/components/ui/table'
 
-interface DataTableProps {
+const props = defineProps<{
   columns: ColumnDef<TData, TValue>[]
   data: TData[]
-}
+}>()
 
 const {
   sorting,
@@ -30,12 +30,6 @@ const {
   columnVisibility,
   rowSelection,
 } = useTableState()
-
-const props = defineProps<DataTableProps>()
-const emit = defineEmits<{
-  anonymizeSelected: [studies: TData[]]
-  sendSelected: [studies: TData[]]
-}>()
 
 const table = useVueTable({
   get data() {
@@ -64,11 +58,11 @@ const table = useVueTable({
       ? updaterOrValue(columnVisibility.value)
       : updaterOrValue
   } : undefined,
-  onRowSelectionChange: rowSelection.value ? (updaterOrValue) => {
+  onRowSelectionChange: (updaterOrValue) => {
     rowSelection.value = typeof updaterOrValue === 'function'
       ? updaterOrValue(rowSelection.value)
       : updaterOrValue
-  } : undefined,
+  },
   state: {
     get sorting() {
       return sorting.value ?? []

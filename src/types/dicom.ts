@@ -6,6 +6,7 @@ export interface DicomFile {
   metadata?: DicomMetadata
   anonymized?: boolean
   sent?: boolean
+  parsed?: boolean
   // Optional OPFS file ID for worker-based processing
   opfsFileId?: string
 }
@@ -30,7 +31,7 @@ export interface DicomMetadata {
 }
 
 export interface DicomStudy {
-  accessionNumber: string
+  accessionNumber?: string
   studyInstanceUID: string
   patientName?: string
   patientId?: string
