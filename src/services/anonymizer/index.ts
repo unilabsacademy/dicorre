@@ -1,4 +1,4 @@
-import { Effect, Context, Layer } from "effect"
+import { Effect, Context, Layer, PubSub, Stream } from "effect"
 import {
   DicomDeidentifier,
   BasicProfile,
@@ -8,8 +8,10 @@ import {
 } from '@umessen/dicom-deidentifier'
 import * as dcmjs from 'dcmjs'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
+import type { AnonymizationEvent } from '@/types/events'
 import { DicomProcessor } from '../dicomProcessor'
 import { ConfigService } from '../config'
+import { AnonymizationEventBus } from '../eventBus'
 import { getAllSpecialHandlers } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
 import { AnonymizationError, ConfigurationError, type AnonymizerError } from '@/types/effects'
@@ -32,9 +34,9 @@ export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
     readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string) => Effect.Effect<DicomFile, AnonymizerError>
-    readonly anonymizeFiles: (files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<DicomFile[], AnonymizerError>
-    readonly anonymizeInBatches: (files: DicomFile[], config: AnonymizationConfig, batchSize?: number, onBatchComplete?: (batchIndex: number, totalBatches: number) => void) => Effect.Effect<DicomFile[], AnonymizerError>
-    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
+    readonly anonymizeFiles: (files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number }) => Effect.Effect<DicomFile[], AnonymizerError>
+    readonly anonymizeStudyWithEvents: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number }) => Effect.Effect<DicomFile[], AnonymizerError>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
     readonly validateConfig: (config: AnonymizationConfig) => Effect.Effect<void, ConfigurationError>
   }
 >() { }
@@ -266,49 +268,101 @@ class AnonymizerImpl {
   static anonymizeFiles = (
     files: DicomFile[],
     config: AnonymizationConfig,
-    options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void } = {}
+    options: { concurrency?: number } = {}
   ): Effect.Effect<DicomFile[], AnonymizerError, DicomProcessor | ConfigService> =>
     Effect.gen(function* () {
-      const { concurrency = 3, onProgress } = options
-      let completed = 0
+      const { concurrency = 3 } = options
       const total = files.length
 
       // Generate shared timestamp for consistent replacements across all files
       const sharedTimestamp = Date.now().toString().slice(-7)
       console.log(`[Effect Anonymizer] Using shared timestamp for ${files.length} files: ${sharedTimestamp}`)
 
-      // Create individual effects that update progress
-      const effectsWithProgress = files.map((file, index) =>
-        Effect.gen(function* () {
-          if (onProgress) {
-            onProgress({
-              total,
-              completed,
-              percentage: Math.round((completed / total) * 100),
-              currentFile: file.fileName
-            })
-          }
-
-          const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp)
-
-          completed++
-          if (onProgress) {
-            onProgress({
-              total,
-              completed,
-              percentage: Math.round((completed / total) * 100),
-              currentFile: file.fileName
-            })
-          }
-
-          return result
-        })
+      // Create individual effects
+      const effects = files.map((file) =>
+        AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp)
       )
 
       // Run all effects concurrently
-      const results = yield* Effect.all(effectsWithProgress, { concurrency, batching: true })
+      const results = yield* Effect.all(effects, { concurrency, batching: true })
 
       return results
+    })
+
+  /**
+   * Anonymize files with event publishing
+   */
+  static anonymizeStudyWithEvents = (
+    studyId: string,
+    files: DicomFile[],
+    config: AnonymizationConfig,
+    options: { concurrency?: number } = {}
+  ): Effect.Effect<DicomFile[], AnonymizerError, DicomProcessor | ConfigService | AnonymizationEventBus> =>
+    Effect.gen(function* () {
+      const { concurrency = 3 } = options
+      const total = files.length
+      const sharedTimestamp = Date.now().toString().slice(-7)
+      const eventBus = yield* AnonymizationEventBus
+      
+      // Emit start event
+      yield* PubSub.publish(eventBus, {
+        _tag: "AnonymizationStarted",
+        studyId,
+        totalFiles: total
+      } as const)
+
+      console.log(`[Effect Anonymizer Events] Using shared timestamp for ${files.length} files: ${sharedTimestamp}`)
+
+      let completed = 0
+
+      // Process files and emit events
+      const processFile = (file: DicomFile) =>
+        Effect.gen(function* () {
+          const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp)
+          completed++
+
+          // Emit progress event
+          yield* PubSub.publish(eventBus, {
+            _tag: "AnonymizationProgress",
+            studyId,
+            completed,
+            total,
+            currentFile: file.fileName
+          } as const)
+
+          // Emit file completed event
+          yield* PubSub.publish(eventBus, {
+            _tag: "FileAnonymized",
+            studyId,
+            file: result
+          } as const)
+
+          return result
+        }).pipe(
+          Effect.catchAll((error) =>
+            Effect.gen(function* () {
+              // Emit error event
+              yield* PubSub.publish(eventBus, {
+                _tag: "AnonymizationError",
+                studyId,
+                error: error as Error
+              } as const)
+              return yield* Effect.fail(error)
+            })
+          )
+        )
+
+      // Process all files
+      const anonymizedFiles = yield* Effect.all(files.map(processFile), { concurrency, batching: true })
+
+      // Emit completion event
+      yield* PubSub.publish(eventBus, {
+        _tag: "StudyAnonymized",
+        studyId,
+        files: anonymizedFiles
+      } as const)
+
+      return anonymizedFiles
     })
 
   /**
@@ -420,7 +474,7 @@ export const AnonymizerLive = Layer.succeed(
   Anonymizer.of({
     anonymizeFile: AnonymizerImpl.anonymizeFile,
     anonymizeFiles: AnonymizerImpl.anonymizeFiles,
-    anonymizeInBatches: AnonymizerImpl.anonymizeInBatches,
+    anonymizeStudyWithEvents: AnonymizerImpl.anonymizeStudyWithEvents,
     anonymizeStudy: AnonymizerImpl.anonymizeStudy,
     validateConfig: AnonymizerImpl.validateConfig
   })

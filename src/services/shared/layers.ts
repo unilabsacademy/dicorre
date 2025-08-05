@@ -9,6 +9,7 @@ import { OPFSStorage, OPFSStorageLive } from '../opfsStorage'
 import { DicomProcessorLive } from '../dicomProcessor'
 import { AnonymizerLive } from '../anonymizer'
 import { DicomSenderLive } from '../dicomSender'
+import { EventBusLayer } from '../eventBus'
 import { ConfigurationError } from '@/types/effects'
 
 /**
@@ -43,6 +44,7 @@ export const AdvancedServicesLayer = Layer.mergeAll(
  * Complete application layer with all services
  */
 export const AppLayer = Layer.mergeAll(
+  EventBusLayer,
   ConfigServiceLive,
   FileHandlerLive,
   OPFSStorageLive,

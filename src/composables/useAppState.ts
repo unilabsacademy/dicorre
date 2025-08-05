@@ -1,12 +1,13 @@
 import { ref, computed } from 'vue'
-import { ManagedRuntime } from 'effect'
+import { ManagedRuntime, Effect } from 'effect'
 import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import { Anonymizer } from '@/services/anonymizer'
+import { DicomProcessor } from '@/services/dicomProcessor'
 import { useTableState } from '@/composables/useTableState'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
 import { useSendingProgress } from '@/composables/useSendingProgress'
 import { useFileProcessing } from '@/composables/useFileProcessing'
 import { useDragAndDrop } from '@/composables/useDragAndDrop'
-import { useAnonymizer } from '@/composables/useAnonymizer'
 import { useDicomSender } from '@/composables/useDicomSender'
 
 type RuntimeType = ReturnType<typeof ManagedRuntime.make<any, any>>
@@ -23,7 +24,6 @@ export function useAppState(runtime: RuntimeType) {
   // Initialize composables
   const fileProcessing = useFileProcessing()
   const dragAndDrop = useDragAndDrop()
-  const anonymizer = useAnonymizer()
   const dicomSender = useDicomSender()
 
   // Progress management
@@ -80,25 +80,76 @@ export function useAppState(runtime: RuntimeType) {
   }
 
   const anonymizeSelected = async (config: AnonymizationConfig, isAppReady: boolean) => {
+    if (!isAppReady) {
+      setAppError('Configuration not loaded')
+      return
+    }
+
+    if (selectedStudies.value.length === 0) {
+      return
+    }
+
     try {
-      await runtime.runPromise(
-        anonymizer.anonymizeSelectedEffect(selectedStudies.value, config, {
-          concurrency: concurrency.value,
-          isAppReady,
-          dicomFiles: dicomFiles.value,
-          onUpdateFiles: (updatedFiles) => {
-            dicomFiles.value = updatedFiles
-          },
-          onUpdateStudies: (updatedStudies) => {
-            studies.value = updatedStudies
-          },
-          onSetStudyProgress: setStudyProgress,
-          onRemoveStudyProgress: removeStudyProgress,
-          onSuccessMessage: (message) => {
-            successMessage.value = message
-          }
+      // Process each study with direct service calls
+      // Events are published internally but we don't need to subscribe for basic functionality
+      for (const study of selectedStudies.value) {
+        const studyFiles = study.series.flatMap(series => series.files)
+        
+        // Set initial progress
+        setStudyProgress(study.studyInstanceUID, {
+          isProcessing: true,
+          progress: 0,
+          totalFiles: studyFiles.length,
+          currentFile: undefined
+        })
+        
+        try {
+          const anonymizedFiles = await runtime.runPromise(
+            Effect.gen(function* () {
+              const anonymizer = yield* Anonymizer
+              return yield* anonymizer.anonymizeStudyWithEvents(
+                study.studyInstanceUID,
+                studyFiles,
+                config,
+                { concurrency: concurrency.value }
+              )
+            })
+          )
+          
+          // Update the files in our collection
+          anonymizedFiles.forEach(anonymizedFile => {
+            const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
+            if (fileIndex !== -1) {
+              dicomFiles.value[fileIndex] = anonymizedFile
+            }
+          })
+          
+          // Remove progress for completed study
+          removeStudyProgress(study.studyInstanceUID)
+          
+        } catch (studyError) {
+          console.error(`Error anonymizing study ${study.studyInstanceUID}:`, studyError)
+          removeStudyProgress(study.studyInstanceUID)
+          throw studyError
+        }
+      }
+
+      // After all studies are anonymized, regenerate the studies structure from updated files
+      const updatedStudies = await runtime.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.groupFilesByStudy(dicomFiles.value)
         })
       )
+      
+      // Update the studies state with the new anonymized data
+      studies.value = updatedStudies
+
+      successMessage.value = `Successfully anonymized ${selectedStudies.value.length} studies`
+      
+      // Clear selection after successful anonymization
+      clearSelection()
+
     } catch (error) {
       console.error('Error in anonymization:', error)
       setAppError(error as Error)

@@ -145,4 +145,16 @@ test('uploads single case zip file and checks correct grouping', async ({ page }
 
   console.log(`Single case: ${currentFileCount} files anonymized into ${studiesCount} study`);
   console.log('Console messages during test:', consoleMessages.slice(-10)); // Last 10 messages
+  
+  // Check for any error messages displayed in the UI
+  const errorMessage = page.locator('[data-testid="error-message"], .error, [role="alert"]').first();
+  const hasError = await errorMessage.isVisible().catch(() => false);
+  
+  if (hasError) {
+    const errorText = await errorMessage.textContent();
+    console.log(`❌ Error found in UI: "${errorText}"`);
+    throw new Error(`Test failed due to UI error: ${errorText}`);
+  } else {
+    console.log('✅ No errors displayed in UI');
+  }
 });

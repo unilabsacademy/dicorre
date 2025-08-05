@@ -24,8 +24,14 @@ test.describe('DICOM Sending E2E Tests', () => {
     await expect(anonymizeButton).toBeEnabled()
     await anonymizeButton.click()
 
-    // Wait for study selection to register
-    await page.waitForTimeout(2000)
+    // Wait for anonymization to complete (button becomes disabled)
+    await expect(anonymizeButton).toBeDisabled({ timeout: 15000 })
+    
+    // After anonymization, selection is cleared, so select study again for sending
+    await studyCheckboxes.nth(1).click()
+    
+    // Wait for selection to register
+    await page.waitForTimeout(1000)
 
     // Mock DICOM server responses
     let requestCount = 0
@@ -80,6 +86,18 @@ test.describe('DICOM Sending E2E Tests', () => {
     // Verify DICOM requests were made
     await page.waitForTimeout(3000)
     expect(requestCount).toBeGreaterThan(0)
+    
+    // Check for any error messages displayed in the UI
+    const errorMessage = page.locator('[data-testid="error-message"], .error, [role="alert"]').first();
+    const hasError = await errorMessage.isVisible().catch(() => false);
+    
+    if (hasError) {
+      const errorText = await errorMessage.textContent();
+      console.log(`❌ Error found in UI: "${errorText}"`);
+      throw new Error(`Test failed due to UI error: ${errorText}`);
+    } else {
+      console.log('✅ No errors displayed in UI');
+    }
   })
 
   test('handles server errors gracefully', async ({ page }) => {
@@ -129,6 +147,18 @@ test.describe('DICOM Sending E2E Tests', () => {
 
     // App should handle errors without crashing
     await expect(page.getByTestId('app-title')).toBeVisible()
+    
+    // For this test, we expect error handling, so we don't fail on UI errors
+    // but we log them for debugging
+    const errorMessage = page.locator('[data-testid="error-message"], .error, [role="alert"]').first();
+    const hasError = await errorMessage.isVisible().catch(() => false);
+    
+    if (hasError) {
+      const errorText = await errorMessage.textContent();
+      console.log(`ℹ️ Expected error handling test - Error found: "${errorText}"`);
+    } else {
+      console.log('ℹ️ No errors displayed (error handling may be working)');
+    }
   })
 
   test('connection test works', async ({ page }) => {
@@ -151,6 +181,18 @@ test.describe('DICOM Sending E2E Tests', () => {
 
     // Connection test should complete without errors
     await expect(page.getByTestId('app-title')).toBeVisible()
+    
+    // Check for any error messages displayed in the UI
+    const errorMessage = page.locator('[data-testid="error-message"], .error, [role="alert"]').first();
+    const hasError = await errorMessage.isVisible().catch(() => false);
+    
+    if (hasError) {
+      const errorText = await errorMessage.textContent();
+      console.log(`❌ Error found in UI: "${errorText}"`);
+      throw new Error(`Test failed due to UI error: ${errorText}`);
+    } else {
+      console.log('✅ No errors displayed in UI');
+    }
   })
 
 })

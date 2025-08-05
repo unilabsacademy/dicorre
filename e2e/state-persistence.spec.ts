@@ -50,4 +50,16 @@ test('persists uploaded files and UI state across page reload', async ({ page })
   const studiesCountText = await page.getByTestId('studies-count-badge').textContent()
   const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0')
   expect(studiesCount).toBe(1)
+  
+  // Check for any error messages displayed in the UI
+  const errorMessage = page.locator('[data-testid="error-message"], .error, [role="alert"]').first();
+  const hasError = await errorMessage.isVisible().catch(() => false);
+  
+  if (hasError) {
+    const errorText = await errorMessage.textContent();
+    console.log(`❌ Error found in UI: "${errorText}"`);
+    throw new Error(`Test failed due to UI error: ${errorText}`);
+  } else {
+    console.log('✅ No errors displayed in UI');
+  }
 })

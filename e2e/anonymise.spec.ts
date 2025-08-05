@@ -39,6 +39,29 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   const anonymizedCountBefore = parseInt(anonymizedCountTextBefore?.match(/(\d+)/)?.[1] || '0');
   expect(anonymizedCountBefore).toBe(0);
 
+  // Capture original data table values before anonymization
+  await page.waitForTimeout(1000);
+  const originalAccessionNumbers: string[] = [];
+  const originalPatientIds: string[] = [];
+  
+  const accessionCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
+  const patientIdCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(3)');
+  
+  const accessionCountBefore = await accessionCellsBefore.count();
+  for (let i = 0; i < Math.min(accessionCountBefore, 3); i++) {
+    const accessionText = await accessionCellsBefore.nth(i).textContent();
+    if (accessionText) originalAccessionNumbers.push(accessionText);
+  }
+  
+  const patientIdCountBefore = await patientIdCellsBefore.count();
+  for (let i = 0; i < Math.min(patientIdCountBefore, 3); i++) {
+    const patientIdText = await patientIdCellsBefore.nth(i).textContent();
+    if (patientIdText) originalPatientIds.push(patientIdText);
+  }
+  
+  console.log('Original accession numbers:', originalAccessionNumbers);
+  console.log('Original patient IDs:', originalPatientIds);
+
   // Wait for studies table to appear
   await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 10000 });
 
@@ -153,11 +176,74 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
     }
   }
 
-  // Check patient ID column (assuming it's the third data column after checkbox and accession)
+  // Check patient ID column (assuming it's the third data column after checkbox and accession)  
   const patientIdCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(3)');
   const patientIdCount = await patientIdCells.count();
   
   console.log(`Found ${patientIdCount} patient ID cells to check`);
+  
+  // Capture anonymized data table values
+  const anonymizedAccessionNumbers: string[] = [];
+  const anonymizedPatientIds: string[] = [];
+  
+  // Re-get accession numbers after anonymization
+  const accessionCellsAfter = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
+  const accessionCountAfter = await accessionCellsAfter.count();
+  for (let i = 0; i < Math.min(accessionCountAfter, 3); i++) {
+    const accessionText = await accessionCellsAfter.nth(i).textContent();
+    if (accessionText) anonymizedAccessionNumbers.push(accessionText);
+  }
+  
+  // Get patient IDs after anonymization  
+  for (let i = 0; i < Math.min(patientIdCount, 3); i++) {
+    const patientIdText = await patientIdCells.nth(i).textContent();
+    if (patientIdText) anonymizedPatientIds.push(patientIdText);
+  }
+  
+  console.log('Anonymized accession numbers:', anonymizedAccessionNumbers);
+  console.log('Anonymized patient IDs:', anonymizedPatientIds);
+  
+  // CRITICAL: Verify that values actually changed
+  let accessionNumbersChanged = false;
+  let patientIdsChanged = false;
+  
+  for (let i = 0; i < Math.min(originalAccessionNumbers.length, anonymizedAccessionNumbers.length); i++) {
+    if (originalAccessionNumbers[i] !== anonymizedAccessionNumbers[i]) {
+      accessionNumbersChanged = true;
+      console.log(`✅ Accession number changed: "${originalAccessionNumbers[i]}" → "${anonymizedAccessionNumbers[i]}"`);
+    } else {
+      console.log(`❌ Accession number NOT changed: "${originalAccessionNumbers[i]}"`);
+    }
+  }
+  
+  for (let i = 0; i < Math.min(originalPatientIds.length, anonymizedPatientIds.length); i++) {
+    if (originalPatientIds[i] !== anonymizedPatientIds[i]) {
+      patientIdsChanged = true;
+      console.log(`✅ Patient ID changed: "${originalPatientIds[i]}" → "${anonymizedPatientIds[i]}"`);
+    } else {
+      console.log(`❌ Patient ID NOT changed: "${originalPatientIds[i]}"`);
+    }
+  }
+  
+  // EXPECT CHANGES
+  expect(accessionNumbersChanged).toBe(true);
+  expect(patientIdsChanged).toBe(true);
+  
+  // Verify anonymized badges show 'Anonymized' status
+  // The anonymized column should be the 9th column (after checkbox, accession, patient ID, date, description, series, files, study UID)
+  const anonymizedCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(9)');
+  const cellCount = await anonymizedCells.count();
+  
+  if (cellCount > 0) {
+    for (let i = 0; i < Math.min(cellCount, 3); i++) {
+      const cellText = await anonymizedCells.nth(i).textContent();
+      console.log(`Checking anonymized status ${i + 1}: "${cellText}"`);
+      expect(cellText).toBe('Anonymized');
+    }
+    console.log(`✅ All ${Math.min(cellCount, 3)} studies show 'Anonymized' status`);
+  } else {
+    console.log(`❌ No anonymized status cells found in table`);
+  }
   
   if (patientIdCount > 0) {
     let validPatientIdCount = 0;
@@ -182,9 +268,33 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   }
 
   console.log('✅ Verified that anonymized values follow expected patterns from config');
+  
+  // Check for any error messages displayed in the UI
+  const errorMessage = page.locator('[data-testid="error-message"], .error, [role="alert"]').first();
+  const hasError = await errorMessage.isVisible().catch(() => false);
+  
+  if (hasError) {
+    const errorText = await errorMessage.textContent();
+    console.log(`❌ Error found in UI: "${errorText}"`);
+    throw new Error(`Test failed due to UI error: ${errorText}`);
+  } else {
+    console.log('✅ No errors displayed in UI');
+  }
 });
 
 test('visits the app root url', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByTestId('app-title')).toHaveText('DICOM Anonymizer & Sender');
+  
+  // Check for any error messages displayed in the UI
+  const errorMessage = page.locator('[data-testid="error-message"], .error, [role="alert"]').first();
+  const hasError = await errorMessage.isVisible().catch(() => false);
+  
+  if (hasError) {
+    const errorText = await errorMessage.textContent();
+    console.log(`❌ Error found in UI: "${errorText}"`);
+    throw new Error(`Test failed due to UI error: ${errorText}`);
+  } else {
+    console.log('✅ No errors displayed in UI');
+  }
 })
