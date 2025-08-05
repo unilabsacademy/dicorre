@@ -329,16 +329,18 @@ class DicomSenderImpl {
 /**
  * Live implementation layer with ConfigService dependency
  */
-export const DicomSenderLive = Layer.succeed(
+export const DicomSenderLive = Layer.effect(
   DicomSender,
-  DicomSender.of({
-    testConnection: DicomSenderImpl.testConnection,
-    sendFile: DicomSenderImpl.sendFile,
-    sendStudy: DicomSenderImpl.sendStudy,
-    updateConfig: DicomSenderImpl.updateConfig,
-    getConfig: DicomSenderImpl.getConfig,
-    getTransmissionState: DicomSenderImpl.getTransmissionState,
-    getAllTransmissionStates: DicomSenderImpl.getAllTransmissionStates,
-    isTransmitting: DicomSenderImpl.isTransmitting
+  Effect.gen(function* () {
+    return DicomSender.of({
+      testConnection: DicomSenderImpl.testConnection,
+      sendFile: DicomSenderImpl.sendFile,
+      sendStudy: DicomSenderImpl.sendStudy,
+      updateConfig: DicomSenderImpl.updateConfig,
+      getConfig: DicomSenderImpl.getConfig,
+      getTransmissionState: DicomSenderImpl.getTransmissionState,
+      getAllTransmissionStates: DicomSenderImpl.getAllTransmissionStates,
+      isTransmitting: DicomSenderImpl.isTransmitting
+    })
   })
 )

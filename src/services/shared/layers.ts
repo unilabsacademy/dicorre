@@ -43,8 +43,12 @@ export const AdvancedServicesLayer = Layer.mergeAll(
  * Complete application layer with all services
  */
 export const AppLayer = Layer.mergeAll(
-  BaseServicesLayer,
-  AdvancedServicesLayer
+  ConfigServiceLive,
+  FileHandlerLive,
+  OPFSStorageLive,
+  DicomProcessorLive,
+  AnonymizerLive,
+  DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
 )
 
 /**
@@ -55,7 +59,7 @@ export const FileHandlerLayer = FileHandlerLive
 export const OPFSStorageLayer = OPFSStorageLive
 export const DicomProcessorLayer = DicomProcessorLive.pipe(Layer.provide(BaseServicesLayer))
 export const AnonymizerLayer = AnonymizerLive.pipe(Layer.provide(ProcessingServicesLayer))
-export const DicomSenderLayer = DicomSenderLive.pipe(Layer.provide(BaseServicesLayer))
+export const DicomSenderLayer = DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
 
 /**
  * Test layers for isolated testing (without dependencies)

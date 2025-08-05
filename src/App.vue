@@ -1,12 +1,15 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
-import { Effect, Layer } from 'effect'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { Effect } from 'effect'
 import type { DicomFile } from '@/types/dicom'
 import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
 import { useAppConfig } from '@/composables/useAppConfig'
-import { FileHandler, FileHandlerLive } from '@/services/fileHandler'
-import { useDicomProcessor } from '@/composables/useDicomProcessor'
+import { FileHandler } from '@/services/fileHandler'
+import { DicomProcessor } from '@/services/dicomProcessor'
+import { Anonymizer } from '@/services/anonymizer'
+import { DicomSender } from '@/services/dicomSender'
+import { AppLayer } from '@/services/shared/layers'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -33,17 +36,30 @@ import {
   Wifi
 } from 'lucide-vue-next'
 
-// Initialize the workflow composable
+// Initialize workflow composable for Effect program access
 const workflow = useDicomWorkflow()
-const dicomProcessor = useDicomProcessor()
 
-// Create the Effect layer for FileHandler
-const fileHandlerLayer = FileHandlerLive
+// Main Effect program services (will be initialized in onMounted)
+const appServices = ref<{
+  fileHandler: any
+  processor: any
+  anonymizer: any
+  sender: any
+} | null>(null)
 
-// Helper to execute an Effect with the file handler environment
-const runFileHandler = <A>(effect: Effect.Effect<A, any, any>) =>
-  // @ts-ignore – Effect typing for provideLayer narrows env to never which conflicts with Vue TS config
-  Effect.runPromise(effect.pipe(Effect.provide(fileHandlerLayer)))
+// Main Effect program for the application
+const mainProgram = Effect.gen(function* () {
+  const fileHandler = yield* FileHandler
+  const processor = yield* DicomProcessor
+  const anonymizer = yield* Anonymizer
+  const sender = yield* DicomSender
+  
+  return { fileHandler, processor, anonymizer, sender }
+})
+
+// Helper to run Effect programs with the application layer
+const runWithAppLayer = <A, E>(effect: Effect.Effect<A, E, any>) =>
+  Effect.runPromise(effect.pipe(Effect.provide(AppLayer)) as Effect.Effect<A, E, never>)
 const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
 const { setStudySendingProgress, removeStudySendingProgress, clearAllSendingProgress } = useSendingProgress()
 const { config: loadedConfig, loading: configLoading, error: configError } = useAppConfig()
@@ -72,8 +88,19 @@ const error = computed(() => {
   }
   return workflow.errors.value[0]?.message || null
 })
+
+// Application-level error handling
+const appError = ref<string | null>(null)
+const setAppError = (err: Error | string) => {
+  appError.value = typeof err === 'string' ? err : err.message
+  console.error('App Error:', err)
+}
+
+const clearAppError = () => {
+  appError.value = null
+}
 const totalFiles = computed(() => dicomFiles.value.length)
-const anonymizedFilesCount = computed(() => workflow.anonymizer.results.value.length)
+const anonymizedFilesCount = computed(() => dicomFiles.value.filter(file => file.anonymized).length)
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
 
@@ -179,23 +206,29 @@ async function handleFileInput(event: Event) {
   }
 }
 
-async function processNewFiles(newUploadedFiles: File[]) {
-  if (!isAppReady.value) {
-    console.error('Cannot process files: Configuration not loaded')
-    return
-  }
+// Effect-based file processing workflow
+const processNewFilesEffect = (newUploadedFiles: File[]) =>
+  Effect.gen(function* () {
+    if (!isAppReady.value) {
+      return yield* Effect.fail(new Error('Configuration not loaded'))
+    }
 
-  if (newUploadedFiles.length === 0) return
+    if (newUploadedFiles.length === 0) {
+      return yield* Effect.succeed([])
+    }
 
-  successMessage.value = ''
-  let localDicomFiles: DicomFile[] = []
+    const services = appServices.value
+    if (!services) {
+      return yield* Effect.fail(new Error('Application services not initialized'))
+    }
 
-  try {
-    // Process each uploaded file with simulated progress tracking
+    let localDicomFiles: DicomFile[] = []
+
+    // Process each uploaded file
     for (let i = 0; i < newUploadedFiles.length; i++) {
       const file = newUploadedFiles[i]
 
-      // Initialize progress for this file
+      // Update progress UI
       fileProcessingState.value = {
         isProcessing: true,
         fileName: file.name,
@@ -205,9 +238,8 @@ async function processNewFiles(newUploadedFiles: File[]) {
         currentFileIndex: i
       }
 
-      // Simulate progress for ZIP files (they take longer)
       if (file.name.toLowerCase().endsWith('.zip')) {
-        // Simulate gradual progress up to 90%
+        // Simulate progress steps for ZIP files
         const progressSteps = [10, 25, 40, 60, 75, 90]
         const stepTexts = [
           'Reading archive structure...',
@@ -224,54 +256,42 @@ async function processNewFiles(newUploadedFiles: File[]) {
             currentStep: stepTexts[step],
             progress: progressSteps[step]
           }
-
         }
 
-        // Now do the actual extraction
-        const extractedFiles = await runFileHandler(
-          Effect.gen(function* () {
-            const handler = yield* FileHandler
-            return yield* handler.extractZipFile(file)
-          })
-        )
+        // Extract ZIP file using Effect
+        const extractedFiles = yield* services.fileHandler.extractZipFile(file)
         localDicomFiles.push(...extractedFiles)
 
-        // Complete this file's progress
         fileProcessingState.value = {
           ...fileProcessingState.value,
           currentStep: `Extracted ${extractedFiles.length} DICOM files`,
           progress: 100
-        }      } else {
-        // For single files, show quick progress
+        }
+      } else {
         fileProcessingState.value = {
           ...fileProcessingState.value,
           progress: 50
         }
 
-        const dicomFile = await runFileHandler(
-          Effect.gen(function* () {
-            const handler = yield* FileHandler
-            return yield* handler.readSingleDicomFile(file)
-          })
-        )
+        const dicomFile = yield* services.fileHandler.readSingleDicomFile(file)
         localDicomFiles.push(dicomFile)
 
         fileProcessingState.value = {
           ...fileProcessingState.value,
           currentStep: 'File processed',
           progress: 100
-        }      }
+        }
+      }
     }
 
     if (localDicomFiles.length === 0) {
-      workflow.errors.value.push(new Error('No DICOM files found in the uploaded files.'))
       fileProcessingState.value = null
-      return
+      return yield* Effect.fail(new Error('No DICOM files found in the uploaded files'))
     }
 
     console.log(`Extracted ${localDicomFiles.length} new DICOM files from ${newUploadedFiles.length} uploaded files`)
 
-    // Parse files with simulated progress tracking
+    // Parse files with progress tracking
     fileProcessingState.value = {
       isProcessing: true,
       fileName: `${localDicomFiles.length} DICOM files`,
@@ -298,28 +318,25 @@ async function processNewFiles(newUploadedFiles: File[]) {
       }
     }
 
-    // Do the actual parsing
-    const parsedFiles = await workflow.processor.parseFiles(localDicomFiles, concurrency.value)
+    // Parse files using Effect
+    const parsedFiles = yield* services.processor.parseFiles(localDicomFiles, concurrency.value)
 
     if (parsedFiles.length === 0) {
       fileProcessingState.value = null
-      return
+      return yield* Effect.succeed([])
     }
 
-    // Update to 90% and wait there
     fileProcessingState.value = {
       ...fileProcessingState.value,
       currentStep: 'Organizing into studies...',
       progress: 90
     }
 
-    // No artificial delay needed
-
-    // Add to existing DICOM files (single source of truth)
+    // Add to existing DICOM files
     dicomFiles.value = [...dicomFiles.value, ...parsedFiles]
 
-    // Group all DICOM files so that the UI can display studies
-    const groupedStudies = await dicomProcessor.groupFilesByStudy(dicomFiles.value)
+    // Group files by study
+    const groupedStudies = yield* services.processor.groupFilesByStudy(dicomFiles.value)
     studies.value = groupedStudies
 
     console.log(`Parsed ${parsedFiles.length} new files, total: ${dicomFiles.value.length} files in ${groupedStudies.length} studies`)
@@ -332,15 +349,24 @@ async function processNewFiles(newUploadedFiles: File[]) {
       progress: 100
     }
 
-    // Hide progress after showing completion
+    // Hide progress after completion
     setTimeout(() => {
       fileProcessingState.value = null
     }, 500)
 
+    return parsedFiles
+  })
+
+// Wrapper function to execute the Effect program
+async function processNewFiles(newUploadedFiles: File[]) {
+  try {
+    await runWithAppLayer(processNewFilesEffect(newUploadedFiles))
+    successMessage.value = ''
   } catch (error) {
     console.error('Error processing files:', error)
     fileProcessingState.value = null
     if (error instanceof Error) {
+      setAppError(error)
       workflow.errors.value.push(error)
     }
   }
@@ -351,227 +377,249 @@ async function processFiles() {
   await processNewFiles(uploadedFiles.value)
 }
 
-// Anonymize selected studies
-async function anonymizeSelected() {
-  if (!isAppReady.value) {
-    console.error('Cannot anonymize: Configuration not loaded')
-    return
-  }
-
-  const selected = selectedStudies.value
-  if (selected.length === 0) return
-
-  console.log('anonymizeSelected called with', selected.length, 'studies')
-
-  // Process all studies in parallel to enable multiple workers
-  const studyPromises = selected.map(async (study) => {
-
-    const studyFiles = study.series.flatMap(series => series.files)
-    const totalFiles = studyFiles.length
-
-    // Initialize progress tracking
-    setStudyProgress(study.studyInstanceUID, {
-      isProcessing: true,
-      progress: 0,
-      totalFiles,
-      currentFile: undefined
-    })
-
-    try {
-      const anonymizedFiles = await workflow.anonymizer.anonymizeFiles(studyFiles, config.value, concurrency.value, {
-        onProgress: (progressInfo) => {
-          console.log('Progress callback called for study', study.studyInstanceUID, ':', progressInfo)
-          // Update progress for this specific study
-          setStudyProgress(study.studyInstanceUID, {
-            isProcessing: true,
-            progress: progressInfo.percentage,
-            totalFiles,
-            currentFile: progressInfo.currentFile
-          })
-        }
-      })
-
-      console.log(`Successfully anonymized ${anonymizedFiles.length} files for study ${study.studyInstanceUID}`)
-
-      // Update DICOM files with the anonymized versions
-      // Create new array to ensure old references are released
-      const updatedFiles = dicomFiles.value.map(file => {
-        const anonymized = anonymizedFiles.find(af => af.id === file.id)
-        if (anonymized) {
-          // Clear original file data to help garbage collection
-          if (file.arrayBuffer && file.arrayBuffer !== anonymized.arrayBuffer) {
-            // ArrayBuffer cannot be nullified directly, but we can encourage GC
-            // by ensuring the reference is replaced
-          }
-          if (file.metadata && file.metadata !== anonymized.metadata) {
-            file.metadata = undefined
-          }
-        }
-        return anonymized || file
-      })
-
-      // Replace entire array to break references to old data
-      dicomFiles.value = updatedFiles
-
-      // Immediately refresh study grouping for this completed study to update UI
-      console.log(`Regrouping studies after ${study.studyInstanceUID} anonymization completion...`)
-      const regroupedStudies = await dicomProcessor.groupFilesByStudy(dicomFiles.value)
-      studies.value = regroupedStudies
-      console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
-
-
-      // Mark study as complete
-      setStudyProgress(study.studyInstanceUID, {
-        isProcessing: false,
-        progress: 100,
-        totalFiles,
-        currentFile: undefined
-      })
-
-      removeStudyProgress(study.studyInstanceUID)
-
-      return anonymizedFiles
-
-    } catch (error) {
-      console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
-      removeStudyProgress(study.studyInstanceUID)
-      throw error
+// Effect-based anonymization workflow
+const anonymizeSelectedEffect = () =>
+  Effect.gen(function* () {
+    if (!isAppReady.value) {
+      return yield* Effect.fail(new Error('Configuration not loaded'))
     }
-  })
 
-  try {
-    // Wait for all studies to complete (UI already updated per study)
-    await Promise.all(studyPromises)
+    const selected = selectedStudies.value
+    if (selected.length === 0) {
+      return yield* Effect.succeed([])
+    }
 
-    console.log(`All ${selected.length} studies completed anonymization`)
-    successMessage.value = `Successfully anonymized ${selected.length} studies!`
-  } catch (error) {
-    console.error('Error in parallel anonymization:', error)
-    // Handle any remaining errors
-  }
-}
+    const services = appServices.value
+    if (!services) {
+      return yield* Effect.fail(new Error('Application services not initialized'))
+    }
 
-// Test server connection - simple async/await
-async function testConnection() {
-  await workflow.sender.testConnection()
-}
+    console.log('anonymizeSelected called with', selected.length, 'studies')
 
-// Send selected studies with progress tracking
-async function handleSendSelected(selectedStudies: DicomStudy[]) {
-  successMessage.value = ''
-  
-  console.log(`Starting to send ${selectedStudies.length} selected studies`)
-  
-  // Process each study in parallel with progress tracking
-  const studyPromises = selectedStudies.map(async (study) => {
-    const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)
-    
-    try {
-      console.log(`Starting to send study ${study.studyInstanceUID} with ${totalFiles} files`)
-      
-      // Set initial sending progress
-      setStudySendingProgress(study.studyInstanceUID, {
-        isProcessing: true,
-        progress: 0,
-        totalFiles,
-        currentFile: undefined
-      })
+    // Process all studies in parallel
+    const anonymizeStudy = (study: DicomStudy) =>
+      Effect.gen(function* () {
+        const studyFiles = study.series.flatMap(series => series.files)
+        const totalFiles = studyFiles.length
 
-      // Create a progress callback to update the UI
-      const onProgress = (completed: number, total: number, currentFile?: string) => {
-        const progress = Math.round((completed / total) * 100)
-        console.log(`Sending progress for study ${study.studyInstanceUID}: ${completed}/${total} (${progress}%)`)
-        
-        setStudySendingProgress(study.studyInstanceUID, {
+        // Initialize progress tracking
+        setStudyProgress(study.studyInstanceUID, {
           isProcessing: true,
-          progress,
-          totalFiles: total,
-          currentFile
-        })
-      }
-
-      // Send the study using the worker-based approach
-      const success = await sendStudyViaWorkers(study, onProgress)
-      
-      if (success) {
-        // Mark all files as sent in the main data
-        study.series.forEach(series => {
-          series.files.forEach(file => {
-            file.sent = true
-          })
-        })
-        
-        // Update the global dicomFiles array to reflect sent status
-        const updatedFiles = dicomFiles.value.map(file => {
-          const studyFile = study.series.find(s => s.files.find(f => f.id === file.id))?.files.find(f => f.id === file.id)
-          if (studyFile) {
-            return { ...file, sent: true }
-          }
-          return file
-        })
-        
-        // Replace entire array to break references to old data
-        dicomFiles.value = updatedFiles
-
-        // Immediately refresh study grouping for this completed study to update UI
-        console.log(`Regrouping studies after ${study.studyInstanceUID} sending completion...`)
-        const regroupedStudies = await dicomProcessor.groupFilesByStudy(dicomFiles.value)
-        studies.value = regroupedStudies
-        console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
-        // Mark study as complete
-        setStudySendingProgress(study.studyInstanceUID, {
-          isProcessing: false,
-          progress: 100,
+          progress: 0,
           totalFiles,
           currentFile: undefined
         })
 
-          removeStudySendingProgress(study.studyInstanceUID)
-        
-        console.log(`Successfully sent study ${study.studyInstanceUID}`)
-      } else {
-        throw new Error('Failed to send study')
-      }
+        try {
+          const anonymizedFiles = yield* services.anonymizer.anonymizeFiles(studyFiles, config.value, {
+            concurrency: concurrency.value,
+            onProgress: (progressInfo: any) => {
+              console.log('Progress callback called for study', study.studyInstanceUID, ':', progressInfo)
+              setStudyProgress(study.studyInstanceUID, {
+                isProcessing: true,
+                progress: progressInfo.percentage,
+                totalFiles,
+                currentFile: progressInfo.currentFile
+              })
+            }
+          })
 
-    } catch (error) {
-      console.error(`Error sending study ${study.studyInstanceUID}:`, error)
-      removeStudySendingProgress(study.studyInstanceUID)
-      throw error
-    }
+          console.log(`Successfully anonymized ${anonymizedFiles.length} files for study ${study.studyInstanceUID}`)
+
+          // Update DICOM files with anonymized versions
+          const updatedFiles = dicomFiles.value.map(file => {
+            const anonymized = anonymizedFiles.find((af: any) => af.id === file.id)
+            if (anonymized) {
+              if (file.metadata && file.metadata !== anonymized.metadata) {
+                file.metadata = undefined
+              }
+            }
+            return anonymized || file
+          })
+
+          dicomFiles.value = updatedFiles
+
+          // Refresh study grouping
+          console.log(`Regrouping studies after ${study.studyInstanceUID} anonymization completion...`)
+          const regroupedStudies = yield* services.processor.groupFilesByStudy(dicomFiles.value)
+          studies.value = regroupedStudies
+          console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
+
+          // Mark study as complete
+          setStudyProgress(study.studyInstanceUID, {
+            isProcessing: false,
+            progress: 100,
+            totalFiles,
+            currentFile: undefined
+          })
+
+          removeStudyProgress(study.studyInstanceUID)
+
+          return anonymizedFiles
+        } catch (error) {
+          console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
+          removeStudyProgress(study.studyInstanceUID)
+          return yield* Effect.fail(error as Error)
+        }
+      })
+
+    // Process all studies in parallel
+    const results = yield* Effect.all(selected.map(anonymizeStudy), { concurrency: 'unbounded' })
+    
+    console.log(`All ${selected.length} studies completed anonymization`)
+    successMessage.value = `Successfully anonymized ${selected.length} studies!`
+    
+    return results
   })
 
+// Wrapper function to execute the Effect program
+async function anonymizeSelected() {
   try {
-    // Wait for all studies to complete (UI already updated per study)
-    await Promise.all(studyPromises)
-
-    console.log(`All ${selectedStudies.length} studies completed sending`)
-    successMessage.value = `Successfully sent ${selectedStudies.length} studies!`
+    await runWithAppLayer(anonymizeSelectedEffect())
   } catch (error) {
-    console.error('Error in parallel sending:', error)
-    // Handle any remaining errors
+    console.error('Error in anonymization:', error)
+    setAppError(error as Error)
   }
 }
 
-// Send study via workers (similar to anonymization)
-async function sendStudyViaWorkers(study: DicomStudy, onProgress: (completed: number, total: number, currentFile?: string) => void): Promise<boolean> {
-  try {
-    const success = await workflow.sender.sendStudyWithProgress(study, {
-      concurrency: concurrency.value,
-      maxRetries: 2,
-      onProgress: (progress) => {
-        // Convert the progress format to the expected callback format
-        if (progress && typeof progress.completed === 'number' && typeof progress.total === 'number') {
-          onProgress(progress.completed, progress.total, progress.currentFile)
-        }
-      }
-    })
+// Effect-based connection testing  
+const testConnectionEffect = () =>
+  Effect.gen(function* () {
+    const services = appServices.value
+    if (!services) {
+      return yield* Effect.fail(new Error('Application services not initialized'))
+    }
     
-    return success
+    return yield* services.sender.testConnection
+  })
+
+async function testConnection() {
+  try {
+    await runWithAppLayer(testConnectionEffect())
   } catch (error) {
-    console.error('Error sending study via workers:', error)
-    return false
+    console.error('Connection test failed:', error)
+    setAppError(error as Error)
   }
 }
+
+// Effect-based sending workflow
+const handleSendSelectedEffect = (selectedStudiesToSend: DicomStudy[]) =>
+  Effect.gen(function* () {
+    const services = appServices.value
+    if (!services) {
+      return yield* Effect.fail(new Error('Application services not initialized'))
+    }
+
+    console.log(`Starting to send ${selectedStudiesToSend.length} selected studies`)
+    
+    const sendStudy = (study: DicomStudy) =>
+      Effect.gen(function* () {
+        const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)
+        
+        try {
+          console.log(`Starting to send study ${study.studyInstanceUID} with ${totalFiles} files`)
+          
+          // Set initial sending progress
+          setStudySendingProgress(study.studyInstanceUID, {
+            isProcessing: true,
+            progress: 0,
+            totalFiles,
+            currentFile: undefined
+          })
+
+          // Create progress callback
+          const onProgress = (completed: number, total: number, currentFile?: string) => {
+            const progress = Math.round((completed / total) * 100)
+            console.log(`Sending progress for study ${study.studyInstanceUID}: ${completed}/${total} (${progress}%)`)
+            
+            setStudySendingProgress(study.studyInstanceUID, {
+              isProcessing: true,
+              progress,
+              totalFiles: total,
+              currentFile
+            })
+          }
+
+          // Send study using Effect program
+          const sentFiles = yield* services.sender.sendStudy(study, {
+            concurrency: concurrency.value,
+            maxRetries: 2,
+            onProgress: (progress: any) => {
+              if (progress && typeof progress.completed === 'number' && typeof progress.total === 'number') {
+                onProgress(progress.completed, progress.total, progress.currentFile)
+              }
+            }
+          })
+          
+          if (sentFiles.length > 0) {
+            // Mark all files as sent
+            study.series.forEach(series => {
+              series.files.forEach(file => {
+                file.sent = true
+              })
+            })
+            
+            // Update global dicomFiles array
+            const updatedFiles = dicomFiles.value.map(file => {
+              const studyFile = study.series.find(s => s.files.find(f => f.id === file.id))?.files.find(f => f.id === file.id)
+              if (studyFile) {
+                return { ...file, sent: true }
+              }
+              return file
+            })
+            
+            dicomFiles.value = updatedFiles
+
+            // Refresh study grouping
+            console.log(`Regrouping studies after ${study.studyInstanceUID} sending completion...`)
+            const regroupedStudies = yield* services.processor.groupFilesByStudy(dicomFiles.value)
+            studies.value = regroupedStudies
+            console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
+            
+            // Mark study as complete
+            setStudySendingProgress(study.studyInstanceUID, {
+              isProcessing: false,
+              progress: 100,
+              totalFiles,
+              currentFile: undefined
+            })
+
+            removeStudySendingProgress(study.studyInstanceUID)
+            
+            console.log(`Successfully sent study ${study.studyInstanceUID}`)
+            return true
+          } else {
+            return yield* Effect.fail(new Error('Failed to send study'))
+          }
+
+        } catch (error) {
+          console.error(`Error sending study ${study.studyInstanceUID}:`, error)
+          removeStudySendingProgress(study.studyInstanceUID)
+          return yield* Effect.fail(error as Error)
+        }
+      })
+
+    // Process all studies in parallel
+    const results = yield* Effect.all(selectedStudiesToSend.map(sendStudy), { concurrency: 'unbounded' })
+
+    console.log(`All ${selectedStudiesToSend.length} studies completed sending`)
+    successMessage.value = `Successfully sent ${selectedStudiesToSend.length} studies!`
+    
+    return results
+  })
+
+// Wrapper function to execute the Effect program
+async function handleSendSelected(selectedStudies: DicomStudy[]) {
+  try {
+    successMessage.value = ''
+    await runWithAppLayer(handleSendSelectedEffect(selectedStudies))
+  } catch (error) {
+    console.error('Error in sending:', error)
+    setAppError(error as Error)
+  }
+}
+
+// Legacy function removed - now handled by Effect-based workflow
 
 // Clear all files
 function clearFiles() {
@@ -610,8 +658,27 @@ const {
 watch(persistenceRestoring, (v) => (isRestoring.value = v))
 watch(persistenceProgress, (v) => (restoreProgress.value = v))
 
-onMounted(() => {
-  restoreSession()
+// Initialize application services on mount
+onMounted(async () => {
+  try {
+    // Initialize main Effect program and services
+    const services = await runWithAppLayer(mainProgram)
+    appServices.value = services
+    console.log('Application services initialized:', services)
+    
+    // Restore session after services are available
+    restoreSession()
+  } catch (error) {
+    console.error('Failed to initialize application services:', error)
+    setAppError(error as Error)
+  }
+})
+
+// Cleanup on unmount
+onUnmounted(() => {
+  // Clear any running Effect programs
+  clearAppError()
+  appServices.value = null
 })
 </script>
 
@@ -648,22 +715,22 @@ onMounted(() => {
 
       <!-- Error Display -->
       <Alert
-        v-if="error"
-        :variant="error.includes('browser') ? 'default' : 'destructive'"
+        v-if="error || appError"
+        :variant="(error || appError)?.includes('browser') ? 'default' : 'destructive'"
       >
         <AlertDescription>
-          {{ error }}
+          {{ error || appError }}
           <Button
-            v-if="!error.includes('browser')"
+            v-if="!(error || appError)?.includes('browser')"
             variant="ghost"
             size="sm"
-            @click="error = null"
+            @click="error ? (error = null) : clearAppError()"
             class="ml-2 h-auto p-1"
           >
             ×
           </Button>
           <div
-            v-if="error.includes('browser')"
+            v-if="(error || appError)?.includes('browser')"
             class="mt-2 text-sm"
           >
             <p>This application requires modern browser features for optimal performance.</p>

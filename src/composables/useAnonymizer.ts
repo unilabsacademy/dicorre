@@ -1,20 +1,9 @@
 import { ref, computed } from 'vue'
-import { Effect, Layer } from 'effect'
+import { Effect } from 'effect'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
-import { Anonymizer, AnonymizerLive, type AnonymizationProgress } from '@/services/anonymizer'
-import { DicomProcessor, DicomProcessorLive } from '@/services/dicomProcessor'
-import { ConfigServiceLive } from '@/services/config'
+import { Anonymizer, type AnonymizationProgress } from '@/services/anonymizer'
+import { DicomProcessor } from '@/services/dicomProcessor'
 import { getWorkerManager } from '@/workers/workerManager'
-
-const anonymizerLayer = Layer.mergeAll(
-  AnonymizerLive,
-  DicomProcessorLive,
-  ConfigServiceLive
-)
-
-const run = <A>(effect: Effect.Effect<A, any, any>) =>
-  // @ts-ignore – Typing clash between provide and env never
-  Effect.runPromise(effect.pipe(Effect.provide(anonymizerLayer)))
 
 // Environment variable to control worker usage (can be toggled for debugging)
 let USE_WORKERS = true // Both worker and Effect-based paths working correctly
@@ -30,66 +19,44 @@ if (typeof window !== 'undefined') {
 }
 
 export function useAnonymizer() {
+  // UI state management with Vue refs
   const loading = ref(false)
   const error = ref<Error | null>(null)
   const progress = ref<AnonymizationProgress | null>(null)
   const results = ref<DicomFile[]>([])
 
-  const anonymizeFile = async (file: DicomFile, config: AnonymizationConfig): Promise<DicomFile | null> => {
-    loading.value = true
-    error.value = null
-    try {
-      const result = await run(
-        Effect.gen(function* () {
-          const anonymizer = yield* Anonymizer
-          return yield* anonymizer.anonymizeFile(file, config)
-        })
-      )
-      return result
-    } catch (e) {
-      error.value = e as Error
-      return null
-    } finally {
-      loading.value = false
-    }
-  }
+  // Effect program for anonymizing a single file
+  const anonymizeFile = (file: DicomFile, config: AnonymizationConfig) =>
+    Effect.gen(function* () {
+      const anonymizer = yield* Anonymizer
+      return yield* anonymizer.anonymizeFile(file, config)
+    })
 
-  const anonymizeFiles = async (
+  // Effect program for anonymizing multiple files
+  const anonymizeFiles = (
     files: DicomFile[],
     config: AnonymizationConfig,
     concurrency = 3,
     options?: { onProgress?: (progress: AnonymizationProgress) => void }
-  ): Promise<DicomFile[]> => {
-    loading.value = true
-    error.value = null
-    progress.value = null
-    results.value = []
-
-    try {
-      // Use workers if enabled, otherwise fall back to Effect services
+  ) =>
+    Effect.gen(function* () {
       if (USE_WORKERS) {
         console.log('[useAnonymizer] Using WorkerManager for anonymization')
-        return await anonymizeFilesWithWorkers(files, config, concurrency, options)
+        return yield* anonymizeFilesWithWorkersEffect(files, config, concurrency, options)
       } else {
         console.log('[useAnonymizer] Using Effect services for anonymization')
-        return await anonymizeFilesWithEffect(files, config, concurrency, options)
+        return yield* anonymizeFilesWithEffect(files, config, concurrency, options)
       }
-    } catch (e) {
-      error.value = e as Error
-      return []
-    } finally {
-      loading.value = false
-    }
-  }
+    })
 
-  // Worker-based anonymization
-  const anonymizeFilesWithWorkers = async (
+  // Worker-based anonymization as Effect program
+  const anonymizeFilesWithWorkersEffect = (
     files: DicomFile[],
     config: AnonymizationConfig,
     concurrency: number,
     options?: { onProgress?: (progress: AnonymizationProgress) => void }
-  ): Promise<DicomFile[]> => {
-    return new Promise((resolve, reject) => {
+  ) =>
+    Effect.async<DicomFile[], Error>((resume) => {
       const workerManager = getWorkerManager()
       const studyId = `study-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
 
@@ -114,134 +81,122 @@ export function useAnonymizer() {
         onComplete: async (anonymizedFileRefs) => {
           console.log(`[useAnonymizer] Worker anonymization completed: ${anonymizedFileRefs.length} file references`)
           
-          // Load anonymized files from OPFS and parse their metadata to update the UI
-          const anonymizedFiles = await Promise.all(
-            anonymizedFileRefs.map(async (fileRef: any) => {
-              try {
-                // Load the anonymized file data from OPFS
-                const arrayBuffer = await run(
-                  Effect.gen(function* () {
-                    const opfsStorage = yield* Effect.succeed({
-                      async loadFile(fileId: string) {
-                        // Use the OPFSWorkerHelper to load the file
-                        const { OPFSWorkerHelper } = await import('@/services/opfsStorage/opfsWorkerHelper')
-                        return await OPFSWorkerHelper.loadFile(fileId)
-                      }
+          try {
+            // Load anonymized files from OPFS and parse their metadata to update the UI
+            const anonymizedFiles = await Promise.all(
+              anonymizedFileRefs.map(async (fileRef: any) => {
+                try {
+                  // Load the anonymized file data from OPFS
+                  const arrayBuffer = await Effect.runPromise(
+                    Effect.gen(function* () {
+                      const opfsStorage = yield* Effect.succeed({
+                        async loadFile(fileId: string) {
+                          // Use the OPFSWorkerHelper to load the file
+                          const { OPFSWorkerHelper } = await import('@/services/opfsStorage/opfsWorkerHelper')
+                          return await OPFSWorkerHelper.loadFile(fileId)
+                        }
+                      })
+                      return yield* Effect.tryPromise(() => opfsStorage.loadFile(fileRef.opfsFileId))
                     })
-                    return yield* Effect.tryPromise(() => opfsStorage.loadFile(fileRef.opfsFileId))
-                  })
-                )
+                  )
 
-                // Create a temporary DicomFile to parse metadata
-                const tempFile = {
-                  id: fileRef.id,
-                  fileName: fileRef.fileName,
-                  fileSize: arrayBuffer.byteLength,
-                  arrayBuffer,
-                  anonymized: true,
-                  opfsFileId: fileRef.opfsFileId
+                  // Create a temporary DicomFile to parse metadata
+                  const tempFile = {
+                    id: fileRef.id,
+                    fileName: fileRef.fileName,
+                    fileSize: arrayBuffer.byteLength,
+                    arrayBuffer,
+                    anonymized: true,
+                    opfsFileId: fileRef.opfsFileId
+                  }
+
+                  // Parse the anonymized file to get updated metadata
+                  const parsedFile = await Effect.runPromise(
+                    Effect.gen(function* () {
+                      const processor = yield* DicomProcessor
+                      return yield* processor.parseFile(tempFile)
+                    })
+                  )
+
+                  console.log(`[useAnonymizer] Parsed anonymized file ${fileRef.fileName} with updated metadata`)
+
+                  return {
+                    ...parsedFile,
+                    arrayBuffer: new ArrayBuffer(0), // Empty - will load from OPFS when needed for performance
+                    anonymized: true,
+                    opfsFileId: fileRef.opfsFileId
+                  }
+
+                } catch (error) {
+                  console.error(`[useAnonymizer] Failed to parse anonymized file ${fileRef.fileName}:`, error)
+                  // Fallback: use original file structure but mark as anonymized
+                  const originalFile = files.find(f => f.id === fileRef.id)
+                  return {
+                    id: fileRef.id,
+                    fileName: fileRef.fileName,
+                    fileSize: originalFile?.fileSize || 0,
+                    arrayBuffer: new ArrayBuffer(0),
+                    metadata: originalFile?.metadata,
+                    anonymized: true,
+                    opfsFileId: fileRef.opfsFileId
+                  }
                 }
-
-                // Parse the anonymized file to get updated metadata
-                const parsedFile = await run(
-                  Effect.gen(function* () {
-                    const processor = yield* DicomProcessor
-                    return yield* processor.parseFile(tempFile)
-                  })
-                )
-
-                console.log(`[useAnonymizer] Parsed anonymized file ${fileRef.fileName} with updated metadata`)
-
-                return {
-                  ...parsedFile,
-                  arrayBuffer: new ArrayBuffer(0), // Empty - will load from OPFS when needed for performance
-                  anonymized: true,
-                  opfsFileId: fileRef.opfsFileId
-                }
-
-              } catch (error) {
-                console.error(`[useAnonymizer] Failed to parse anonymized file ${fileRef.fileName}:`, error)
-                // Fallback: use original file structure but mark as anonymized
-                const originalFile = files.find(f => f.id === fileRef.id)
-                return {
-                  id: fileRef.id,
-                  fileName: fileRef.fileName,
-                  fileSize: originalFile?.fileSize || 0,
-                  arrayBuffer: new ArrayBuffer(0),
-                  metadata: originalFile?.metadata,
-                  anonymized: true,
-                  opfsFileId: fileRef.opfsFileId
-                }
-              }
-            })
-          )
-          
-          console.log(`[useAnonymizer] Created ${anonymizedFiles.length} parsed file references with updated metadata`)
-          results.value = anonymizedFiles
-          resolve(anonymizedFiles)
+              })
+            )
+            
+            console.log(`[useAnonymizer] Created ${anonymizedFiles.length} parsed file references with updated metadata`)
+            results.value = anonymizedFiles
+            resume(Effect.succeed(anonymizedFiles))
+          } catch (err) {
+            resume(Effect.fail(err as Error))
+          }
         },
         onError: (err) => {
           console.error('[useAnonymizer] Worker anonymization error:', err)
           error.value = err
-          reject(err)
+          resume(Effect.fail(err))
         }
       })
     })
-  }
 
   // Effect-based anonymization (fallback)
-  const anonymizeFilesWithEffect = async (
+  const anonymizeFilesWithEffect = (
     files: DicomFile[],
     config: AnonymizationConfig,
     concurrency: number,
     options?: { onProgress?: (progress: AnonymizationProgress) => void }
-  ): Promise<DicomFile[]> => {
-    const anonymizedFiles = await run(
-      Effect.gen(function* () {
-        const anonymizer = yield* Anonymizer
-        return yield* anonymizer.anonymizeFiles(files, config, {
-          concurrency,
-          onProgress: (p) => {
-            progress.value = p
-            options?.onProgress?.(p)
-          }
-        })
+  ) =>
+    Effect.gen(function* () {
+      const anonymizer = yield* Anonymizer
+      const anonymizedFiles = yield* anonymizer.anonymizeFiles(files, config, {
+        concurrency,
+        onProgress: (p) => {
+          progress.value = p
+          options?.onProgress?.(p)
+        }
       })
-    )
-    results.value = anonymizedFiles
-    return anonymizedFiles
-  }
+      results.value = anonymizedFiles
+      return anonymizedFiles
+    })
 
-  const anonymizeInBatches = async (
+  // Effect program for batch anonymization
+  const anonymizeInBatches = (
     files: DicomFile[],
     config: AnonymizationConfig,
     batchSize = 10
-  ): Promise<DicomFile[]> => {
-    loading.value = true
-    error.value = null
-    results.value = []
-    try {
-      const anonymizedFiles = await run(
-        Effect.gen(function* () {
-          const anonymizer = yield* Anonymizer
-          return yield* anonymizer.anonymizeInBatches(files, config, batchSize, (batchIdx, totalBatches) => {
-            progress.value = {
-              total: totalBatches,
-              completed: batchIdx,
-              percentage: Math.round((batchIdx / totalBatches) * 100)
-            }
-          })
-        })
-      )
+  ) =>
+    Effect.gen(function* () {
+      const anonymizer = yield* Anonymizer
+      const anonymizedFiles = yield* anonymizer.anonymizeInBatches(files, config, batchSize, (batchIdx, totalBatches) => {
+        progress.value = {
+          total: totalBatches,
+          completed: batchIdx,
+          percentage: Math.round((batchIdx / totalBatches) * 100)
+        }
+      })
       results.value = anonymizedFiles
       return anonymizedFiles
-    } catch (e) {
-      error.value = e as Error
-      return []
-    } finally {
-      loading.value = false
-    }
-  }
+    })
 
   const reset = () => {
     loading.value = false
@@ -255,12 +210,14 @@ export function useAnonymizer() {
   const isUsingWorkers = computed(() => USE_WORKERS)
 
   return {
+    // UI state
     loading,
     error,
     progress,
     results,
     progressPercentage,
     isUsingWorkers,
+    // Effect programs
     anonymizeFile,
     anonymizeFiles,
     anonymizeInBatches,

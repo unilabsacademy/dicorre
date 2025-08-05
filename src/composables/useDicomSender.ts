@@ -1,105 +1,59 @@
 import { ref, computed } from 'vue'
-import { Effect, Layer } from 'effect'
+import { Effect } from 'effect'
 import type { DicomStudy } from '@/types/dicom'
-import { DicomSender, DicomSenderLive, type DicomServerConfig, type SendingProgress } from '@/services/dicomSender'
-import { ConfigServiceLive } from '@/services/config'
-
-const senderLayer = Layer.mergeAll(
-  DicomSenderLive,
-  ConfigServiceLive
-)
-
-const run = <A>(effect: Effect.Effect<A, any, any>) =>
-  // @ts-ignore – Suppress typing noise when env is eliminated
-  Effect.runPromise(effect.pipe(Effect.provide(senderLayer)))
+import { DicomSender, type DicomServerConfig, type SendingProgress } from '@/services/dicomSender'
 
 export function useDicomSender() {
+  // UI state management with Vue refs
   const loading = ref(false)
   const error = ref<Error | null>(null)
   const progress = ref<SendingProgress | null>(null)
   const connectionStatus = ref<boolean | null>(null)
 
-  const sendStudy = async (
+  // Effect program for sending study
+  const sendStudy = (
     study: DicomStudy,
     options: { concurrency?: number; maxRetries?: number } = {}
-  ): Promise<boolean> => {
-    loading.value = true
-    error.value = null
-    try {
-      await run(
-        Effect.gen(function* () {
-          const sender = yield* DicomSender
-          return yield* sender.sendStudy(study, options)
-        })
-      )
-      return true
-    } catch (e) {
-      error.value = e as Error
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
+  ) =>
+    Effect.gen(function* () {
+      const sender = yield* DicomSender
+      return yield* sender.sendStudy(study, options)
+    })
 
-  const sendStudyWithProgress = async (
+  // Effect program for sending study with progress tracking
+  const sendStudyWithProgress = (
     study: DicomStudy,
     options: { concurrency?: number; maxRetries?: number; onProgress?: (progress: SendingProgress) => void } = {}
-  ): Promise<boolean> => {
-    loading.value = true
-    error.value = null
-    progress.value = null
-    try {
-      await run(
-        Effect.gen(function* () {
-          const sender = yield* DicomSender
-          return yield* sender.sendStudy(study, {
-            ...options,
-            onProgress: (p) => {
-              progress.value = p
-              // Also call the external callback if provided
-              if (options.onProgress) {
-                options.onProgress(p)
-              }
-            }
-          })
-        })
-      )
-      return true
-    } catch (e) {
-      error.value = e as Error
-      return false
-    } finally {
-      loading.value = false
-    }
-  }
+  ) =>
+    Effect.gen(function* () {
+      const sender = yield* DicomSender
+      return yield* sender.sendStudy(study, {
+        ...options,
+        onProgress: (p) => {
+          progress.value = p
+          // Also call the external callback if provided
+          if (options.onProgress) {
+            options.onProgress(p)
+          }
+        }
+      })
+    })
 
-  const testConnection = async (): Promise<boolean> => {
-    try {
-      const isConnected = await run(
-        Effect.gen(function* () {
-          const sender = yield* DicomSender
-          return yield* sender.testConnection
-        })
-      )
+  // Effect program for testing connection
+  const testConnection = () =>
+    Effect.gen(function* () {
+      const sender = yield* DicomSender
+      const isConnected = yield* sender.testConnection
       connectionStatus.value = isConnected
       return isConnected
-    } catch (e) {
-      error.value = e as Error
-      connectionStatus.value = false
-      return false
-    }
-  }
-
-  const updateServerConfig = (newConfig: DicomServerConfig) => {
-    run(
-      Effect.gen(function* () {
-        const sender = yield* DicomSender
-        return yield* sender.updateConfig(newConfig)
-      })
-    ).catch((e) => {
-      error.value = e as Error
     })
-  }
+
+  // Effect program for updating server configuration
+  const updateServerConfig = (newConfig: DicomServerConfig) =>
+    Effect.gen(function* () {
+      const sender = yield* DicomSender
+      return yield* sender.updateConfig(newConfig)
+    })
 
   const reset = () => {
     loading.value = false
@@ -114,12 +68,14 @@ export function useDicomSender() {
   })
 
   return {
+    // UI state
     loading,
     error,
     progress,
     connectionStatus,
     isConnected,
     progressPercentage,
+    // Effect programs
     sendStudy,
     sendStudyWithProgress,
     testConnection,
