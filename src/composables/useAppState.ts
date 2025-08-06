@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
-import { ManagedRuntime, Effect } from 'effect'
+import { ManagedRuntime, Effect, Stream } from 'effect'
 import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
-import { Anonymizer } from '@/services/anonymizer'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { useTableState } from '@/composables/useTableState'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
@@ -9,6 +8,7 @@ import { useSendingProgress } from '@/composables/useSendingProgress'
 import { useFileProcessing } from '@/composables/useFileProcessing'
 import { useDragAndDrop } from '@/composables/useDragAndDrop'
 import { useDicomSender } from '@/composables/useDicomSender'
+import { useAnonymizer } from '@/composables/useAnonymizer'
 
 type RuntimeType = ReturnType<typeof ManagedRuntime.make<any, any>>
 
@@ -25,6 +25,7 @@ export function useAppState(runtime: RuntimeType) {
   const fileProcessing = useFileProcessing()
   const dragAndDrop = useDragAndDrop()
   const dicomSender = useDicomSender()
+  const anonymizer = useAnonymizer()
 
   // Progress management
   const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
@@ -90,42 +91,71 @@ export function useAppState(runtime: RuntimeType) {
     }
 
     try {
-      // Process each study with direct service calls
-      // Events are published internally but we don't need to subscribe for basic functionality
+      // Process each study using the simplified anonymizer composable
       for (const study of selectedStudies.value) {
         const studyFiles = study.series.flatMap(series => series.files)
         
-        // Set initial progress
-        setStudyProgress(study.studyInstanceUID, {
-          isProcessing: true,
-          progress: 0,
-          totalFiles: studyFiles.length,
-          currentFile: undefined
-        })
-        
         try {
-          const anonymizedFiles = await runtime.runPromise(
-            Effect.gen(function* () {
-              const anonymizer = yield* Anonymizer
-              return yield* anonymizer.anonymizeStudyWithEvents(
-                study.studyInstanceUID,
-                studyFiles,
-                config,
-                { concurrency: concurrency.value }
-              )
-            })
+          // Use the unified stream approach from useAnonymizer
+          await runtime.runPromise(
+            anonymizer.anonymizeStudyStream(
+              study.studyInstanceUID,
+              studyFiles,
+              config,
+              { concurrency: concurrency.value }
+            ).pipe(
+              Stream.tap((event) => 
+                Effect.sync(() => {
+                  // React to each event in the stream
+                  switch (event._tag) {
+                    case "AnonymizationStarted":
+                      setStudyProgress(event.studyId, {
+                        isProcessing: true,
+                        progress: 0,
+                        totalFiles: event.totalFiles,
+                        currentFile: undefined
+                      })
+                      break
+                      
+                    case "AnonymizationProgress":
+                      setStudyProgress(event.studyId, {
+                        isProcessing: true,
+                        progress: Math.round((event.completed / event.total) * 100),
+                        totalFiles: event.total,
+                        currentFile: event.currentFile
+                      })
+                      break
+                      
+                    case "FileAnonymized":
+                      // Update the file in our collection
+                      const fileIndex = dicomFiles.value.findIndex(f => f.id === event.file.id)
+                      if (fileIndex !== -1) {
+                        dicomFiles.value[fileIndex] = event.file
+                      }
+                      break
+                      
+                    case "StudyAnonymized":
+                      // Study completed - update files with anonymized versions
+                      event.files.forEach(anonymizedFile => {
+                        const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
+                        if (fileIndex !== -1) {
+                          dicomFiles.value[fileIndex] = anonymizedFile
+                        }
+                      })
+                      removeStudyProgress(event.studyId)
+                      console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
+                      break
+                      
+                    case "AnonymizationError":
+                      console.error(`Anonymization error for study ${event.studyId}:`, event.error)
+                      removeStudyProgress(event.studyId)
+                      break
+                  }
+                })
+              ),
+              Stream.runDrain // Consume the entire stream
+            )
           )
-          
-          // Update the files in our collection
-          anonymizedFiles.forEach(anonymizedFile => {
-            const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
-            if (fileIndex !== -1) {
-              dicomFiles.value[fileIndex] = anonymizedFile
-            }
-          })
-          
-          // Remove progress for completed study
-          removeStudyProgress(study.studyInstanceUID)
           
         } catch (studyError) {
           console.error(`Error anonymizing study ${study.studyInstanceUID}:`, studyError)

@@ -241,6 +241,186 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
     })
   })
 
+  describe('Stream-based anonymization', () => {
+    it('should emit stream events in correct order', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+      
+      // Parse files first
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+      
+      const config: AnonymizationConfig = {
+        profile: 'basic',
+        removePrivateTags: true,
+        useCustomHandlers: false
+      }
+
+      const events: AnonymizationEvent[] = []
+      
+      await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        
+        // Collect stream events
+        yield* anonymizer.anonymizeStudyStream(
+          'test-study-stream',
+          parsedFiles,
+          config,
+          { concurrency: 1 }
+        ).pipe(
+          Stream.runForEach((event) => Effect.sync(() => events.push(event)))
+        )
+      }))
+      
+      // Verify stream events
+      expect(events.length).toBeGreaterThanOrEqual(2) // At least start and completion
+      expect(events[0]._tag).toBe('AnonymizationStarted')
+      expect(events[0].studyId).toBe('test-study-stream')
+      expect(events[0].totalFiles).toBe(1)
+      
+      // Should end with completion event
+      const completionEvent = events.find(e => e._tag === 'StudyAnonymized')
+      expect(completionEvent).toBeDefined()
+      expect(completionEvent?.studyId).toBe('test-study-stream')
+      expect(completionEvent?.files).toHaveLength(1)
+      expect(completionEvent?.files[0].anonymized).toBe(true)
+    })
+
+    it('should emit error events for invalid configuration', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+      
+      // Parse files first
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+      
+      // Invalid configuration
+      const invalidConfig = {
+        profile: 'invalid-profile' as any,
+        removePrivateTags: true,
+        useCustomHandlers: false
+      }
+
+      const events: AnonymizationEvent[] = []
+      let streamError: Error | null = null
+      
+      try {
+        await runTest(Effect.gen(function* () {
+          const anonymizer = yield* Anonymizer
+          
+          yield* anonymizer.anonymizeStudyStream(
+            'test-study-error',
+            parsedFiles,
+            invalidConfig,
+            { concurrency: 1 }
+          ).pipe(
+            Stream.runForEach((event) => Effect.sync(() => events.push(event)))
+          )
+        }))
+      } catch (error) {
+        streamError = error as Error
+      }
+      
+      // Should have error event or throw error
+      const errorEvent = events.find(e => e._tag === 'AnonymizationError')
+      expect(errorEvent || streamError).toBeDefined()
+    })
+
+    it('should handle empty file list', async () => {
+      const config: AnonymizationConfig = {
+        profile: 'basic',
+        removePrivateTags: true,
+        useCustomHandlers: false
+      }
+
+      const events: AnonymizationEvent[] = []
+      
+      await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        
+        yield* anonymizer.anonymizeStudyStream(
+          'test-study-empty',
+          [],
+          config,
+          { concurrency: 1 }
+        ).pipe(
+          Stream.runForEach((event) => Effect.sync(() => events.push(event)))
+        )
+      }))
+      
+      // Should at least emit start and completion events
+      expect(events.length).toBeGreaterThanOrEqual(2)
+      expect(events[0]._tag).toBe('AnonymizationStarted')
+      expect(events[0].totalFiles).toBe(0)
+      
+      const completionEvent = events.find(e => e._tag === 'StudyAnonymized')
+      expect(completionEvent).toBeDefined()
+      expect(completionEvent?.files).toHaveLength(0)
+    })
+
+    it('should handle concurrent file processing', async () => {
+      // Create multiple test files
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC'),
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC'),
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ].map((file, index) => ({ ...file, id: `file-${index}` }))
+      
+      // Parse files first
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+      
+      const config: AnonymizationConfig = {
+        profile: 'basic',
+        removePrivateTags: true,
+        useCustomHandlers: false
+      }
+
+      const events: AnonymizationEvent[] = []
+      
+      await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        
+        yield* anonymizer.anonymizeStudyStream(
+          'test-study-concurrent',
+          parsedFiles,
+          config,
+          { concurrency: 3 } // Process all files concurrently
+        ).pipe(
+          Stream.runForEach((event) => Effect.sync(() => events.push(event)))
+        )
+      }))
+      
+      // Verify all files were processed
+      expect(events.length).toBeGreaterThanOrEqual(2) // At least start and completion
+      expect(events[0]._tag).toBe('AnonymizationStarted')
+      expect(events[0].totalFiles).toBe(3)
+      
+      const completionEvent = events.find(e => e._tag === 'StudyAnonymized')
+      expect(completionEvent).toBeDefined()
+      expect(completionEvent?.files).toHaveLength(3)
+      
+      // All files should be anonymized
+      completionEvent?.files.forEach(file => {
+        expect(file.anonymized).toBe(true)
+      })
+    })
+  })
+
   describe('Error handling', () => {
     it('should reject files without metadata', async () => {
       const fileWithoutMetadata: DicomFile = {

@@ -155,7 +155,7 @@ async function anonymizeStudy(
     console.log(`[Worker] Effect service completed anonymization: ${result.anonymizedFiles.length} files`)
     
     // Save anonymized files back to OPFS and create references
-    const anonymizedFileRefs: MinimalFileReference[] = []
+    const anonymizedFileRefs: DicomFile[] = []
     for (let i = 0; i < result.anonymizedFiles.length; i++) {
       const anonymizedFile = result.anonymizedFiles[i]
       const originalRef = files[i]
@@ -166,9 +166,14 @@ async function anonymizeStudy(
       // Save to OPFS
       await OPFSWorkerHelper.saveFile(anonymizedOpfsFileId, anonymizedFile.arrayBuffer)
       
+      // Create DicomFile with anonymized flag set to true
       anonymizedFileRefs.push({
         id: originalRef.id,
         fileName: originalRef.fileName,
+        fileSize: anonymizedFile.arrayBuffer.byteLength,
+        arrayBuffer: anonymizedFile.arrayBuffer,
+        anonymized: true,
+        metadata: anonymizedFile.metadata,
         opfsFileId: anonymizedOpfsFileId
       })
     }

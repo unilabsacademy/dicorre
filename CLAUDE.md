@@ -65,9 +65,9 @@ docker-compose up -d
 
 TODO
 
-## Testing with Playwright MCP
+## Testing
 
-When testing the web app with Playwright MCP:
+When testing the web app with Playwright e2e test or using the Playwright MCP:
 
 ### File Upload Testing
 - **Issue**: File uploads require clicking the file label to trigger the browser's file chooser

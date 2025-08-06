@@ -1,12 +1,10 @@
-import { Effect, Context, Layer, PubSub, Stream } from "effect"
+import { Effect, Context, Layer, PubSub, Stream, pipe } from "effect"
 import {
   DicomDeidentifier,
   BasicProfile,
   CleanDescOption,
   CleanGraphOption,
-  RetainDeviceIdentOption
 } from '@umessen/dicom-deidentifier'
-import * as dcmjs from 'dcmjs'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import type { AnonymizationEvent } from '@/types/events'
 import { DicomProcessor } from '../dicomProcessor'
@@ -37,6 +35,7 @@ export class Anonymizer extends Context.Tag("Anonymizer")<
     readonly anonymizeFiles: (files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number }) => Effect.Effect<DicomFile[], AnonymizerError>
     readonly anonymizeStudyWithEvents: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number }) => Effect.Effect<DicomFile[], AnonymizerError>
     readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
+    readonly anonymizeStudyStream: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number }) => Stream.Stream<AnonymizationEvent, AnonymizerError>
     readonly validateConfig: (config: AnonymizationConfig) => Effect.Effect<void, ConfigurationError>
   }
 >() { }
@@ -303,7 +302,7 @@ class AnonymizerImpl {
       const total = files.length
       const sharedTimestamp = Date.now().toString().slice(-7)
       const eventBus = yield* AnonymizationEventBus
-      
+
       // Emit start event
       yield* PubSub.publish(eventBus, {
         _tag: "AnonymizationStarted",
@@ -404,16 +403,16 @@ class AnonymizerImpl {
   ): Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor | ConfigService> =>
     Effect.gen(function* () {
       const { concurrency = 3, onProgress } = options
-      
+
       console.log(`[Effect Anonymizer] Starting anonymization of study ${studyId} with ${files.length} files`)
-      
+
       // Validate configuration first
       yield* AnonymizerImpl.validateConfig(config)
-      
+
       // Generate shared timestamp for consistent replacements across all files in this study
       const sharedTimestamp = Date.now().toString().slice(-7)
       console.log(`[Effect Anonymizer] Using shared timestamp for study ${studyId}: ${sharedTimestamp}`)
-      
+
       let completed = 0
       const total = files.length
 
@@ -431,12 +430,12 @@ class AnonymizerImpl {
           }
 
           console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
-          
+
           // Anonymize individual file with shared timestamp
           const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp)
 
           completed++
-          
+
           // Send progress update after completion
           if (onProgress) {
             onProgress({
@@ -456,7 +455,7 @@ class AnonymizerImpl {
       const anonymizedFiles = yield* Effect.all(effectsWithProgress, { concurrency, batching: true })
 
       console.log(`[Effect Anonymizer] Study ${studyId} anonymization completed: ${anonymizedFiles.length} files processed`)
-      
+
       return {
         studyId,
         anonymizedFiles,
@@ -464,6 +463,98 @@ class AnonymizerImpl {
         completedFiles: anonymizedFiles.length
       }
     })
+
+  /**
+   * Stream-based anonymization that emits events as a stream
+   * This provides natural progress tracking and backpressure control
+   */
+  static anonymizeStudyStream = (
+    studyId: string,
+    files: DicomFile[],
+    config: AnonymizationConfig,
+    options: { concurrency?: number } = {}
+  ): Stream.Stream<AnonymizationEvent, AnonymizerError, DicomProcessor | ConfigService> => {
+    const { concurrency = 3 } = options
+    const total = files.length
+
+    // Generate shared timestamp for consistent replacements
+    const sharedTimestamp = Date.now().toString().slice(-7)
+    console.log(`[Effect Anonymizer Stream] Using shared timestamp for study ${studyId}: ${sharedTimestamp}`)
+
+    // Create a ref to track completed count
+    let completed = 0
+
+    // Start with validation
+    const validationStream = Stream.fromEffect(
+      AnonymizerImpl.validateConfig(config).pipe(
+        Effect.map(() => ({
+          _tag: "AnonymizationStarted" as const,
+          studyId,
+          totalFiles: total
+        }))
+      )
+    )
+
+    // Process files stream
+    const filesStream = pipe(
+      Stream.fromIterable(files),
+      Stream.mapEffect(
+        (file) =>
+          AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp).pipe(
+            Effect.tap(() => Effect.sync(() => {
+              completed++
+              console.log(`[Effect Anonymizer Stream] Completed file ${completed}/${total}: ${file.fileName}`)
+            }))
+          ),
+        { concurrency }
+      ),
+      Stream.flatMap((file) =>
+        Stream.make(
+          {
+            _tag: "AnonymizationProgress" as const,
+            studyId,
+            completed,
+            total,
+            currentFile: file.fileName
+          },
+          {
+            _tag: "FileAnonymized" as const,
+            studyId,
+            file
+          }
+        )
+      ),
+      Stream.runCollect,
+      Stream.fromEffect,
+      Stream.flatMap((results) => {
+        const anonymizedFiles = Array.from(results).filter(
+          (event): event is { _tag: "FileAnonymized"; studyId: string; file: DicomFile } =>
+            event._tag === "FileAnonymized"
+        ).map(event => event.file)
+
+        console.log(`[Effect Anonymizer Stream] Study ${studyId} anonymization completed: ${anonymizedFiles.length} files processed`)
+
+        return Stream.make({
+          _tag: "StudyAnonymized" as const,
+          studyId,
+          files: anonymizedFiles
+        })
+      })
+    )
+
+    // Combine the streams
+    return pipe(
+      validationStream,
+      Stream.concat(filesStream),
+      Stream.catchAll((error) =>
+        Stream.make({
+          _tag: "AnonymizationError" as const,
+          studyId,
+          error: error instanceof Error ? error : new Error(String(error))
+        })
+      )
+    )
+  }
 }
 
 /**
@@ -476,6 +567,7 @@ export const AnonymizerLive = Layer.succeed(
     anonymizeFiles: AnonymizerImpl.anonymizeFiles,
     anonymizeStudyWithEvents: AnonymizerImpl.anonymizeStudyWithEvents,
     anonymizeStudy: AnonymizerImpl.anonymizeStudy,
+    anonymizeStudyStream: AnonymizerImpl.anonymizeStudyStream,
     validateConfig: AnonymizerImpl.validateConfig
   })
 )

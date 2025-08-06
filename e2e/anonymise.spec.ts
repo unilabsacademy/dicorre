@@ -98,12 +98,6 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   
   console.log(`Anonymization result: ${anonymizedCount}/${fileCount} files anonymized`);
   
-  // Check if there are any error messages or configuration issues
-  const consoleMessages = await page.evaluate(() => {
-    // Get console logs from the page
-    return (window as any).testLogs || [];
-  });
-  
   if (anonymizedCount < fileCount) {
     console.log(`Warning: Only ${anonymizedCount} out of ${fileCount} files were anonymized`);
     console.log('This might indicate a configuration issue or anonymization failure');

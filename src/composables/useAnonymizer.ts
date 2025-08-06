@@ -1,9 +1,9 @@
 import { ref, computed } from 'vue'
-import { Effect } from 'effect'
+import { Effect, Stream } from 'effect'
 import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import type { AnonymizationEvent } from '@/types/events'
 import { Anonymizer, type AnonymizationProgress } from '@/services/anonymizer'
-import { DicomProcessor } from '@/services/dicomProcessor'
-import { getWorkerManager } from '@/workers/workerManager'
+import { getAnonymizationWorkerManager } from '@/workers/workerManager'
 
 // Environment variable to control worker usage (can be toggled for debugging)
 let USE_WORKERS = true // Both worker and Effect-based paths working correctly
@@ -23,295 +23,106 @@ export function useAnonymizer() {
   const loading = ref(false)
   const error = ref<Error | null>(null)
   const progress = ref<AnonymizationProgress | null>(null)
-  const results = ref<DicomFile[]>([])
 
-  // Effect program for anonymizing a single file
-  const anonymizeFile = (file: DicomFile, config: AnonymizationConfig) =>
-    Effect.gen(function* () {
-      const anonymizer = yield* Anonymizer
-      return yield* anonymizer.anonymizeFile(file, config)
-    })
-
-  // Effect program for anonymizing multiple files
-  const anonymizeFiles = (
+  /**
+   * Unified stream-based anonymization that works with both workers and Effect services
+   * Always returns a stream of AnonymizationEvent regardless of execution path
+   */
+  const anonymizeStudyStream = (
+    studyId: string,
     files: DicomFile[],
     config: AnonymizationConfig,
-    concurrency = 3,
-    options?: { onProgress?: (progress: AnonymizationProgress) => void }
-  ) =>
-    Effect.gen(function* () {
-      if (USE_WORKERS) {
-        console.log('[useAnonymizer] Using WorkerManager for anonymization')
-        return yield* anonymizeFilesWithWorkersEffect(files, config, concurrency, options)
-      } else {
-        console.log('[useAnonymizer] Using Effect services for anonymization')
-        return yield* anonymizeFilesWithEffect(files, config, concurrency, options)
-      }
-    })
+    options: { concurrency?: number } = {}
+  ): Stream.Stream<AnonymizationEvent, Error> => {
+    const { concurrency = 3 } = options
 
-  // Worker-based anonymization as Effect program
-  const anonymizeFilesWithWorkersEffect = (
+    if (USE_WORKERS) {
+      console.log(`[useAnonymizer] Using workers for study ${studyId} with ${files.length} files`)
+      return createWorkerBasedStream(studyId, files, config, concurrency)
+    } else {
+      console.log(`[useAnonymizer] Using Effect services for study ${studyId} with ${files.length} files`)
+      return createEffectBasedStream(studyId, files, config, concurrency)
+    }
+  }
+
+  /**
+   * Create a stream that bridges worker messages to AnonymizationEvents
+   */
+  const createWorkerBasedStream = (
+    studyId: string,
     files: DicomFile[],
     config: AnonymizationConfig,
-    concurrency: number,
-    options?: { onProgress?: (progress: AnonymizationProgress) => void }
-  ) =>
-    Effect.async<DicomFile[], Error>((resume) => {
-      const workerManager = getWorkerManager()
-      const studyId = `study-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-
-      console.log(`[useAnonymizer] Starting OPFS-based worker anonymization for ${files.length} files`)
-      console.log(`[useAnonymizer] Study ID: ${studyId}`)
-
+    concurrency: number
+  ): Stream.Stream<AnonymizationEvent, Error> =>
+    Stream.async<AnonymizationEvent, Error>((emit) => {
+      const workerManager = getAnonymizationWorkerManager()
+      
       workerManager.anonymizeStudy({
         studyId,
         files,
         config,
         concurrency,
         onProgress: (progressData) => {
-          const progressInfo: AnonymizationProgress = {
-            total: progressData.total,
+          emit.single({
+            _tag: "AnonymizationProgress",
+            studyId,
             completed: progressData.completed,
-            percentage: progressData.percentage,
+            total: progressData.total,
             currentFile: progressData.currentFile
-          }
-          progress.value = progressInfo
-          options?.onProgress?.(progressInfo)
+          })
         },
-        onComplete: async (anonymizedFileRefs) => {
-          console.log(`[useAnonymizer] Worker anonymization completed: ${anonymizedFileRefs.length} file references`)
-          
-          try {
-            // Load anonymized files from OPFS and parse their metadata to update the UI
-            const anonymizedFiles = await Promise.all(
-              anonymizedFileRefs.map(async (fileRef: any) => {
-                try {
-                  // Load the anonymized file data from OPFS
-                  const arrayBuffer = await Effect.runPromise(
-                    Effect.gen(function* () {
-                      const opfsStorage = yield* Effect.succeed({
-                        async loadFile(fileId: string) {
-                          // Use the OPFSWorkerHelper to load the file
-                          const { OPFSWorkerHelper } = await import('@/services/opfsStorage/opfsWorkerHelper')
-                          return await OPFSWorkerHelper.loadFile(fileId)
-                        }
-                      })
-                      return yield* Effect.tryPromise(() => opfsStorage.loadFile(fileRef.opfsFileId))
-                    })
-                  )
-
-                  // Create a temporary DicomFile to parse metadata
-                  const tempFile = {
-                    id: fileRef.id,
-                    fileName: fileRef.fileName,
-                    fileSize: arrayBuffer.byteLength,
-                    arrayBuffer,
-                    anonymized: true,
-                    opfsFileId: fileRef.opfsFileId
-                  }
-
-                  // Parse the anonymized file to get updated metadata
-                  const parsedFile = await Effect.runPromise(
-                    Effect.gen(function* () {
-                      const processor = yield* DicomProcessor
-                      return yield* processor.parseFile(tempFile)
-                    })
-                  )
-
-                  console.log(`[useAnonymizer] Parsed anonymized file ${fileRef.fileName} with updated metadata`)
-
-                  return {
-                    ...parsedFile,
-                    arrayBuffer: new ArrayBuffer(0), // Empty - will load from OPFS when needed for performance
-                    anonymized: true,
-                    opfsFileId: fileRef.opfsFileId
-                  }
-
-                } catch (error) {
-                  console.error(`[useAnonymizer] Failed to parse anonymized file ${fileRef.fileName}:`, error)
-                  // Fallback: use original file structure but mark as anonymized
-                  const originalFile = files.find(f => f.id === fileRef.id)
-                  return {
-                    id: fileRef.id,
-                    fileName: fileRef.fileName,
-                    fileSize: originalFile?.fileSize || 0,
-                    arrayBuffer: new ArrayBuffer(0),
-                    metadata: originalFile?.metadata,
-                    anonymized: true,
-                    opfsFileId: fileRef.opfsFileId
-                  }
-                }
-              })
-            )
-            
-            console.log(`[useAnonymizer] Created ${anonymizedFiles.length} parsed file references with updated metadata`)
-            results.value = anonymizedFiles
-            resume(Effect.succeed(anonymizedFiles))
-          } catch (err) {
-            resume(Effect.fail(err as Error))
-          }
+        onComplete: (anonymizedFiles) => {
+          emit.single({
+            _tag: "StudyAnonymized",
+            studyId,
+            files: anonymizedFiles
+          })
+          emit.end()
         },
         onError: (err) => {
-          console.error('[useAnonymizer] Worker anonymization error:', err)
-          error.value = err
-          resume(Effect.fail(err))
-        }
-      })
-    })
-
-  // Effect-based anonymization (fallback)
-  const anonymizeFilesWithEffect = (
-    files: DicomFile[],
-    config: AnonymizationConfig,
-    concurrency: number,
-    options?: { onProgress?: (progress: AnonymizationProgress) => void }
-  ) =>
-    Effect.gen(function* () {
-      const anonymizer = yield* Anonymizer
-      const anonymizedFiles = yield* anonymizer.anonymizeFiles(files, config, {
-        concurrency,
-        onProgress: (p) => {
-          progress.value = p
-          options?.onProgress?.(p)
-        }
-      })
-      results.value = anonymizedFiles
-      return anonymizedFiles
-    })
-
-  // Effect program for batch anonymization
-  const anonymizeInBatches = (
-    files: DicomFile[],
-    config: AnonymizationConfig,
-    batchSize = 10
-  ) =>
-    Effect.gen(function* () {
-      const anonymizer = yield* Anonymizer
-      const anonymizedFiles = yield* anonymizer.anonymizeInBatches(files, config, batchSize, (batchIdx, totalBatches) => {
-        progress.value = {
-          total: totalBatches,
-          completed: batchIdx,
-          percentage: Math.round((batchIdx / totalBatches) * 100)
-        }
-      })
-      results.value = anonymizedFiles
-      return anonymizedFiles
-    })
-
-  // Effect program for anonymizing multiple selected studies with progress tracking
-  const anonymizeSelectedEffect = (
-    selectedStudies: DicomStudy[],
-    config: AnonymizationConfig,
-    options: {
-      concurrency?: number
-      isAppReady: boolean
-      dicomFiles: DicomFile[]
-      onUpdateFiles?: (updatedFiles: DicomFile[]) => void
-      onUpdateStudies?: (updatedStudies: DicomStudy[]) => void
-      onSetStudyProgress?: (studyId: string, progress: any) => void
-      onRemoveStudyProgress?: (studyId: string) => void
-      onSuccessMessage?: (message: string) => void
-    }
-  ) =>
-    Effect.gen(function* () {
-      if (!options.isAppReady) {
-        return yield* Effect.fail(new Error('Configuration not loaded'))
-      }
-
-      if (selectedStudies.length === 0) {
-        return yield* Effect.succeed([])
-      }
-
-      const anonymizer = yield* Anonymizer
-      const processor = yield* DicomProcessor
-
-      console.log('anonymizeSelected called with', selectedStudies.length, 'studies')
-
-      // Process all studies in parallel
-      const anonymizeStudy = (study: DicomStudy) =>
-        Effect.gen(function* () {
-          const studyFiles = study.series.flatMap(series => series.files)
-          const totalFiles = studyFiles.length
-
-          // Initialize progress tracking
-          options.onSetStudyProgress?.(study.studyInstanceUID, {
-            isProcessing: true,
-            progress: 0,
-            totalFiles,
-            currentFile: undefined
+          emit.single({
+            _tag: "AnonymizationError",
+            studyId,
+            error: err
           })
-
-          try {
-            const anonymizedFiles = yield* anonymizer.anonymizeFiles(studyFiles, config, {
-              concurrency: options.concurrency || 3,
-              onProgress: (progressInfo: any) => {
-                console.log('Progress callback called for study', study.studyInstanceUID, ':', progressInfo)
-                options.onSetStudyProgress?.(study.studyInstanceUID, {
-                  isProcessing: true,
-                  progress: progressInfo.percentage,  
-                  totalFiles,
-                  currentFile: progressInfo.currentFile
-                })
-              }
-            })
-
-            console.log(`Successfully anonymized ${anonymizedFiles.length} files for study ${study.studyInstanceUID}`)
-
-            // Update DICOM files with anonymized versions
-            const updatedFiles = options.dicomFiles.map(file => {
-              const anonymized = anonymizedFiles.find((af: any) => af.id === file.id)
-              if (anonymized) {
-                if (file.metadata && file.metadata !== anonymized.metadata) {
-                  file.metadata = undefined
-                }
-              }
-              return anonymized || file
-            })
-
-            options.onUpdateFiles?.(updatedFiles)
-
-            // Refresh study grouping
-            console.log(`Regrouping studies after ${study.studyInstanceUID} anonymization completion...`)
-            const regroupedStudies = yield* processor.groupFilesByStudy(updatedFiles)
-            options.onUpdateStudies?.(regroupedStudies)
-            console.log(`Updated UI with ${regroupedStudies.length} studies after ${study.studyInstanceUID} completion`)
-
-            // Mark study as complete
-            options.onSetStudyProgress?.(study.studyInstanceUID, {
-              isProcessing: false,
-              progress: 100,
-              totalFiles,
-              currentFile: undefined
-            })
-
-            options.onRemoveStudyProgress?.(study.studyInstanceUID)
-
-            return anonymizedFiles
-          } catch (error) {
-            console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
-            options.onRemoveStudyProgress?.(study.studyInstanceUID)
-            return yield* Effect.fail(error as Error)
-          }
-        })
-
-      // Process all studies in parallel
-      const results = yield* Effect.all(selectedStudies.map(anonymizeStudy), { concurrency: 'unbounded' })
+          emit.fail(err)
+        }
+      })
       
-      console.log(`All ${selectedStudies.length} studies completed anonymization`)
-      options.onSuccessMessage?.(`Successfully anonymized ${selectedStudies.length} studies!`)
-      
-      return results
+      // Emit start event immediately
+      emit.single({
+        _tag: "AnonymizationStarted",
+        studyId,
+        totalFiles: files.length
+      })
     })
+
+  /**
+   * Create a stream using Effect services directly
+   */
+  const createEffectBasedStream = (
+    studyId: string,
+    files: DicomFile[],
+    config: AnonymizationConfig,
+    concurrency: number
+  ): Stream.Stream<AnonymizationEvent, Error> =>
+    Stream.fromEffect(
+      Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        return anonymizer.anonymizeStudyStream(studyId, files, config, { concurrency })
+      }).pipe(Effect.mapError(error => new Error(String(error))))
+    ).pipe(
+      Stream.flatten,
+      Stream.mapError(error => error instanceof Error ? error : new Error(String(error)))
+    )
 
   const reset = () => {
     loading.value = false
     error.value = null
     progress.value = null
-    results.value = []
   }
 
   const progressPercentage = computed(() => progress.value?.percentage || 0)
-  
   const isUsingWorkers = computed(() => USE_WORKERS)
 
   return {
@@ -319,14 +130,10 @@ export function useAnonymizer() {
     loading,
     error,
     progress,
-    results,
     progressPercentage,
     isUsingWorkers,
-    // Effect programs
-    anonymizeFile,
-    anonymizeFiles,
-    anonymizeInBatches,
-    anonymizeSelectedEffect,
+    // Unified stream-based anonymization
+    anonymizeStudyStream,
     reset
   }
 }
