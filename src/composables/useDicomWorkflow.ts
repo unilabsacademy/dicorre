@@ -42,7 +42,13 @@ export function useDicomWorkflow() {
   ) =>
     Effect.gen(function* () {
       const anonymizer = yield* Anonymizer
-      return yield* anonymizer.anonymizeFiles(files, config, options)
+      const studyResult = yield* anonymizer.anonymizeStudy(
+        `workflow-study-${Date.now()}`,
+        files, 
+        config, 
+        options
+      )
+      return studyResult.anonymizedFiles
     })
   
   // Effect program for sending a study
@@ -52,7 +58,7 @@ export function useDicomWorkflow() {
   ) =>
     Effect.gen(function* () {
       const sender = yield* DicomSender
-      return yield* sender.sendStudyWithProgress(study, options)
+      return yield* sender.sendStudy(study, options)
     })
 
   // Effect program for complete workflow: process → anonymize → send

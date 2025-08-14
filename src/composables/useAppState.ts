@@ -94,7 +94,7 @@ export function useAppState(runtime: RuntimeType) {
       // Process each study using the simplified anonymizer composable
       for (const study of selectedStudies.value) {
         const studyFiles = study.series.flatMap(series => series.files)
-        
+
         try {
           // Use the unified stream approach from useAnonymizer
           await runtime.runPromise(
@@ -102,9 +102,9 @@ export function useAppState(runtime: RuntimeType) {
               study.studyInstanceUID,
               studyFiles,
               config,
-              { concurrency: concurrency.value }
+              concurrency.value
             ).pipe(
-              Stream.tap((event) => 
+              Stream.tap((event) =>
                 Effect.sync(() => {
                   // React to each event in the stream
                   switch (event._tag) {
@@ -116,7 +116,7 @@ export function useAppState(runtime: RuntimeType) {
                         currentFile: undefined
                       })
                       break
-                      
+
                     case "AnonymizationProgress":
                       setStudyProgress(event.studyId, {
                         isProcessing: true,
@@ -125,7 +125,7 @@ export function useAppState(runtime: RuntimeType) {
                         currentFile: event.currentFile
                       })
                       break
-                      
+
                     case "FileAnonymized":
                       // Update the file in our collection
                       const fileIndex = dicomFiles.value.findIndex(f => f.id === event.file.id)
@@ -133,7 +133,7 @@ export function useAppState(runtime: RuntimeType) {
                         dicomFiles.value[fileIndex] = event.file
                       }
                       break
-                      
+
                     case "StudyAnonymized":
                       // Study completed - update files with anonymized versions
                       event.files.forEach(anonymizedFile => {
@@ -145,7 +145,7 @@ export function useAppState(runtime: RuntimeType) {
                       removeStudyProgress(event.studyId)
                       console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
                       break
-                      
+
                     case "AnonymizationError":
                       console.error(`Anonymization error for study ${event.studyId}:`, event.error)
                       removeStudyProgress(event.studyId)
@@ -156,7 +156,7 @@ export function useAppState(runtime: RuntimeType) {
               Stream.runDrain // Consume the entire stream
             )
           )
-          
+
         } catch (studyError) {
           console.error(`Error anonymizing study ${study.studyInstanceUID}:`, studyError)
           removeStudyProgress(study.studyInstanceUID)
@@ -171,12 +171,12 @@ export function useAppState(runtime: RuntimeType) {
           return yield* processor.groupFilesByStudy(dicomFiles.value)
         })
       )
-      
+
       // Update the studies state with the new anonymized data
       studies.value = updatedStudies
 
       successMessage.value = `Successfully anonymized ${selectedStudies.value.length} studies`
-      
+
       // Clear selection after successful anonymization
       clearSelection()
 

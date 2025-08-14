@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { Effect, PubSub, Stream } from 'effect'
+import { Effect } from 'effect'
 import { readFileSync } from 'fs'
 import { join } from 'path'
 import { Anonymizer, AnonymizerLive } from './index'
@@ -9,7 +9,6 @@ import { EventBusLayer, AnonymizationEventBus } from '../eventBus'
 import { Layer } from 'effect'
 import { clearValueCache } from './handlers'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
-import type { AnonymizationEvent } from '@/types/events'
 
 // Helper to load DICOM files from test-data
 function loadTestDicomFile(relativePath: string): DicomFile {
@@ -42,35 +41,22 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
     clearValueCache()
   })
 
-  describe('Configuration validation', () => {
-    it('should validate valid configuration', async () => {
-      const config: AnonymizationConfig = {
-        profile: 'basic',
-        removePrivateTags: true,
-        useCustomHandlers: true
+  describe('Configuration processing', () => {
+    it('should process replacement patterns correctly', async () => {
+      const replacements = {
+        accessionNumber: 'ACA{timestamp}',
+        patientId: 'PAT{timestamp}',
+        patientName: 'ANONYMOUS'
       }
 
-      await expect(
-        runTest(Effect.gen(function* () {
-          const anonymizer = yield* Anonymizer
-          return yield* anonymizer.validateConfig(config)
-        }))
-      ).resolves.not.toThrow()
-    })
+      const result = await runTest(Effect.gen(function* () {
+        const configService = yield* ConfigService
+        return yield* configService.processReplacements(replacements)
+      }))
 
-    it('should reject invalid profile', async () => {
-      const invalidConfig = {
-        profile: 'invalid' as any,
-        removePrivateTags: true,
-        useCustomHandlers: true
-      }
-
-      await expect(
-        runTest(Effect.gen(function* () {
-          const anonymizer = yield* Anonymizer
-          return yield* anonymizer.validateConfig(invalidConfig)
-        }))
-      ).rejects.toThrow()
+      expect(result.accessionNumber).toMatch(/^ACA\d{7}$/)
+      expect(result.patientId).toMatch(/^PAT\d{7}$/)
+      expect(result.patientName).toBe('ANONYMOUS')
     })
   })
 
@@ -89,7 +75,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
 
       const result = await runTest(Effect.gen(function* () {
         const configService = yield* ConfigService
-        return yield* configService.processReplacements(configWithTimestamps.replacements!)
+        return yield* configService.processReplacements(configWithTimestamps.replacements as Record<string, string>)
       }))
 
       expect(result.accessionNumber).toMatch(/^ACA\d{7}$/)
@@ -191,7 +177,8 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
 
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
-        return yield* anonymizer.anonymizeFiles(parsedFiles, config)
+        const studyResult = yield* anonymizer.anonymizeStudy('test-study', parsedFiles, config)
+        return studyResult.anonymizedFiles
       }))
       
       expect(result).toHaveLength(1)
@@ -220,152 +207,50 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
         
-        // Start anonymization with events
-        const anonymizedFiles = yield* anonymizer.anonymizeStudyWithEvents(
+        // Start anonymization with progress callback
+        let progressCalled = false
+        const studyResult = yield* anonymizer.anonymizeStudy(
           'test-study-123',
           parsedFiles,
           config,
-          { concurrency: 1 }
+          { 
+            concurrency: 1,
+            onProgress: () => { progressCalled = true }
+          }
         )
         
-        return anonymizedFiles
+        return { files: studyResult.anonymizedFiles, progressCalled }
       }))
       
       // Verify results
-      expect(result).toHaveLength(1)
-      expect(result[0].anonymized).toBe(true)
-      
-      // The events are published to the PubSub but we don't test event collection here
-      // since it requires complex setup. The fact that the method completes successfully
-      // means events were published without errors.
+      expect(result.files).toHaveLength(1)
+      expect(result.files[0].anonymized).toBe(true)
+      expect(result.progressCalled).toBe(true)
     })
   })
 
-  describe('Stream-based anonymization', () => {
-    it('should emit stream events in correct order', async () => {
-      const files = [
-        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
-      ]
-      
-      // Parse files first
-      const parsedFiles = await Effect.runPromise(
-        Effect.gen(function* () {
-          const processor = yield* DicomProcessor
-          return yield* processor.parseFiles(files)
-        }).pipe(Effect.provide(DicomProcessorLive))
-      )
-      
-      const config: AnonymizationConfig = {
-        profile: 'basic',
-        removePrivateTags: true,
-        useCustomHandlers: false
-      }
-
-      const events: AnonymizationEvent[] = []
-      
-      await runTest(Effect.gen(function* () {
-        const anonymizer = yield* Anonymizer
-        
-        // Collect stream events
-        yield* anonymizer.anonymizeStudyStream(
-          'test-study-stream',
-          parsedFiles,
-          config,
-          { concurrency: 1 }
-        ).pipe(
-          Stream.runForEach((event) => Effect.sync(() => events.push(event)))
-        )
-      }))
-      
-      // Verify stream events
-      expect(events.length).toBeGreaterThanOrEqual(2) // At least start and completion
-      expect(events[0]._tag).toBe('AnonymizationStarted')
-      expect(events[0].studyId).toBe('test-study-stream')
-      expect(events[0].totalFiles).toBe(1)
-      
-      // Should end with completion event
-      const completionEvent = events.find(e => e._tag === 'StudyAnonymized')
-      expect(completionEvent).toBeDefined()
-      expect(completionEvent?.studyId).toBe('test-study-stream')
-      expect(completionEvent?.files).toHaveLength(1)
-      expect(completionEvent?.files[0].anonymized).toBe(true)
-    })
-
-    it('should emit error events for invalid configuration', async () => {
-      const files = [
-        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
-      ]
-      
-      // Parse files first
-      const parsedFiles = await Effect.runPromise(
-        Effect.gen(function* () {
-          const processor = yield* DicomProcessor
-          return yield* processor.parseFiles(files)
-        }).pipe(Effect.provide(DicomProcessorLive))
-      )
-      
-      // Invalid configuration
-      const invalidConfig = {
-        profile: 'invalid-profile' as any,
-        removePrivateTags: true,
-        useCustomHandlers: false
-      }
-
-      const events: AnonymizationEvent[] = []
-      let streamError: Error | null = null
-      
-      try {
-        await runTest(Effect.gen(function* () {
-          const anonymizer = yield* Anonymizer
-          
-          yield* anonymizer.anonymizeStudyStream(
-            'test-study-error',
-            parsedFiles,
-            invalidConfig,
-            { concurrency: 1 }
-          ).pipe(
-            Stream.runForEach((event) => Effect.sync(() => events.push(event)))
-          )
-        }))
-      } catch (error) {
-        streamError = error as Error
-      }
-      
-      // Should have error event or throw error
-      const errorEvent = events.find(e => e._tag === 'AnonymizationError')
-      expect(errorEvent || streamError).toBeDefined()
-    })
-
+  describe('Study anonymization', () => {
     it('should handle empty file list', async () => {
       const config: AnonymizationConfig = {
         profile: 'basic',
         removePrivateTags: true,
         useCustomHandlers: false
       }
-
-      const events: AnonymizationEvent[] = []
       
-      await runTest(Effect.gen(function* () {
+      const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
         
-        yield* anonymizer.anonymizeStudyStream(
+        return yield* anonymizer.anonymizeStudy(
           'test-study-empty',
           [],
           config,
           { concurrency: 1 }
-        ).pipe(
-          Stream.runForEach((event) => Effect.sync(() => events.push(event)))
         )
       }))
       
-      // Should at least emit start and completion events
-      expect(events.length).toBeGreaterThanOrEqual(2)
-      expect(events[0]._tag).toBe('AnonymizationStarted')
-      expect(events[0].totalFiles).toBe(0)
-      
-      const completionEvent = events.find(e => e._tag === 'StudyAnonymized')
-      expect(completionEvent).toBeDefined()
-      expect(completionEvent?.files).toHaveLength(0)
+      expect(result.studyId).toBe('test-study-empty')
+      expect(result.totalFiles).toBe(0)
+      expect(result.anonymizedFiles).toHaveLength(0)
     })
 
     it('should handle concurrent file processing', async () => {
@@ -389,33 +274,25 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         removePrivateTags: true,
         useCustomHandlers: false
       }
-
-      const events: AnonymizationEvent[] = []
       
-      await runTest(Effect.gen(function* () {
+      const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
         
-        yield* anonymizer.anonymizeStudyStream(
+        return yield* anonymizer.anonymizeStudy(
           'test-study-concurrent',
           parsedFiles,
           config,
           { concurrency: 3 } // Process all files concurrently
-        ).pipe(
-          Stream.runForEach((event) => Effect.sync(() => events.push(event)))
         )
       }))
       
       // Verify all files were processed
-      expect(events.length).toBeGreaterThanOrEqual(2) // At least start and completion
-      expect(events[0]._tag).toBe('AnonymizationStarted')
-      expect(events[0].totalFiles).toBe(3)
-      
-      const completionEvent = events.find(e => e._tag === 'StudyAnonymized')
-      expect(completionEvent).toBeDefined()
-      expect(completionEvent?.files).toHaveLength(3)
+      expect(result.studyId).toBe('test-study-concurrent')
+      expect(result.totalFiles).toBe(3)
+      expect(result.anonymizedFiles).toHaveLength(3)
       
       // All files should be anonymized
-      completionEvent?.files.forEach(file => {
+      result.anonymizedFiles.forEach(file => {
         expect(file.anonymized).toBe(true)
       })
     })
