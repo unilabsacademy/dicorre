@@ -1,10 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ManagedRuntime } from 'effect'
-import type { DicomFile } from '@/types/dicom'
-import { useDicomWorkflow } from '@/composables/useDicomWorkflow'
 import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
-import { useAppConfig } from '@/composables/useAppConfig'
 import { useAppState } from '@/composables/useAppState'
 import { AppLayer } from '@/services/shared/layers'
 import { DataTable, columns } from '@/components/StudyDataTable'
@@ -31,23 +28,14 @@ import {
 } from 'lucide-vue-next'
 
 const runtime = ManagedRuntime.make(AppLayer)
-const workflow = useDicomWorkflow()
 const appState = useAppState(runtime)
-const {
-  config: loadedConfig,
-  loading: configLoading,
-  error: configError
-} = useAppConfig()
 
-
-const isProcessing = workflow.loading
 const error = computed(() => {
-  if (configError.value) {
-    return `Configuration Error: ${configError.value.message}`
+  if (appState.configError.value) {
+    return `Configuration Error: ${appState.configError.value.message}`
   }
-  return workflow.errors.value[0]?.message || appState.appError.value
 })
-const config = computed<AnonymizationConfig>(() => loadedConfig.value!)
+const config = computed<AnonymizationConfig>(() => appState.config.value!)
 
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
@@ -68,13 +56,12 @@ const {
 const { fileProcessingState } = appState.fileProcessing
 
 const isAppReady = computed(() => {
-  return !configLoading.value && !configError.value && loadedConfig.value !== null
+  return !appState.configLoading.value && !appState.configError.value && appState.config.value !== null
 })
 
 const showFileDropZone = computed(() => {
   return isAppReady.value &&
     (!appState.studies.value || appState.studies.value.length === 0) &&
-    !isProcessing.value &&
     !isRestoring.value
 })
 
@@ -95,7 +82,7 @@ function addFilesToUploaded(newFiles: File[]) {
 }
 
 async function anonymizeSelected() {
-  await appState.anonymizeSelected(config.value, isAppReady.value)
+  await appState.anonymizeSelected()
 }
 
 async function testConnection() {
@@ -108,7 +95,6 @@ async function handleSendSelected(selectedStudiesToSend: DicomStudy[]) {
 
 function clearFiles() {
   appState.clearFiles()
-  workflow.resetAll()
   clearSession()
 }
 
@@ -174,7 +160,7 @@ onUnmounted(() => {
             v-if="!error?.includes('browser')"
             variant="ghost"
             size="sm"
-            @click="error ? (error = null) : appState.clearAppError()"
+            @click="error ? (error = undefined) : appState.clearAppError()"
             class="ml-2 h-auto p-1"
           >
             ×
@@ -190,7 +176,7 @@ onUnmounted(() => {
       </Alert>
 
       <!-- Configuration Loading State -->
-      <Card v-if="configLoading">
+      <Card v-if="appState.configLoading.value">
         <CardContent class="flex items-center justify-center py-8">
           <div class="text-center space-y-4 w-full max-w-md">
             <p class="text-muted-foreground">
@@ -260,7 +246,7 @@ onUnmounted(() => {
 
           <Button
             @click="handleSendSelected(appState.selectedStudies.value)"
-            :disabled="isProcessing || appState.selectedStudiesCount.value === 0"
+            :disabled="fileProcessingState?.isProcessing || appState.selectedStudiesCount.value === 0"
             variant="secondary"
             size="sm"
             data-testid="send-button"
@@ -318,8 +304,8 @@ onUnmounted(() => {
         data-testid="file-drop-zone"
         class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
         :class="{ 'border-primary bg-primary/5': isDragOver }"
-        @drop="(event) => handleDrop(event, { onFilesAdded: addFilesToUploaded, onProcessFiles: processNewFiles })"
-        @dragover="(event) => handleDragOver(event)"
+        @drop="(event: any) => handleDrop(event, { onFilesAdded: addFilesToUploaded, onProcessFiles: processNewFiles })"
+        @dragover="(event: any) => handleDragOver(event)"
         @dragleave="() => handleDragLeave()"
       >
         <CardContent class="flex flex-col items-center justify-center py-16">

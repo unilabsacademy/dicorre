@@ -7,11 +7,11 @@ interface StudyProgress {
   currentFile?: string
 }
 
-// Global state for anonymization progress
+// Outside main function to be global
 const studyProgressMap = ref<Map<string, StudyProgress>>(new Map())
 
 export function useAnonymizationProgress() {
-  
+
   const setStudyProgress = (studyId: string, progress: StudyProgress) => {
     console.log('Setting progress for study:', studyId, progress)
     studyProgressMap.value.set(studyId, progress)
@@ -26,13 +26,11 @@ export function useAnonymizationProgress() {
 
   const removeStudyProgress = (studyId: string) => {
     studyProgressMap.value.delete(studyId)
-    // Force reactivity by creating a new Map
     studyProgressMap.value = new Map(studyProgressMap.value)
   }
 
   const clearAllProgress = () => {
     studyProgressMap.value.clear()
-    // Force reactivity by creating a new Map
     studyProgressMap.value = new Map()
   }
 

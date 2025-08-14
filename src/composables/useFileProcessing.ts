@@ -14,10 +14,8 @@ export interface FileProcessingState {
 }
 
 export function useFileProcessing() {
-  // File processing progress state
   const fileProcessingState = ref<FileProcessingState | null>(null)
 
-  // Effect program for processing new files
   const processNewFilesEffect = (
     newUploadedFiles: File[],
     options: {
@@ -42,7 +40,6 @@ export function useFileProcessing() {
 
       let localDicomFiles: DicomFile[] = []
 
-      // Process each uploaded file
       for (let i = 0; i < newUploadedFiles.length; i++) {
         const file = newUploadedFiles[i]
 
@@ -76,7 +73,6 @@ export function useFileProcessing() {
             }
           }
 
-          // Extract ZIP file using Effect
           const extractedFiles = yield* fileHandler.extractZipFile(file)
           localDicomFiles.push(...extractedFiles)
 
@@ -109,7 +105,6 @@ export function useFileProcessing() {
 
       console.log(`Extracted ${localDicomFiles.length} new DICOM files from ${newUploadedFiles.length} uploaded files`)
 
-      // Parse files with progress tracking
       fileProcessingState.value = {
         isProcessing: true,
         fileName: `${localDicomFiles.length} DICOM files`,
@@ -119,7 +114,6 @@ export function useFileProcessing() {
         currentFileIndex: 0
       }
 
-      // Simulate parsing progress
       const parsingSteps = [20, 50, 80, 90]
       const parsingTexts = [
         'Reading DICOM headers...',
@@ -136,7 +130,6 @@ export function useFileProcessing() {
         }
       }
 
-      // Parse files using Effect
       const parsedFiles = yield* processor.parseFiles(localDicomFiles, options.concurrency)
 
       if (parsedFiles.length === 0) {
@@ -160,7 +153,6 @@ export function useFileProcessing() {
 
       console.log(`Parsed ${parsedFiles.length} new files, total: ${updatedFiles.length} files in ${groupedStudies.length} studies`)
 
-      // Complete progress
       fileProcessingState.value = {
         ...fileProcessingState.value,
         fileName: `Processing complete`,
@@ -168,10 +160,9 @@ export function useFileProcessing() {
         progress: 100
       }
 
-      // Hide progress after completion
       setTimeout(() => {
         fileProcessingState.value = null
-      }, 500)
+      }, 300)
 
       return parsedFiles
     })
@@ -181,11 +172,8 @@ export function useFileProcessing() {
   }
 
   return {
-    // State
     fileProcessingState,
-    // Effect programs
     processNewFilesEffect,
-    // Utilities
     clearProcessingState
   }
 }

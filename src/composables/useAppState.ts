@@ -1,7 +1,8 @@
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { ManagedRuntime, Effect, Stream } from 'effect'
 import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
 import { DicomProcessor } from '@/services/dicomProcessor'
+import { ConfigService } from '@/services/config'
 import { useTableState } from '@/composables/useTableState'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
 import { useSendingProgress } from '@/composables/useSendingProgress'
@@ -20,6 +21,11 @@ export function useAppState(runtime: RuntimeType) {
   const successMessage = ref('')
   const concurrency = ref(3)
   const appError = ref<string | null>(null)
+
+  // Configuration state
+  const config = ref<AnonymizationConfig | null>(null)
+  const configLoading = ref(false)
+  const configError = ref<Error | null>(null)
 
   // Initialize composables
   const fileProcessing = useFileProcessing()
@@ -45,6 +51,27 @@ export function useAppState(runtime: RuntimeType) {
 
   const clearAppError = () => {
     appError.value = null
+  }
+
+  const loadConfig = async () => {
+    configLoading.value = true
+    configError.value = null
+    try {
+      const loadedConfig = await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          return yield* configService.getAnonymizationConfig
+        })
+      )
+      config.value = loadedConfig
+      console.log('Loaded configuration from app.config.json:', loadedConfig)
+    } catch (e) {
+      configError.value = e as Error
+      console.error('Failed to load configuration:', e)
+      throw new Error(`Critical configuration loading failed: ${e}`)
+    } finally {
+      configLoading.value = false
+    }
   }
 
   const processNewFiles = async (newFiles: File[], isAppReady: boolean) => {
@@ -80,8 +107,8 @@ export function useAppState(runtime: RuntimeType) {
     await processNewFiles(uploadedFiles.value, isAppReady)
   }
 
-  const anonymizeSelected = async (config: AnonymizationConfig, isAppReady: boolean) => {
-    if (!isAppReady) {
+  const anonymizeSelected = async () => {
+    if (!config.value) {
       setAppError('Configuration not loaded')
       return
     }
@@ -101,7 +128,7 @@ export function useAppState(runtime: RuntimeType) {
             anonymizer.anonymizeStudyStream(
               study.studyInstanceUID,
               studyFiles,
-              config,
+              config.value,
               concurrency.value
             ).pipe(
               Stream.tap((event) =>
@@ -241,6 +268,11 @@ export function useAppState(runtime: RuntimeType) {
     processFiles(isAppReady)
   }
 
+  // Load configuration on mount
+  onMounted(() => {
+    loadConfig()
+  })
+
   return {
     // State
     uploadedFiles,
@@ -249,6 +281,9 @@ export function useAppState(runtime: RuntimeType) {
     successMessage,
     concurrency,
     appError,
+    config,
+    configLoading,
+    configError,
 
     // Computed
     selectedStudies,
@@ -263,6 +298,7 @@ export function useAppState(runtime: RuntimeType) {
     // Methods
     setAppError,
     clearAppError,
+    loadConfig,
     processNewFiles,
     addFilesToUploaded,
     processFiles,
