@@ -85,6 +85,11 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   await expect(anonymizeButton).toContainText('Anonymize (', { timeout: 5000 });
   await expect(anonymizeButton).toBeEnabled();
 
+  // Test Effect-based approach by toggling workers off
+  await page.evaluate(() => {
+    (window as any).toggleWorkers(false);
+  });
+
   // Trigger anonymization
   await anonymizeButton.click();
 

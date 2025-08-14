@@ -1,16 +1,19 @@
 import { ref, computed } from 'vue'
 import { Effect, Stream } from 'effect'
-import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import type { AnonymizationEvent } from '@/types/events'
+import type { AnonymizerError } from '@/types/effects'
 import { Anonymizer, type AnonymizationProgress } from '@/services/anonymizer'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'
+import { DicomProcessor } from '@/services/dicomProcessor'
+import { ConfigService } from '@/services/config'
 
 // Environment variable to control worker usage (can be toggled for debugging)
 let USE_WORKERS = true // Both worker and Effect-based paths working correctly
 
 // Allow runtime toggling for debugging
 if (typeof window !== 'undefined') {
-  (window as any).toggleWorkers = (enabled?: boolean) => {
+  (window as unknown as { toggleWorkers: (enabled?: boolean) => boolean }).toggleWorkers = (enabled?: boolean) => {
     USE_WORKERS = enabled ?? !USE_WORKERS
     console.log(`[useAnonymizer] Workers ${USE_WORKERS ? 'ENABLED' : 'DISABLED'}`)
     return USE_WORKERS
@@ -26,14 +29,14 @@ export function useAnonymizer() {
 
   /**
    * Unified stream-based anonymization that works with both workers and Effect services
-   * Always returns a stream of AnonymizationEvent regardless of execution path
+   * Returns worker stream (no dependencies) or Effect stream (with dependencies)
    */
   const anonymizeStudyStream = (
     studyId: string,
     files: DicomFile[],
     config: AnonymizationConfig,
     options: { concurrency?: number } = {}
-  ): Stream.Stream<AnonymizationEvent, Error> => {
+  ): Stream.Stream<AnonymizationEvent, Error | AnonymizerError, never | DicomProcessor | ConfigService> => {
     const { concurrency = 3 } = options
 
     if (USE_WORKERS) {
@@ -56,7 +59,7 @@ export function useAnonymizer() {
   ): Stream.Stream<AnonymizationEvent, Error> =>
     Stream.async<AnonymizationEvent, Error>((emit) => {
       const workerManager = getAnonymizationWorkerManager()
-      
+
       workerManager.anonymizeStudy({
         studyId,
         files,
@@ -88,7 +91,7 @@ export function useAnonymizer() {
           emit.fail(err)
         }
       })
-      
+
       // Emit start event immediately
       emit.single({
         _tag: "AnonymizationStarted",
@@ -98,23 +101,26 @@ export function useAnonymizer() {
     })
 
   /**
-   * Create a stream using Effect services directly
+   * Create a stream using Effect services directly with proper dependencies
    */
   const createEffectBasedStream = (
     studyId: string,
     files: DicomFile[],
     config: AnonymizationConfig,
     concurrency: number
-  ): Stream.Stream<AnonymizationEvent, Error> =>
-    Stream.fromEffect(
+  ): Stream.Stream<AnonymizationEvent, AnonymizerError, DicomProcessor | ConfigService> => {
+    console.log(`[useAnonymizer] Using Effect services for study ${studyId} with ${files.length} files`)
+
+    return Stream.fromEffect(
       Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
         return anonymizer.anonymizeStudyStream(studyId, files, config, { concurrency })
-      }).pipe(Effect.mapError(error => new Error(String(error))))
+      })
     ).pipe(
-      Stream.flatten,
-      Stream.mapError(error => error instanceof Error ? error : new Error(String(error)))
+      Stream.flatten
     )
+  }
+
 
   const reset = () => {
     loading.value = false

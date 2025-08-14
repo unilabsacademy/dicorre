@@ -11,14 +11,14 @@ export class ConfigService extends Context.Tag("ConfigService")<
   {
     readonly getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType>
     readonly getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
-    readonly getAnonymizationPreset: (presetName: string) => Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
-    readonly processReplacements: (replacements: Record<string, string>) => Effect.Effect<Record<string, string>, ConfigurationErrorType>
+    readonly getAnonymizationPreset: (presetName: string) => Effect.Effect<AnonymizationConfig, ConfigurationErrorType | ValidationError>
+    readonly processReplacements: (replacements: Record<string, string>, sharedTimestamp?: string) => Effect.Effect<Record<string, string>, ConfigurationErrorType | ValidationError>
     readonly getPresets: Effect.Effect<Record<string, { profile: string; description: string }>, never>
     readonly getTagDescription: (tagId: string) => Effect.Effect<string, never>
     readonly getTagsToRemove: Effect.Effect<string[], never>
     readonly validateConfig: (config: AppConfig) => Effect.Effect<void, ConfigurationErrorType>
   }
->() {}
+>() { }
 
 /**
  * Internal implementation class
@@ -90,7 +90,7 @@ class ConfigServiceImpl {
   /**
    * Get anonymization preset by name
    */
-  static getAnonymizationPreset = (presetName: string): Effect.Effect<AnonymizationConfig, ConfigurationErrorType> =>
+  static getAnonymizationPreset = (presetName: string): Effect.Effect<AnonymizationConfig, ConfigurationErrorType | ValidationError> =>
     Effect.gen(function* () {
       if (!presetName || presetName.trim() === '') {
         return yield* Effect.fail(new ValidationError({
@@ -131,7 +131,7 @@ class ConfigServiceImpl {
    * Process replacement patterns (e.g., {timestamp} -> actual timestamp)
    * Optional timestamp parameter ensures consistent values across multiple files
    */
-  static processReplacements = (replacements: Record<string, string>, sharedTimestamp?: string): Effect.Effect<Record<string, string>, ConfigurationErrorType> =>
+  static processReplacements = (replacements: Record<string, string>, sharedTimestamp?: string): Effect.Effect<Record<string, string>, ConfigurationErrorType | ValidationError> =>
     Effect.gen(function* () {
       if (!replacements || typeof replacements !== 'object') {
         return yield* Effect.fail(new ValidationError({
@@ -143,7 +143,7 @@ class ConfigServiceImpl {
       const processed: Record<string, string> = {}
       // Use shared timestamp if provided, otherwise generate new one
       const timestamp = sharedTimestamp || Date.now().toString().slice(-7)
-      
+
       for (const [key, value] of Object.entries(replacements)) {
         if (typeof value !== 'string') {
           return yield* Effect.fail(new ConfigurationError({
@@ -160,11 +160,10 @@ class ConfigServiceImpl {
             message: `Failed to process replacement for '${key}': ${error}`,
             setting: `replacements.${key}`,
             value: value,
-            cause: error
           }))
         }
       }
-      
+
       return processed
     })
 
@@ -173,7 +172,7 @@ class ConfigServiceImpl {
    */
   static getPresets: Effect.Effect<Record<string, { profile: string; description: string }>, never> = Effect.succeed(() => {
     const presets: Record<string, { profile: string; description: string }> = {}
-    
+
     if (ConfigServiceImpl.config.presets) {
       for (const [key, preset] of Object.entries(ConfigServiceImpl.config.presets)) {
         presets[key] = {
@@ -182,7 +181,7 @@ class ConfigServiceImpl {
         }
       }
     }
-    
+
     return presets
   }).pipe(Effect.map(fn => fn()))
 

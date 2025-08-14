@@ -4,6 +4,7 @@ import {
   BasicProfile,
   CleanDescOption,
   CleanGraphOption,
+  type DeidentifyOptions
 } from '@umessen/dicom-deidentifier'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import type { AnonymizationEvent } from '@/types/events'
@@ -124,7 +125,7 @@ class AnonymizerImpl {
       )
       console.log('Processed replacements result:', processedReplacements)
 
-      // Perform anonymization using the existing legacy method
+      // Perform anonymization
       const result = yield* Effect.tryPromise({
         try: () => AnonymizerImpl.anonymizeFileInternal(file, config, processedReplacements),
         catch: (error) => new AnonymizationError({
@@ -164,52 +165,26 @@ class AnonymizerImpl {
         }
 
         // Configure deidentifier options
-        const deidentifierConfig = {
+        const deidentifierConfig: DeidentifyOptions = {
           profileOptions: profileOptions,
           dummies: {
-            default: processedReplacements.default || 'REMOVED',
-            lookup: {
-              // Use config replacements with fallbacks
-              '00100010': processedReplacements.patientName || 'ANONYMOUS', // Patient Name
-              '00100020': processedReplacements.patientId || 'ANON001', // Patient ID
-              '00100030': processedReplacements.patientBirthDate || '19000101', // Patient Birth Date
-              '00080080': processedReplacements.institution || 'ANONYMIZED', // Institution Name
-              '00080050': processedReplacements.accessionNumber || 'ACA0000000', // Accession Number
-              // Add any custom replacements
-              ...config.customReplacements
-            }
+            default: processedReplacements.default,
+            lookup: config.customReplacements || {},
           },
-          keep: config.preserveTags || [
-            // Default essential technical tags for image interpretation
-            '00080016', // SOP Class UID
-            '00080018', // SOP Instance UID
-            '0020000D', // Study Instance UID
-            '0020000E', // Series Instance UID
-            '00200013', // Instance Number
-          ]
-        }
-
-        // Add option to remove private tags if requested
-        if (config.removePrivateTags) {
-          // This should add an option to REMOVE private tags, not retain them
-          // The library might have a specific option for this
-          console.log('removePrivateTags is enabled, but the library may not support this directly')
+          keep: config.preserveTags,
+          getReferenceDate: getDicomReferenceDate,
+          getReferenceTime: getDicomReferenceTime
         }
 
         // Add custom special handlers if enabled
         if (config.useCustomHandlers) {
           const tagsToRemove = config.tagsToRemove || []
           const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove)
-          // @ts-expect-error - specialHandlers property may not be in official types
           deidentifierConfig.specialHandlers = specialHandlers
         }
 
-        // Add helper functions for handling missing DICOM dates/times
-        deidentifierConfig.getReferenceDate = getDicomReferenceDate
-        deidentifierConfig.getReferenceTime = getDicomReferenceTime
-
         // Create deidentifier instance
-        let deidentifier: any
+        let deidentifier: DicomDeidentifier
         try {
           deidentifier = new DicomDeidentifier(deidentifierConfig)
           console.log(`Created deidentifier for ${file.fileName} with ${config.useCustomHandlers ? 'custom' : 'standard'} handlers`)
