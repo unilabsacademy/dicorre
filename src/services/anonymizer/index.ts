@@ -117,6 +117,8 @@ class AnonymizerImpl {
         }))
       }
 
+      console.log(`Starting anonymization of file: ${file.fileName}`)
+
       // Get processed replacements from config service with optional shared timestamp
       console.log('Processing replacements from config:', config.replacements)
       const processedReplacements = yield* configService.processReplacements(
@@ -125,116 +127,99 @@ class AnonymizerImpl {
       )
       console.log('Processed replacements result:', processedReplacements)
 
-      // Perform anonymization
-      const result = yield* Effect.tryPromise({
-        try: () => AnonymizerImpl.anonymizeFileInternal(file, config, processedReplacements),
+      // Select profile based on config
+      const profileOptions = yield* Effect.sync(() => {
+        switch (config.profile) {
+          case 'clean':
+            return [CleanDescOption]
+          case 'very-clean':
+            return [CleanGraphOption]
+          case 'basic':
+          default:
+            return [BasicProfile]
+        }
+      })
+
+      // Configure deidentifier options
+      const deidentifierConfig: DeidentifyOptions = {
+        profileOptions,
+        dummies: {
+          default: processedReplacements.default,
+          lookup: config.customReplacements || {},
+        },
+        keep: config.preserveTags,
+        getReferenceDate: getDicomReferenceDate,
+        getReferenceTime: getDicomReferenceTime
+      }
+
+      // Add custom special handlers if enabled
+      if (config.useCustomHandlers) {
+        const tagsToRemove = config.tagsToRemove || []
+        const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove)
+        deidentifierConfig.specialHandlers = specialHandlers
+      }
+
+      // Create deidentifier instance
+      const deidentifier = yield* Effect.try({
+        try: () => {
+          const instance = new DicomDeidentifier(deidentifierConfig)
+          console.log(`Created deidentifier for ${file.fileName} with ${config.useCustomHandlers ? 'custom' : 'standard'} handlers`)
+          return instance
+        },
         catch: (error) => new AnonymizationError({
-          message: `Failed to anonymize file: ${file.fileName}`,
+          message: `Cannot create anonymizer: ${error}`,
           fileName: file.fileName,
           cause: error
         })
       })
 
-      // Re-parse the anonymized file
-      const finalFile = yield* dicomProcessor.parseFile(result)
-      console.log(`Successfully anonymized ${file.fileName}`)
-      return finalFile
-    })
+      // Convert ArrayBuffer to Uint8Array for the deidentifier
+      const uint8Array = new Uint8Array(file.arrayBuffer)
+      console.log(`Converted to Uint8Array for ${file.fileName}, size: ${uint8Array.length}`)
 
-  /**
-   * Internal anonymization method (extracted from legacy code)
-   */
-  private static anonymizeFileInternal(file: DicomFile, config: AnonymizationConfig, processedReplacements: Record<string, string>): Promise<DicomFile> {
-    return new Promise((resolve, reject) => {
-      try {
-        console.log(`Starting anonymization of file: ${file.fileName}`)
-
-        // Select profile based on config
-        let profileOptions: any[] = []
-        switch (config.profile) {
-          case 'clean':
-            profileOptions = [CleanDescOption]
-            break
-          case 'very-clean':
-            profileOptions = [CleanGraphOption]
-            break
-          case 'basic':
-          default:
-            profileOptions = [BasicProfile]
-            break
-        }
-
-        // Configure deidentifier options
-        const deidentifierConfig: DeidentifyOptions = {
-          profileOptions: profileOptions,
-          dummies: {
-            default: processedReplacements.default,
-            lookup: config.customReplacements || {},
-          },
-          keep: config.preserveTags,
-          getReferenceDate: getDicomReferenceDate,
-          getReferenceTime: getDicomReferenceTime
-        }
-
-        // Add custom special handlers if enabled
-        if (config.useCustomHandlers) {
-          const tagsToRemove = config.tagsToRemove || []
-          const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove)
-          deidentifierConfig.specialHandlers = specialHandlers
-        }
-
-        // Create deidentifier instance
-        let deidentifier: DicomDeidentifier
-        try {
-          deidentifier = new DicomDeidentifier(deidentifierConfig)
-          console.log(`Created deidentifier for ${file.fileName} with ${config.useCustomHandlers ? 'custom' : 'standard'} handlers`)
-        } catch (deidentifierError) {
-          console.error(`Failed to create deidentifier:`, deidentifierError)
-          throw new Error(`Cannot create anonymizer: ${deidentifierError}`)
-        }
-
-        // Convert ArrayBuffer to Uint8Array for the deidentifier
-        const uint8Array = new Uint8Array(file.arrayBuffer)
-        console.log(`Converted to Uint8Array for ${file.fileName}, size: ${uint8Array.length}`)
-
-        // Anonymize the DICOM file
-        let anonymizedUint8Array: Uint8Array
-        try {
-          anonymizedUint8Array = deidentifier.deidentify(uint8Array)
-          console.log(`Deidentified ${file.fileName} using library, result size: ${anonymizedUint8Array.length}`)
-        } catch (deidentifyError: any) {
-          console.error(`Library deidentification failed:`, deidentifyError)
-          console.error(`Error stack:`, deidentifyError.stack)
+      // Anonymize the DICOM file
+      const anonymizedUint8Array = yield* Effect.try({
+        try: () => {
+          const result = deidentifier.deidentify(uint8Array)
+          console.log(`Deidentified ${file.fileName} using library, result size: ${result.length}`)
+          return result
+        },
+        catch: (error: any) => {
+          console.error(`Library deidentification failed:`, error)
+          console.error(`Error stack:`, error.stack)
 
           // Try to provide more context about the error
-          if (deidentifyError.message?.includes("Cannot read properties of undefined")) {
+          if (error.message?.includes("Cannot read properties of undefined")) {
             console.error(`This might be due to malformed DICOM tags or unsupported private tags in ${file.fileName}`)
             console.error(`Consider enabling removePrivateTags option or checking the DICOM file structure`)
           }
 
-          throw new Error(`Cannot anonymize file ${file.fileName}: ${deidentifyError.message || deidentifyError}`)
+          return new AnonymizationError({
+            message: `Cannot anonymize file ${file.fileName}: ${error.message || error}`,
+            fileName: file.fileName,
+            cause: error
+          })
         }
+      })
 
-        // Convert back to ArrayBuffer
-        const anonymizedArrayBuffer = anonymizedUint8Array.buffer.slice(
-          anonymizedUint8Array.byteOffset,
-          anonymizedUint8Array.byteOffset + anonymizedUint8Array.byteLength
-        )
+      // Convert back to ArrayBuffer
+      const anonymizedArrayBuffer = anonymizedUint8Array.buffer.slice(
+        anonymizedUint8Array.byteOffset,
+        anonymizedUint8Array.byteOffset + anonymizedUint8Array.byteLength
+      )
 
-        // Return new file with anonymized data
-        const anonymizedFile: DicomFile = {
-          ...file,
-          arrayBuffer: anonymizedArrayBuffer,
-          anonymized: true
-        }
-
-        resolve(anonymizedFile)
-      } catch (error) {
-        console.error(`Error anonymizing file ${file.fileName}:`, error)
-        reject(new Error(`Failed to anonymize file: ${file.fileName}`))
+      // Create anonymized file with new data
+      const anonymizedFile: DicomFile = {
+        ...file,
+        arrayBuffer: anonymizedArrayBuffer,
+        anonymized: true
       }
+
+      // Re-parse the anonymized file
+      const finalFile = yield* dicomProcessor.parseFile(anonymizedFile)
+      console.log(`Successfully anonymized ${file.fileName}`)
+      return finalFile
     })
-  }
 
   /**
    * Anonymize multiple files concurrently with shared timestamp for consistent grouping

@@ -10,7 +10,7 @@ export class FileHandler extends Context.Tag("FileHandler")<
     readonly readSingleDicomFile: (file: File) => Effect.Effect<DicomFile, FileHandlerErrorType>
     readonly validateDicomFile: (arrayBuffer: ArrayBuffer, fileName: string) => Effect.Effect<boolean, ValidationError>
   }
->() {}
+>() { }
 
 class FileHandlerImpl {
   private static generateFileId(): string {
@@ -30,7 +30,7 @@ class FileHandlerImpl {
       }
 
       const view = new DataView(arrayBuffer)
-      
+
       // Method 1: Check for DICOM magic number "DICM" at position 128
       if (arrayBuffer.byteLength > 132) {
         try {
@@ -40,15 +40,14 @@ class FileHandlerImpl {
             view.getUint8(130),
             view.getUint8(131)
           )
-          
+
           if (magic === 'DICM') {
             return true
           }
         } catch (error) {
           return yield* Effect.fail(new ValidationError({
-            message: `Error reading DICOM magic number in ${fileName}`,
+            message: `Error reading DICOM magic number in ${fileName} - ${error}`,
             fileName,
-            cause: error
           }))
         }
       }
@@ -64,7 +63,7 @@ class FileHandlerImpl {
         try {
           // Look for DICOM group/element tags at the beginning
           const group1 = view.getUint16(0, true)
-          
+
           // Common starting tags for DICOM files
           if (
             (group1 === 0x0008) || // Identifying Information
@@ -79,11 +78,11 @@ class FileHandlerImpl {
           // Also check a few bytes in for implicit VR files
           if (arrayBuffer.byteLength > 16) {
             const group2 = view.getUint16(8, true)
-            
+
             if (
-              (group2 === 0x0008) || 
-              (group2 === 0x0010) || 
-              (group2 === 0x0018) || 
+              (group2 === 0x0008) ||
+              (group2 === 0x0010) ||
+              (group2 === 0x0018) ||
               (group2 === 0x0020)
             ) {
               return true
@@ -91,9 +90,8 @@ class FileHandlerImpl {
           }
         } catch (error) {
           return yield* Effect.fail(new ValidationError({
-            message: `Error checking DICOM patterns in ${fileName}`,
+            message: `Error checking DICOM patterns in ${fileName} - ${error}`,
             fileName,
-            cause: error
           }))
         }
       }
@@ -107,7 +105,7 @@ class FileHandlerImpl {
   static extractZipFile = (file: File): Effect.Effect<DicomFile[], FileHandlerErrorType> =>
     Effect.gen(function* () {
       const zip = new JSZip()
-      
+
       const zipContent = yield* Effect.tryPromise({
         try: () => zip.loadAsync(file),
         catch: (error) => new FileHandlerError({
@@ -123,7 +121,7 @@ class FileHandlerImpl {
       const processFile = (fileName: string) =>
         Effect.gen(function* () {
           const zipFile = zipContent.files[fileName]
-          
+
           // Skip directories and hidden files
           if (zipFile.dir || fileName.startsWith('.') || fileName.includes('/.')) {
             return null
@@ -145,7 +143,7 @@ class FileHandlerImpl {
 
           // Validate DICOM file
           const isDicom = yield* FileHandlerImpl.validateDicomFile(arrayBuffer, fileName)
-          
+
           if (isDicom) {
             return {
               id: FileHandlerImpl.generateFileId(),
@@ -187,7 +185,7 @@ class FileHandlerImpl {
       if (file.name.toLowerCase().endsWith('.dcm') || file.name.toLowerCase().endsWith('.dicom')) {
         yield* FileHandlerImpl.validateDicomFile(arrayBuffer, file.name)
       }
-      
+
       return {
         id: FileHandlerImpl.generateFileId(),
         fileName: file.name,
