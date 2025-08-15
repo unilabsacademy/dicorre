@@ -118,78 +118,80 @@ export function useAppState(runtime: RuntimeType) {
     }
 
     try {
-      // Process each study using the simplified anonymizer composable
-      for (const study of selectedStudies.value) {
+      // Process all studies concurrently using Effect.all for true parallelism
+      const studyStreamEffects = selectedStudies.value.map(study => {
         const studyFiles = study.series.flatMap(series => series.files)
 
-        try {
-          // Use the unified stream approach from useAnonymizer
-          await runtime.runPromise(
-            anonymizer.anonymizeStudyStream(
-              study.studyInstanceUID,
-              studyFiles,
-              config.value,
-              concurrency.value
-            ).pipe(
-              Stream.tap((event) =>
-                Effect.sync(() => {
-                  // React to each event in the stream
-                  switch (event._tag) {
-                    case "AnonymizationStarted":
-                      setStudyProgress(event.studyId, {
-                        isProcessing: true,
-                        progress: 0,
-                        totalFiles: event.totalFiles,
-                        currentFile: undefined
-                      })
-                      break
+        return anonymizer.anonymizeStudyStream(
+          study.studyInstanceUID,
+          studyFiles,
+          config.value!,
+          concurrency.value
+        ).pipe(
+          Stream.tap((event) =>
+            Effect.sync(() => {
+              // React to each event in the stream
+              switch (event._tag) {
+                case "AnonymizationStarted":
+                  setStudyProgress(event.studyId, {
+                    isProcessing: true,
+                    progress: 0,
+                    totalFiles: event.totalFiles,
+                    currentFile: undefined
+                  })
+                  break
 
-                    case "AnonymizationProgress":
-                      setStudyProgress(event.studyId, {
-                        isProcessing: true,
-                        progress: Math.round((event.completed / event.total) * 100),
-                        totalFiles: event.total,
-                        currentFile: event.currentFile
-                      })
-                      break
+                case "AnonymizationProgress":
+                  setStudyProgress(event.studyId, {
+                    isProcessing: true,
+                    progress: Math.round((event.completed / event.total) * 100),
+                    totalFiles: event.total,
+                    currentFile: event.currentFile
+                  })
+                  break
 
-                    case "FileAnonymized":
-                      // Update the file in our collection
-                      const fileIndex = dicomFiles.value.findIndex(f => f.id === event.file.id)
-                      if (fileIndex !== -1) {
-                        dicomFiles.value[fileIndex] = event.file
-                      }
-                      break
-
-                    case "StudyAnonymized":
-                      // Study completed - update files with anonymized versions
-                      event.files.forEach(anonymizedFile => {
-                        const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
-                        if (fileIndex !== -1) {
-                          dicomFiles.value[fileIndex] = anonymizedFile
-                        }
-                      })
-                      removeStudyProgress(event.studyId)
-                      console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
-                      break
-
-                    case "AnonymizationError":
-                      console.error(`Anonymization error for study ${event.studyId}:`, event.error)
-                      removeStudyProgress(event.studyId)
-                      break
+                case "FileAnonymized":
+                  // Update the file in our collection
+                  const fileIndex = dicomFiles.value.findIndex(f => f.id === event.file.id)
+                  if (fileIndex !== -1) {
+                    dicomFiles.value[fileIndex] = event.file
                   }
-                })
-              ),
-              Stream.runDrain // Consume the entire stream
-            )
-          )
+                  break
 
-        } catch (studyError) {
-          console.error(`Error anonymizing study ${study.studyInstanceUID}:`, studyError)
-          removeStudyProgress(study.studyInstanceUID)
-          throw studyError
-        }
-      }
+                case "StudyAnonymized":
+                  // Study completed - update files with anonymized versions
+                  event.files.forEach(anonymizedFile => {
+                    const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
+                    if (fileIndex !== -1) {
+                      dicomFiles.value[fileIndex] = anonymizedFile
+                    }
+                  })
+                  removeStudyProgress(event.studyId)
+                  console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
+                  break
+
+                case "AnonymizationError":
+                  console.error(`Anonymization error for study ${event.studyId}:`, event.error)
+                  removeStudyProgress(event.studyId)
+                  break
+              }
+            })
+          ),
+          Stream.runDrain,
+          Effect.catchAll(error =>
+            Effect.sync(() => {
+              console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
+              removeStudyProgress(study.studyInstanceUID)
+              // Don't rethrow to prevent stopping other concurrent studies
+            })
+          )
+        )
+      })
+
+      // Run all study streams concurrently
+      await runtime.runPromise(
+        Effect.all(studyStreamEffects, { concurrency: "unbounded" })
+      )
 
       // After all studies are anonymized, regenerate the studies structure from updated files
       const updatedStudies = await runtime.runPromise(

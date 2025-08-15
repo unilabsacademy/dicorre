@@ -38,7 +38,7 @@ export interface BaseJob {
   onError?: (error: Error) => void
 }
 
-// Anonymization-specific job  
+// Anonymization-specific job
 export interface AnonymizationJob extends BaseJob {
   config: AnonymizationConfig
   onComplete?: (anonymizedFiles: DicomFile[]) => void
@@ -91,7 +91,7 @@ export class WorkerManager<T extends BaseJob> {
       studyId
     }
     debugMessages.push(message)
-    
+
     // Keep only last 100 messages
     if (debugMessages.length > 100) {
       debugMessages = debugMessages.slice(-100)
@@ -187,10 +187,10 @@ export class WorkerManager<T extends BaseJob> {
   private completeJob(workerTask: WorkerTask<T>) {
     const studyId = workerTask.job?.studyId
     this.logDebug('complete', `Worker #${workerTask.id} completed job`, workerTask.id, studyId)
-    
+
     workerTask.job = null
     workerTask.isAvailable = true
-    
+
     // Process next job in queue if available
     this.processQueue()
   }
@@ -200,54 +200,54 @@ export class WorkerManager<T extends BaseJob> {
       return
     }
 
-    const availableWorker = this.workers.find(w => w.isAvailable)
-    if (!availableWorker) {
-      this.logDebug('queue', `No available workers for ${this.jobQueue.length} queued jobs`)
-      return
-    }
+    // Process all queued jobs that can be assigned to available workers
+    while (this.jobQueue.length > 0) {
+      const availableWorker = this.workers.find(w => w.isAvailable)
+      if (!availableWorker) {
+        this.logDebug('queue', `No available workers for ${this.jobQueue.length} queued jobs`)
+        break
+      }
 
-    const job = this.jobQueue.shift()!
-    this.logDebug('queue', `Processing queued job for study ${job.studyId}`)
-    this.assignJobToWorker(availableWorker, job).catch(error => {
-      this.logDebug('error', `Failed to assign queued job: ${error instanceof Error ? error.message : 'Unknown error'}`)
-    })
+      const job = this.jobQueue.shift()!
+      this.logDebug('queue', `Processing queued job for study ${job.studyId}`)
+      this.assignJobToWorker(availableWorker, job).catch(error => {
+        this.logDebug('error', `Failed to assign queued job: ${error instanceof Error ? error.message : 'Unknown error'}`)
+      })
+    }
   }
 
   private async assignJobToWorker(workerTask: WorkerTask<T>, job: T) {
     this.logDebug('assign', `Assigning ${this.workerType} job (${job.files.length} files) to worker #${workerTask.id}`, workerTask.id, job.studyId)
-    
+
     workerTask.job = job
     workerTask.isAvailable = false
 
     try {
       // Prepare job data based on worker type
       const jobData = await this.prepareJobData(job)
-      
+
       // Send to worker
       workerTask.worker.postMessage(jobData)
     } catch (error) {
       this.logDebug('error', `Failed to prepare job for worker #${workerTask.id}: ${error instanceof Error ? error.message : 'Unknown error'}`, workerTask.id, job.studyId)
-      
+
       // Call the job's error handler
       if (job.onError) {
         job.onError(new Error(`Failed to prepare job: ${error instanceof Error ? error.message : 'Unknown error'}`))
       }
-      
+
       // Reset worker state
       workerTask.job = null
       workerTask.isAvailable = true
     }
   }
 
-  /**
-   * Queue a job for processing
-   */
   public processJob(job: T): void {
     this.logDebug('queue', `Received ${this.workerType} job for study ${job.studyId} with ${job.files.length} files`, undefined, job.studyId)
-    
+
     // Find available worker or queue the job
     const availableWorker = this.workers.find(w => w.isAvailable)
-    
+
     if (availableWorker) {
       this.assignJobToWorker(availableWorker, job).catch(error => {
         this.logDebug('error', `Failed to assign job: ${error.message}`)
@@ -258,16 +258,10 @@ export class WorkerManager<T extends BaseJob> {
     }
   }
 
-  /**
-   * Prepare job data for worker - to be implemented by specific worker managers
-   */
   protected async prepareJobData(job: T): Promise<any> {
     throw new Error('prepareJobData must be implemented by subclass')
   }
 
-  /**
-   * Get current status of workers
-   */
   public getStatus() {
     return {
       totalWorkers: this.workers.length,
@@ -276,9 +270,6 @@ export class WorkerManager<T extends BaseJob> {
     }
   }
 
-  /**
-   * Get detailed worker information for debugging
-   */
   public getWorkerDetails(): WorkerDetail[] {
     return this.workers.map(worker => ({
       id: worker.id,
@@ -290,25 +281,16 @@ export class WorkerManager<T extends BaseJob> {
     }))
   }
 
-  /**
-   * Get recent debug messages
-   */
   public getDebugMessages(): DebugMessage[] {
     return [...debugMessages]
   }
 
-  /**
-   * Clear debug messages
-   */
   public clearDebugMessages(): void {
     debugMessages = []
     debugMessageId = 0
     this.logDebug('message', 'Debug messages cleared')
   }
 
-  /**
-   * Terminate all workers and clear queue
-   */
   public destroy() {
     this.logDebug('message', `Destroying WorkerManager with ${this.workers.length} workers`)
     this.workers.forEach(({ worker, id }) => {
@@ -320,7 +302,6 @@ export class WorkerManager<T extends BaseJob> {
   }
 }
 
-// Anonymization-specific WorkerManager
 export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> {
   constructor(maxWorkers?: number) {
     super('./anonymizationWorker.ts', 'Anonymization', maxWorkers)
@@ -328,7 +309,7 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
 
   protected async prepareJobData(job: AnonymizationJob): Promise<any> {
     this.logDebug('message', `Preparing ${job.files.length} files for worker processing`, undefined, job.studyId)
-    
+
     // Pass only OPFS file references to worker - no ArrayBuffers
     // Serialize and deserialize to ensure all data is cloneable
     const files = job.files.map((file, index) => {
@@ -356,15 +337,11 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
     }
   }
 
-  /**
-   * Queue a study for anonymization
-   */
   public anonymizeStudy(job: AnonymizationJob): void {
     this.processJob(job)
   }
 }
 
-// Sending-specific WorkerManager
 export class SendingWorkerManager extends WorkerManager<SendingJob> {
   constructor(maxWorkers?: number) {
     super('./sendingWorker.ts', 'Sending', maxWorkers)
@@ -372,7 +349,7 @@ export class SendingWorkerManager extends WorkerManager<SendingJob> {
 
   protected async prepareJobData(job: SendingJob): Promise<any> {
     this.logDebug('message', `Preparing ${job.files.length} files for sending`, undefined, job.studyId)
-    
+
     // Pass only OPFS file references to worker - no ArrayBuffers
     // Serialize and deserialize to ensure all data is cloneable
     const files = job.files.map((file, index) => {

@@ -29,13 +29,11 @@ import {
 
 const runtime = ManagedRuntime.make(AppLayer)
 const appState = useAppState(runtime)
-
 const error = computed(() => {
   if (appState.configError.value) {
     return `Configuration Error: ${appState.configError.value.message}`
   }
 })
-const config = computed<AnonymizationConfig>(() => appState.config.value!)
 
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
