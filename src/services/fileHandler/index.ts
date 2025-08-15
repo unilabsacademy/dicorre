@@ -17,9 +17,6 @@ class FileHandlerImpl {
     return `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
   }
 
-  /**
-   * Effect-based DICOM file validation
-   */
   static validateDicomFile = (arrayBuffer: ArrayBuffer, fileName: string): Effect.Effect<boolean, ValidationError> =>
     Effect.gen(function* () {
       if (arrayBuffer.byteLength === 0) {
@@ -99,9 +96,6 @@ class FileHandlerImpl {
       return false
     })
 
-  /**
-   * Effect-based ZIP file extraction
-   */
   static extractZipFile = (file: File): Effect.Effect<DicomFile[], FileHandlerErrorType> =>
     Effect.gen(function* () {
       const zip = new JSZip()
@@ -167,9 +161,6 @@ class FileHandlerImpl {
       return results.filter((file): file is DicomFile => file !== null)
     })
 
-  /**
-   * Effect-based single DICOM file reading
-   */
   static readSingleDicomFile = (file: File): Effect.Effect<DicomFile, FileHandlerErrorType> =>
     Effect.gen(function* () {
       const arrayBuffer = yield* Effect.tryPromise({

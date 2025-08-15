@@ -111,7 +111,7 @@ export interface AnonymizationPreset {
 }
 
 // Import DicomServerConfig for use in AppConfig
-import type { DicomServerConfig } from '@/services/dicomSender'
+import type { DicomServerConfig } from '@/composables/useDicomSender'
 
 export interface AppConfig {
   dicomServer: DicomServerConfig
@@ -122,4 +122,4 @@ export interface AppConfig {
 }
 
 // Re-export DicomServerConfig for convenience
-export type { DicomServerConfig } from '@/services/dicomSender'
+export type { DicomServerConfig } from '@/composables/useDicomSender'

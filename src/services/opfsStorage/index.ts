@@ -17,16 +17,10 @@ export class OPFSStorage extends Context.Tag("OPFSStorage")<
   }
 }
 
-/**
- * Internal implementation class
- */
 class OPFSStorageImpl {
   private static rootDirName = 'dicom-files'
   private static rootDirHandle: FileSystemDirectoryHandle | null = null
 
-  /**
-   * Effect-based initialization
-   */
   private static initEffect(): Effect.Effect<void, StorageErrorType> {
     return Effect.gen(function* () {
       if (!OPFSStorage.isSupported()) {
@@ -58,9 +52,6 @@ class OPFSStorageImpl {
     })
   }
 
-  /**
-   * Effect-based file saving
-   */
   static saveFile = (fileId: string, arrayBuffer: ArrayBuffer): Effect.Effect<void, StorageErrorType> =>
     Effect.gen(function* () {
       // Validate inputs
@@ -120,9 +111,6 @@ class OPFSStorageImpl {
       })
     })
 
-  /**
-   * Effect-based file loading
-   */
   static loadFile = (fileId: string): Effect.Effect<ArrayBuffer, StorageErrorType> =>
     Effect.gen(function* () {
       // Validate input
@@ -174,9 +162,6 @@ class OPFSStorageImpl {
       return arrayBuffer
     })
 
-  /**
-   * Effect-based file deletion
-   */
   static deleteFile = (fileId: string): Effect.Effect<void, StorageErrorType> =>
     Effect.gen(function* () {
       if (!fileId || fileId.trim() === '') {
@@ -201,9 +186,6 @@ class OPFSStorageImpl {
       })
     })
 
-  /**
-   * Effect-based file listing
-   */
   static listFiles: Effect.Effect<string[], StorageErrorType> = Effect.gen(function* () {
     if (!OPFSStorageImpl.rootDirHandle) {
       yield* OPFSStorageImpl.initEffect()
@@ -236,9 +218,6 @@ class OPFSStorageImpl {
     return fileIds
   })
 
-  /**
-   * Effect-based clear all files
-   */
   static clearAllFiles: Effect.Effect<void, StorageErrorType> = Effect.gen(function* () {
     if (!OPFSStorageImpl.rootDirHandle) {
       yield* OPFSStorageImpl.initEffect()
@@ -278,9 +257,6 @@ class OPFSStorageImpl {
     yield* Effect.all(deleteOperations, { concurrency: 5, batching: true })
   })
 
-  /**
-   * Effect-based storage info retrieval
-   */
   static getStorageInfo: Effect.Effect<{ used: number; quota: number }, StorageErrorType> = Effect.gen(function* () {
     const estimate = yield* Effect.tryPromise({
       try: () => navigator.storage.estimate(),
@@ -298,9 +274,6 @@ class OPFSStorageImpl {
   })
 }
 
-/**
- * Live implementation layer
- */
 export const OPFSStorageLive = Layer.succeed(
   OPFSStorage,
   OPFSStorage.of({

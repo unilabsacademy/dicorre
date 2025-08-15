@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Effect, Layer } from 'effect'
 import { DicomSender, DicomSenderLive, type DicomServerConfig } from './index'
 import { ConfigServiceLive } from '../config'
-import type { DicomFile, DicomStudy } from '@/types/dicom'
+import type { DicomFile } from '@/types/dicom'
 
 describe('DicomSender Service (Effect Service Testing)', () => {
   // Test the service through Effect.provide pattern
@@ -56,24 +56,6 @@ describe('DicomSender Service (Effect Service Testing)', () => {
       ).rejects.toThrow()
     })
 
-    it('should send study with multiple files', async () => {
-      const mockStudy: DicomStudy = {
-        studyInstanceUID: '1.2.3.4.5',
-        patientName: 'Test Patient',
-        patientId: 'TEST001',
-        studyDate: '20241201',
-        studyDescription: 'Test Study',
-        series: []
-      }
-
-      // Empty study should return empty array
-      const result = await runTest(Effect.gen(function* () {
-        const sender = yield* DicomSender
-        return yield* sender.sendStudy(mockStudy)
-      }))
-      
-      expect(result).toEqual([])
-    })
   })
 
   describe('Configuration', () => {

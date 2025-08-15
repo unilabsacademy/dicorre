@@ -11,6 +11,7 @@ import { AnonymizerLive } from '../anonymizer'
 import { DicomSenderLive } from '../dicomSender'
 import { EventBusLayer } from '../eventBus'
 import { ConfigurationError } from '@/types/effects'
+import type { AppConfig } from "@/types/dicom"
 
 /**
  * Base services with no dependencies
@@ -88,11 +89,10 @@ export const TestConfigLayer = Layer.succeed(
       setting: `presets.${presetName}`,
       value: presetName
     })),
-    processReplacements: (replacements: Record<string, string>) => Effect.succeed(replacements),
     getPresets: Effect.succeed({}),
     getTagDescription: (tagId: string) => Effect.succeed(tagId),
     getTagsToRemove: Effect.succeed([]),
-    validateConfig: (config: any) => Effect.succeed(undefined)
+    validateConfig: (config: AppConfig) => Effect.succeed(undefined)
   })
 )
 
