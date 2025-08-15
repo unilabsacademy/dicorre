@@ -47,14 +47,25 @@ export function useSessionPersistence(
 
     const existingIds = new Set(persisted.value.files.map((m) => m.id))
 
-    // Persist binary files that have not yet been stored in OPFS
+    // Persist binary files that have not yet been stored in OPFS with consistency verification
     for (const file of extractedDicomFiles.value) {
       if (!existingIds.has(file.id)) {
         try {
           await runStorage(
             Effect.gen(function* () {
               const storage = yield* OPFSStorage
-              return yield* storage.saveFile(file.id, file.arrayBuffer)
+              
+              // Save file to OPFS
+              yield* storage.saveFile(file.id, file.arrayBuffer)
+              
+              // Verify file was saved correctly by checking it exists
+              // This helps ensure OPFS has fully committed the file
+              const exists = yield* storage.fileExists(file.id)
+              if (!exists) {
+                throw new Error(`File verification failed after save: ${file.id}`)
+              }
+              
+              console.log(`File ${file.id} successfully saved and verified in OPFS`)
             })
           )
         } catch (e) {

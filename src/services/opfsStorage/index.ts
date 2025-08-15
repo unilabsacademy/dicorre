@@ -1,4 +1,4 @@
-import { Effect, Context, Layer } from "effect"
+import { Effect, Context, Layer, Schedule } from "effect"
 import { StorageError, ValidationError, type StorageErrorType } from '@/types/effects'
 
 export class OPFSStorage extends Context.Tag("OPFSStorage")<
@@ -6,6 +6,7 @@ export class OPFSStorage extends Context.Tag("OPFSStorage")<
   {
     readonly saveFile: (fileId: string, arrayBuffer: ArrayBuffer) => Effect.Effect<void, StorageErrorType>
     readonly loadFile: (fileId: string) => Effect.Effect<ArrayBuffer, StorageErrorType>
+    readonly fileExists: (fileId: string) => Effect.Effect<boolean, StorageErrorType>
     readonly deleteFile: (fileId: string) => Effect.Effect<void, StorageErrorType>
     readonly listFiles: Effect.Effect<string[], StorageErrorType>
     readonly clearAllFiles: Effect.Effect<void, StorageErrorType>
@@ -111,7 +112,8 @@ class OPFSStorageImpl {
       })
     })
 
-  static loadFile = (fileId: string): Effect.Effect<ArrayBuffer, StorageErrorType> =>
+  // Core file loading logic without retry
+  private static loadFileCore = (fileId: string): Effect.Effect<ArrayBuffer, StorageErrorType> =>
     Effect.gen(function* () {
       // Validate input
       if (!fileId || fileId.trim() === '') {
@@ -160,6 +162,51 @@ class OPFSStorageImpl {
       })
 
       return arrayBuffer
+    })
+
+  // Public loadFile with retry logic for race condition protection
+  static loadFile = (fileId: string): Effect.Effect<ArrayBuffer, StorageErrorType> =>
+    OPFSStorageImpl.loadFileCore(fileId).pipe(
+      Effect.retry(
+        Schedule.exponential("100 millis").pipe(
+          Schedule.intersect(Schedule.recurs(3))
+        )
+      ),
+      Effect.catchAll((error) =>
+        Effect.gen(function* () {
+          // Log the final failure after all retries
+          yield* Effect.logWarning(`Failed to load file ${fileId} after retries: ${error.message}`)
+          return yield* Effect.fail(error)
+        })
+      )
+    )
+
+  // Check if a file exists in OPFS
+  static fileExists = (fileId: string): Effect.Effect<boolean, StorageErrorType> =>
+    Effect.gen(function* () {
+      // Validate input
+      if (!fileId || fileId.trim() === '') {
+        return yield* Effect.fail(new ValidationError({
+          message: 'File ID cannot be empty',
+          fileName: fileId
+        }))
+      }
+
+      // Ensure initialized
+      if (!OPFSStorageImpl.rootDirHandle) {
+        yield* OPFSStorageImpl.initEffect()
+      }
+
+      // Try to get file handle - if it exists, return true, otherwise false
+      return yield* Effect.tryPromise({
+        try: async () => {
+          await OPFSStorageImpl.rootDirHandle!.getFileHandle(`${fileId}.dcm`)
+          return true
+        },
+        catch: () => false // File doesn't exist
+      }).pipe(
+        Effect.orElse(() => Effect.succeed(false))
+      )
     })
 
   static deleteFile = (fileId: string): Effect.Effect<void, StorageErrorType> =>
@@ -279,6 +326,7 @@ export const OPFSStorageLive = Layer.succeed(
   OPFSStorage.of({
     saveFile: OPFSStorageImpl.saveFile,
     loadFile: OPFSStorageImpl.loadFile,
+    fileExists: OPFSStorageImpl.fileExists,
     deleteFile: OPFSStorageImpl.deleteFile,
     listFiles: OPFSStorageImpl.listFiles,
     clearAllFiles: OPFSStorageImpl.clearAllFiles,

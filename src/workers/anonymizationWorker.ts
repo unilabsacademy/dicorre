@@ -46,20 +46,46 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
         const opfs = yield* OPFSStorage
         const anonymizer = yield* Anonymizer
 
-        // Load files from OPFS and create DicomFile objects
-        const dicomFiles: DicomFile[] = []
-        for (const fileRef of fileRefs) {
-          const arrayBuffer = yield* opfs.loadFile(fileRef.opfsFileId)
-          dicomFiles.push({
-            id: fileRef.id,
-            fileName: fileRef.fileName,
-            fileSize: fileRef.fileSize,
-            arrayBuffer,
-            anonymized: false,
-            opfsFileId: fileRef.opfsFileId,
-            metadata: fileRef.metadata
+        // Load files from OPFS with error recovery
+        const fileLoadingEffects = fileRefs.map(fileRef => 
+          Effect.gen(function* () {
+            console.log(`Loading file from OPFS: ${fileRef.opfsFileId}`)
+            
+            // Load with retry and detailed error logging
+            const arrayBuffer = yield* opfs.loadFile(fileRef.opfsFileId).pipe(
+              Effect.catchAll(error => 
+                Effect.gen(function* () {
+                  yield* Effect.logError(`Failed to load file ${fileRef.opfsFileId}: ${error.message}`)
+                  // Re-throw the error with more context
+                  return yield* Effect.fail(new Error(`File loading failed for ${fileRef.fileName} (${fileRef.opfsFileId}): ${error.message}`))
+                })
+              )
+            )
+            
+            return {
+              id: fileRef.id,
+              fileName: fileRef.fileName,
+              fileSize: fileRef.fileSize,
+              arrayBuffer,
+              anonymized: false,
+              opfsFileId: fileRef.opfsFileId,
+              metadata: fileRef.metadata
+            } as DicomFile
           })
-        }
+        )
+
+        // Load all files concurrently with proper error isolation
+        const dicomFiles = yield* Effect.all(fileLoadingEffects, { 
+          concurrency: 3,
+          batching: false 
+        }).pipe(
+          Effect.catchAll(error => 
+            Effect.gen(function* () {
+              yield* Effect.logError(`Study ${studyId} file loading failed: ${error.message}`)
+              return yield* Effect.fail(error)
+            })
+          )
+        )
 
         // Anonymize using service
         const result = yield* anonymizer.anonymizeStudy(studyId, dicomFiles, config, {
@@ -69,13 +95,40 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
           }
         })
 
-        // Save anonymized files back to OPFS
-        for (const file of result.anonymizedFiles) {
-          const anonymizedId = `${file.opfsFileId}_anonymized`
-          yield* opfs.saveFile(anonymizedId, file.arrayBuffer)
-          file.opfsFileId = anonymizedId
-          file.anonymized = true
-        }
+        // Save anonymized files back to OPFS with error recovery
+        const saveEffects = result.anonymizedFiles.map(file => 
+          Effect.gen(function* () {
+            const anonymizedId = `${file.opfsFileId}_anonymized`
+            console.log(`Saving anonymized file to OPFS: ${anonymizedId}`)
+            
+            yield* opfs.saveFile(anonymizedId, file.arrayBuffer).pipe(
+              Effect.catchAll(error => 
+                Effect.gen(function* () {
+                  yield* Effect.logError(`Failed to save anonymized file ${anonymizedId}: ${error.message}`)
+                  return yield* Effect.fail(new Error(`File saving failed for ${file.fileName}: ${error.message}`))
+                })
+              )
+            )
+            
+            // Update file properties
+            file.opfsFileId = anonymizedId
+            file.anonymized = true
+            return file
+          })
+        )
+
+        // Save all files concurrently
+        yield* Effect.all(saveEffects, { 
+          concurrency: 3,
+          batching: false 
+        }).pipe(
+          Effect.catchAll(error => 
+            Effect.gen(function* () {
+              yield* Effect.logError(`Study ${studyId} file saving failed: ${error.message}`)
+              return yield* Effect.fail(error)
+            })
+          )
+        )
 
         // Send completion - return files without ArrayBuffers since main thread will reload from OPFS
         const anonymizedFiles = result.anonymizedFiles.map(file => ({

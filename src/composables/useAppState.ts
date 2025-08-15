@@ -168,6 +168,18 @@ export function useAppState(runtime: RuntimeType) {
                   })
                   removeStudyProgress(event.studyId)
                   console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
+                  
+                  // Immediately regenerate studies structure to reflect the anonymized data
+                  runtime.runPromise(
+                    Effect.gen(function* () {
+                      const processor = yield* DicomProcessor
+                      const updatedStudies = yield* processor.groupFilesByStudy(dicomFiles.value)
+                      studies.value = updatedStudies
+                      console.log(`Studies updated after ${event.studyId} completion`)
+                    })
+                  ).catch(error => {
+                    console.error('Failed to update studies after anonymization:', error)
+                  })
                   break
 
                 case "AnonymizationError":
@@ -188,25 +200,35 @@ export function useAppState(runtime: RuntimeType) {
         )
       })
 
-      // Run all study streams concurrently
+      // Track successful and failed studies
+      const failedStudies: string[] = []
+      const successfulStudies: string[] = []
+
+      // Run all study streams concurrently with result tracking
       await runtime.runPromise(
-        Effect.all(studyStreamEffects, { concurrency: "unbounded" })
+        Effect.all(studyStreamEffects.map((effect, index) => 
+          effect.pipe(
+            Effect.map(() => {
+              successfulStudies.push(selectedStudies.value[index].studyInstanceUID)
+              return true
+            }),
+            Effect.catchAll(() => {
+              failedStudies.push(selectedStudies.value[index].studyInstanceUID)
+              return Effect.succeed(false)
+            })
+          )
+        ), { concurrency: "unbounded" })
       )
 
-      // After all studies are anonymized, regenerate the studies structure from updated files
-      const updatedStudies = await runtime.runPromise(
-        Effect.gen(function* () {
-          const processor = yield* DicomProcessor
-          return yield* processor.groupFilesByStudy(dicomFiles.value)
-        })
-      )
-
-      // Update the studies state with the new anonymized data
-      studies.value = updatedStudies
-
-      successMessage.value = `Successfully anonymized ${selectedStudies.value.length} studies`
-
-      // Clear selection after successful anonymization
+      // Show appropriate success/error message based on results
+      if (failedStudies.length === 0) {
+        successMessage.value = `Successfully anonymized ${successfulStudies.length} studies`
+      } else if (successfulStudies.length === 0) {
+        setAppError(new Error(`Failed to anonymize all ${failedStudies.length} studies`))
+      } else {
+        successMessage.value = `Anonymized ${successfulStudies.length} of ${selectedStudies.value.length} studies. ${failedStudies.length} failed.`
+      }
+      
       clearSelection()
 
     } catch (error) {
