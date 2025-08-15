@@ -422,11 +422,3 @@ export function destroyWorkerManagers() {
   }
 }
 
-// Backwards compatibility
-export function getWorkerManager(): AnonymizationWorkerManager {
-  return getAnonymizationWorkerManager()
-}
-
-export function destroyWorkerManager() {
-  destroyWorkerManagers()
-}

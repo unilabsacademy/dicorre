@@ -1,5 +1,5 @@
 import { ref, computed } from 'vue'
-import { getWorkerManager } from '@/workers/workerManager'
+import { getAnonymizationWorkerManager } from '@/workers/workerManager'
 import type { WorkerDetail, DebugMessage } from '@/workers/workerManager'
 
 // Global reactive state for worker debugging
@@ -15,7 +15,7 @@ const recentMessages = ref<DebugMessage[]>([])
 export function useWorkerDebug() {
   const refreshStatus = () => {
     try {
-      const manager = getWorkerManager()
+      const manager = getAnonymizationWorkerManager()
       
       // Update worker status
       workerStatus.value = manager.getStatus()
@@ -32,7 +32,7 @@ export function useWorkerDebug() {
 
   const clearMessages = () => {
     try {
-      const manager = getWorkerManager()
+      const manager = getAnonymizationWorkerManager()
       manager.clearDebugMessages()
       recentMessages.value = []
     } catch (error) {
