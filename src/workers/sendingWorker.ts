@@ -29,7 +29,7 @@ interface WorkerMessage {
   type: 'send_study'
   data: {
     studyId: string
-    files: Array<{ id: string; fileName: string; arrayBuffer: ArrayBuffer; opfsFileId: string; metadata?: any }>
+    files: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>
     serverConfig: ServerConfig
     concurrency?: number
   }
@@ -41,7 +41,7 @@ type WorkerResponse =
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
 
 // Main worker function
-async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; arrayBuffer: ArrayBuffer; opfsFileId: string; metadata?: any }>, serverConfig: ServerConfig, concurrency = 2) {
+async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, serverConfig: ServerConfig, concurrency = 2) {
   try {
     await runtime.runPromise(
       Effect.gen(function* () {
@@ -64,23 +64,28 @@ async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName
             data: { total, completed, percentage: Math.round((completed / total) * 100), currentFile: fileRef.fileName }
           } as WorkerResponse)
 
-          // Create DicomFile from data and save to OPFS
+          // Load file from OPFS
+          const arrayBuffer = yield* opfs.loadFile(fileRef.opfsFileId)
+          
+          // Create DicomFile from OPFS data
           const dicomFile: DicomFile = {
             id: fileRef.id,
             fileName: fileRef.fileName,
-            fileSize: fileRef.arrayBuffer.byteLength,
-            arrayBuffer: fileRef.arrayBuffer,
+            fileSize: fileRef.fileSize,
+            arrayBuffer,
             metadata: fileRef.metadata,
             opfsFileId: fileRef.opfsFileId
           }
-          
-          // Save to OPFS first
-          yield* opfs.saveFile(fileRef.opfsFileId, fileRef.arrayBuffer)
 
           // Send file using service
           yield* sender.sendFile(dicomFile)
           
-          sentFiles.push(dicomFile)
+          // Mark as sent and add to results
+          dicomFile.sent = true
+          sentFiles.push({
+            ...dicomFile,
+            arrayBuffer: new ArrayBuffer(0) // Empty ArrayBuffer since main thread will reload from OPFS
+          })
           completed++
 
           // Progress update after completion

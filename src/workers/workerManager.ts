@@ -329,20 +329,28 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
   protected async prepareJobData(job: AnonymizationJob): Promise<any> {
     this.logDebug('message', `Preparing ${job.files.length} files for worker processing`, undefined, job.studyId)
     
-    // Pass full files to worker - worker will handle OPFS storage
-    const files = job.files.map((file, index) => ({
-      id: file.id,
-      fileName: file.fileName,
-      arrayBuffer: file.arrayBuffer,
-      opfsFileId: file.opfsFileId || `${job.studyId}_${file.id}_${Date.now()}_${index}`
-    }))
+    // Pass only OPFS file references to worker - no ArrayBuffers
+    // Serialize and deserialize to ensure all data is cloneable
+    const files = job.files.map((file, index) => {
+      const fileData = {
+        id: file.id,
+        fileName: file.fileName,
+        fileSize: file.fileSize,
+        opfsFileId: file.opfsFileId || file.id, // Use existing opfsFileId or fall back to file.id
+        metadata: file.metadata ? JSON.parse(JSON.stringify(file.metadata)) : undefined
+      }
+      return fileData
+    })
+
+    // Ensure config is also cloneable
+    const cloneableConfig = JSON.parse(JSON.stringify(job.config))
 
     return {
       type: 'anonymize_study',
       data: {
         studyId: job.studyId,
         files,
-        config: job.config,
+        config: cloneableConfig,
         concurrency: job.concurrency
       }
     }
@@ -365,21 +373,28 @@ export class SendingWorkerManager extends WorkerManager<SendingJob> {
   protected async prepareJobData(job: SendingJob): Promise<any> {
     this.logDebug('message', `Preparing ${job.files.length} files for sending`, undefined, job.studyId)
     
-    // Pass full files to worker - worker will handle OPFS storage
-    const files = job.files.map((file, index) => ({
-      id: file.id,
-      fileName: file.fileName,
-      arrayBuffer: file.arrayBuffer,
-      opfsFileId: file.opfsFileId || `${job.studyId}_${file.id}_${Date.now()}_${index}`,
-      metadata: file.metadata
-    }))
+    // Pass only OPFS file references to worker - no ArrayBuffers
+    // Serialize and deserialize to ensure all data is cloneable
+    const files = job.files.map((file, index) => {
+      const fileData = {
+        id: file.id,
+        fileName: file.fileName,
+        fileSize: file.fileSize,
+        opfsFileId: file.opfsFileId || file.id, // Use existing opfsFileId or fall back to file.id
+        metadata: file.metadata ? JSON.parse(JSON.stringify(file.metadata)) : undefined
+      }
+      return fileData
+    })
+
+    // Ensure server config is also cloneable
+    const cloneableServerConfig = JSON.parse(JSON.stringify(job.serverConfig))
 
     return {
       type: 'send_study',
       data: {
         studyId: job.studyId,
         files,
-        serverConfig: job.serverConfig,
+        serverConfig: cloneableServerConfig,
         concurrency: job.concurrency
       }
     }

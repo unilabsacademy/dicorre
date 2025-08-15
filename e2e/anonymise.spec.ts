@@ -85,13 +85,30 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   await expect(anonymizeButton).toContainText('Anonymize (', { timeout: 5000 });
   await expect(anonymizeButton).toBeEnabled();
 
-  // Test Effect-based approach by toggling workers off
-  await page.evaluate(() => {
-    (window as any).toggleWorkers(false);
+
+  // Listen for console messages to debug anonymization process
+  const consoleMessages: string[] = [];
+  page.on('console', msg => {
+    const message = `${msg.type()}: ${msg.text()}`;
+    consoleMessages.push(message);
+    console.log(`[Browser Console] ${message}`);
+  });
+
+  // Listen for page errors
+  page.on('pageerror', error => {
+    console.log(`[Page Error] ${error.message}`);
   });
 
   // Trigger anonymization
   await anonymizeButton.click();
+
+  // Wait a bit and check if anonymization is progressing
+  await page.waitForTimeout(2000);
+  
+  // Check if there's any error or progress indication
+  console.log('Checking anonymization progress...');
+  const buttonText = await anonymizeButton.textContent();
+  console.log(`Button text after 2s: ${buttonText}`);
 
   // Wait for anonymization to finish – wait until all studies are anonymized
   // The button should become disabled when all selected studies are anonymized

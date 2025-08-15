@@ -27,7 +27,7 @@ interface WorkerMessage {
   type: 'anonymize_study'
   data: {
     studyId: string
-    files: Array<{ id: string; fileName: string; arrayBuffer: ArrayBuffer; opfsFileId: string }>
+    files: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>
     config: AnonymizationConfig
     concurrency?: number
   }
@@ -39,26 +39,26 @@ type WorkerResponse =
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
 
 // Main worker function
-async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; arrayBuffer: ArrayBuffer; opfsFileId: string }>, config: AnonymizationConfig, concurrency = 3) {
+async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, config: AnonymizationConfig, concurrency = 3) {
   try {
     await runtime.runPromise(
       Effect.gen(function* () {
         const opfs = yield* OPFSStorage
         const anonymizer = yield* Anonymizer
 
-        // Create DicomFile objects from the data
-        const dicomFiles: DicomFile[] = fileRefs.map(fileRef => ({
-          id: fileRef.id,
-          fileName: fileRef.fileName,
-          fileSize: fileRef.arrayBuffer.byteLength,
-          arrayBuffer: fileRef.arrayBuffer,
-          anonymized: false,
-          opfsFileId: fileRef.opfsFileId
-        }))
-
-        // Save files to OPFS first
-        for (const file of dicomFiles) {
-          yield* opfs.saveFile(file.opfsFileId!, file.arrayBuffer)
+        // Load files from OPFS and create DicomFile objects
+        const dicomFiles: DicomFile[] = []
+        for (const fileRef of fileRefs) {
+          const arrayBuffer = yield* opfs.loadFile(fileRef.opfsFileId)
+          dicomFiles.push({
+            id: fileRef.id,
+            fileName: fileRef.fileName,
+            fileSize: fileRef.fileSize,
+            arrayBuffer,
+            anonymized: false,
+            opfsFileId: fileRef.opfsFileId,
+            metadata: fileRef.metadata
+          })
         }
 
         // Anonymize using service
@@ -69,7 +69,7 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
           }
         })
 
-        // Save anonymized files using service
+        // Save anonymized files back to OPFS
         for (const file of result.anonymizedFiles) {
           const anonymizedId = `${file.opfsFileId}_anonymized`
           yield* opfs.saveFile(anonymizedId, file.arrayBuffer)
@@ -77,8 +77,13 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
           file.anonymized = true
         }
 
-        // Send completion
-        self.postMessage({ type: 'complete', studyId, data: { anonymizedFiles: result.anonymizedFiles } } as WorkerResponse)
+        // Send completion - return files without ArrayBuffers since main thread will reload from OPFS
+        const anonymizedFiles = result.anonymizedFiles.map(file => ({
+          ...file,
+          arrayBuffer: new ArrayBuffer(0) // Empty ArrayBuffer since main thread will reload from OPFS
+        }))
+
+        self.postMessage({ type: 'complete', studyId, data: { anonymizedFiles } } as WorkerResponse)
       })
     )
   } catch (error) {
