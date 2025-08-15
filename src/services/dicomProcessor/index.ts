@@ -102,7 +102,11 @@ class DicomProcessorImpl {
       return result
     })
 
-  static parseFiles = (files: DicomFile[], concurrency = 3): Effect.Effect<DicomFile[], DicomProcessorError> =>
+  static parseFiles = (
+    files: DicomFile[], 
+    concurrency = 3, 
+    options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+  ): Effect.Effect<DicomFile[], DicomProcessorError> =>
     Effect.gen(function* () {
       if (files.length === 0) {
         return []
@@ -110,10 +114,22 @@ class DicomProcessorImpl {
 
       console.log(`Starting to parse ${files.length} DICOM files with concurrency ${concurrency}`)
 
-      const results = yield* Effect.all(
-        files.map(file => DicomProcessorImpl.parseFile(file)),
-        { concurrency, batching: true }
+      let completed = 0
+      const total = files.length
+
+      // Create parsing effects with progress tracking
+      const parsingEffects = files.map(file => 
+        DicomProcessorImpl.parseFile(file).pipe(
+          Effect.tap(parsedFile => 
+            Effect.sync(() => {
+              completed++
+              options?.onProgress?.(completed, total, parsedFile)
+            })
+          )
+        )
       )
+
+      const results = yield* Effect.all(parsingEffects, { concurrency, batching: true })
 
       const successfulResults = results.filter(file => file.parsed)
       console.log(`Successfully parsed ${successfulResults.length}/${files.length} DICOM files`)

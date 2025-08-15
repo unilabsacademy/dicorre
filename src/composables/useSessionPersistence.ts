@@ -47,29 +47,40 @@ export function useSessionPersistence(
 
     const existingIds = new Set(persisted.value.files.map((m) => m.id))
 
-    // Persist binary files that have not yet been stored in OPFS with consistency verification
+    // Check if files need to be saved to OPFS (only for restored files that aren't already there)
     for (const file of extractedDicomFiles.value) {
       if (!existingIds.has(file.id)) {
         try {
-          await runStorage(
+          // Check if file already exists in OPFS (it should if processed through the new pipeline)
+          const fileExistsInOPFS = await runStorage(
             Effect.gen(function* () {
               const storage = yield* OPFSStorage
-              
-              // Save file to OPFS
-              yield* storage.saveFile(file.id, file.arrayBuffer)
-              
-              // Verify file was saved correctly by checking it exists
-              // This helps ensure OPFS has fully committed the file
-              const exists = yield* storage.fileExists(file.id)
-              if (!exists) {
-                throw new Error(`File verification failed after save: ${file.id}`)
-              }
-              
-              console.log(`File ${file.id} successfully saved and verified in OPFS`)
+              return yield* storage.fileExists(file.id)
             })
           )
+          
+          if (!fileExistsInOPFS) {
+            // This should only happen for restored files or files processed through old pipeline
+            console.log(`File ${file.id} not found in OPFS, saving now (likely restored file)`)
+            await runStorage(
+              Effect.gen(function* () {
+                const storage = yield* OPFSStorage
+                
+                // Save file to OPFS
+                yield* storage.saveFile(file.id, file.arrayBuffer)
+                
+                // Verify file was saved correctly by checking it exists
+                const exists = yield* storage.fileExists(file.id)
+                if (!exists) {
+                  throw new Error(`File verification failed after save: ${file.id}`)
+                }
+                
+                console.log(`File ${file.id} successfully saved and verified in OPFS`)
+              })
+            )
+          }
         } catch (e) {
-          console.warn('Failed to save file to OPFS', file.id, e)
+          console.warn('Failed to handle OPFS persistence for file', file.id, e)
         }
       }
     }

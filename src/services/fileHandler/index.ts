@@ -96,7 +96,10 @@ class FileHandlerImpl {
       return false
     })
 
-  static extractZipFile = (file: File): Effect.Effect<DicomFile[], FileHandlerErrorType> =>
+  static extractZipFile = (
+    file: File, 
+    options?: { onProgress?: (completed: number, total: number, currentFile?: string) => void }
+  ): Effect.Effect<DicomFile[], FileHandlerErrorType> =>
     Effect.gen(function* () {
       const zip = new JSZip()
 
@@ -109,17 +112,19 @@ class FileHandlerImpl {
         })
       })
 
-      const fileEntries = Object.keys(zipContent.files)
+      const fileEntries = Object.keys(zipContent.files).filter(fileName => 
+        !zipContent.files[fileName].dir && !fileName.startsWith('.') && !fileName.includes('/.')
+      )
 
-      // Process files concurrently with Effect
+      console.log(`Found ${fileEntries.length} potential files in ZIP archive`)
+
+      let completed = 0
+      const total = fileEntries.length
+
+      // Process files concurrently with progress tracking
       const processFile = (fileName: string) =>
         Effect.gen(function* () {
           const zipFile = zipContent.files[fileName]
-
-          // Skip directories and hidden files
-          if (zipFile.dir || fileName.startsWith('.') || fileName.includes('/.')) {
-            return null
-          }
 
           const arrayBuffer = yield* Effect.tryPromise({
             try: () => zipFile.async('arraybuffer'),
@@ -132,11 +137,16 @@ class FileHandlerImpl {
 
           // Skip very small files
           if (arrayBuffer.byteLength < 100) {
+            completed++
+            options?.onProgress?.(completed, total, fileName)
             return null
           }
 
           // Validate DICOM file
           const isDicom = yield* FileHandlerImpl.validateDicomFile(arrayBuffer, fileName)
+
+          completed++
+          options?.onProgress?.(completed, total, fileName)
 
           if (isDicom) {
             return {
@@ -158,7 +168,10 @@ class FileHandlerImpl {
       )
 
       // Filter out null results
-      return results.filter((file): file is DicomFile => file !== null)
+      const dicomFiles = results.filter((file): file is DicomFile => file !== null)
+      console.log(`Extracted ${dicomFiles.length} DICOM files from ${fileEntries.length} total files`)
+      
+      return dicomFiles
     })
 
   static readSingleDicomFile = (file: File): Effect.Effect<DicomFile, FileHandlerErrorType> =>

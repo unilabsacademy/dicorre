@@ -3,6 +3,7 @@ import { Effect } from 'effect'
 import type { DicomFile, DicomStudy } from '@/types/dicom'
 import { FileHandler } from '@/services/fileHandler'
 import { DicomProcessor } from '@/services/dicomProcessor'
+import { OPFSStorage, OPFSStorageLive } from '@/services/opfsStorage'
 
 export interface FileProcessingState {
   isProcessing: boolean
@@ -54,32 +55,25 @@ export function useFileProcessing() {
         }
 
         if (file.name.toLowerCase().endsWith('.zip')) {
-          // Simulate progress steps for ZIP files
-          const progressSteps = [10, 25, 40, 60, 75, 90]
-          const stepTexts = [
-            'Reading archive structure...',
-            'Extracting files...',
-            'Validating DICOM files...',
-            'Processing file headers...',
-            'Analyzing metadata...',
-            'Finalizing extraction...'
-          ]
-
-          for (let step = 0; step < progressSteps.length; step++) {
-            fileProcessingState.value = {
-              ...fileProcessingState.value,
-              currentStep: stepTexts[step],
-              progress: progressSteps[step]
+          // Real progress tracking for ZIP extraction (0-30%)
+          const extractedFiles = yield* fileHandler.extractZipFile(file, {
+            onProgress: (completed, total, currentFile) => {
+              const extractionProgress = Math.round((completed / total) * 30) // 0% to 30%
+              fileProcessingState.value = {
+                ...fileProcessingState.value,
+                currentStep: `Extracting from ZIP: ${currentFile || 'processing...'}`,
+                progress: extractionProgress,
+                currentFileIndex: completed,
+                totalFiles: total
+              }
             }
-          }
-
-          const extractedFiles = yield* fileHandler.extractZipFile(file)
+          })
           localDicomFiles.push(...extractedFiles)
 
           fileProcessingState.value = {
             ...fileProcessingState.value,
-            currentStep: `Extracted ${extractedFiles.length} DICOM files`,
-            progress: 100
+            currentStep: `Extracted ${extractedFiles.length} DICOM files from ZIP`,
+            progress: 30
           }
         } else {
           fileProcessingState.value = {
@@ -108,42 +102,62 @@ export function useFileProcessing() {
       fileProcessingState.value = {
         isProcessing: true,
         fileName: `${localDicomFiles.length} DICOM files`,
-        currentStep: 'Parsing DICOM metadata...',
+        currentStep: 'Starting DICOM parsing...',
         progress: 0,
         totalFiles: localDicomFiles.length,
         currentFileIndex: 0
       }
 
-      const parsingSteps = [20, 50, 80, 90]
-      const parsingTexts = [
-        'Reading DICOM headers...',
-        'Extracting metadata...',
-        'Validating file structure...',
-        'Processing complete...'
-      ]
-
-      for (let step = 0; step < parsingSteps.length - 1; step++) {
-        fileProcessingState.value = {
-          ...fileProcessingState.value,
-          currentStep: parsingTexts[step],
-          progress: parsingSteps[step]
+      // Phase 1: Parse DICOM files (30-70%)
+      const parsedFiles = yield* processor.parseFiles(localDicomFiles, options.concurrency, {
+        onProgress: (completed, total, currentFile) => {
+          const parsingProgress = Math.round(30 + (completed / total) * 40) // 30% to 70%
+          fileProcessingState.value = {
+            ...fileProcessingState.value,
+            currentStep: `Parsing DICOM file: ${currentFile?.fileName || 'processing...'}`,
+            progress: parsingProgress,
+            currentFileIndex: completed
+          }
         }
-      }
-
-      const parsedFiles = yield* processor.parseFiles(localDicomFiles, options.concurrency)
+      })
 
       if (parsedFiles.length === 0) {
         fileProcessingState.value = null
         return yield* Effect.succeed([])
       }
 
-      fileProcessingState.value = {
-        ...fileProcessingState.value,
-        currentStep: 'Organizing into studies...',
-        progress: 90
+      // Phase 2: Save to OPFS (70-95%)
+      const opfs = yield* OPFSStorage
+      
+      for (let i = 0; i < parsedFiles.length; i++) {
+        const file = parsedFiles[i]
+        const saveProgress = Math.round(70 + ((i + 1) / parsedFiles.length) * 25) // 70% to 95%
+        
+        fileProcessingState.value = {
+          ...fileProcessingState.value,
+          currentStep: `Saving file to storage: ${file.fileName}`,
+          progress: saveProgress,
+          currentFileIndex: i + 1
+        }
+        
+        // Save file to OPFS and verify it exists
+        yield* opfs.saveFile(file.id, file.arrayBuffer)
+        const exists = yield* opfs.fileExists(file.id)
+        if (!exists) {
+          return yield* Effect.fail(new Error(`Failed to verify file in storage: ${file.fileName}`))
+        }
+        
+        console.log(`File ${file.id} successfully saved and verified in OPFS`)
       }
 
-      // Add to existing DICOM files
+      // Phase 3: Organize into studies (95-100%)
+      fileProcessingState.value = {
+        ...fileProcessingState.value,
+        currentStep: 'Organizing files into studies...',
+        progress: 95
+      }
+
+      // Only now add to existing DICOM files (after OPFS persistence is complete)
       const updatedFiles = [...options.dicomFiles, ...parsedFiles]
       options.onUpdateFiles?.(updatedFiles)
 
@@ -165,7 +179,9 @@ export function useFileProcessing() {
       }, 300)
 
       return parsedFiles
-    })
+    }).pipe(
+      Effect.provide(OPFSStorageLive)
+    )
 
   const clearProcessingState = () => {
     fileProcessingState.value = null
