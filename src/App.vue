@@ -21,6 +21,7 @@ import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import ConfigLoader from '@/components/ConfigLoader.vue'
 import { Toaster } from '@/components/ui/sonner'
+import 'vue-sonner/style.css'
 import {
   Shield,
   Send,
@@ -124,6 +125,8 @@ onUnmounted(() => {
 </script>
 
 <template>
+  <Toaster />
+
   <div
     class="min-h-screen bg-background p-6 relative"
     @dragenter="(event) => handleGlobalDragEnter(event)"
@@ -235,12 +238,15 @@ onUnmounted(() => {
             variant="default"
             data-testid="selected-count-badge"
           >{{ appState.selectedStudiesCount }} Selected</Badge>
-          
+
           <!-- Display current config info -->
           <div class="flex items-center gap-2 ml-4 text-sm text-muted-foreground">
             <span data-testid="current-profile">{{ appState.config.value?.profile || 'basic' }}</span>
             <span class="text-muted-foreground/50">|</span>
-            <span class="flex items-center gap-1" data-testid="server-url-display">
+            <span
+              class="flex items-center gap-1"
+              data-testid="server-url-display"
+            >
               <Server class="w-3 h-3" />
               {{ appState.serverUrl.value || 'No server configured' }}
             </span>
@@ -281,7 +287,7 @@ onUnmounted(() => {
           </Button>
 
           <ConfigLoader @config-loaded="handleConfigLoaded" />
-          
+
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -379,8 +385,5 @@ onUnmounted(() => {
 
     <!-- Worker Debug Panel -->
     <WorkerDebugPanel />
-    
-    <!-- Toast Notifications -->
-    <Toaster />
   </div>
 </template>
