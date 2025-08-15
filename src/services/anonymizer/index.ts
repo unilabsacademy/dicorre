@@ -8,7 +8,7 @@ import {
 } from '@umessen/dicom-deidentifier'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
-import { getAllSpecialHandlers } from './handlers'
+import { getAllSpecialHandlers, clearStudyCache } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
 import { AnonymizationError, type AnonymizerError } from '@/types/effects'
 
@@ -38,7 +38,7 @@ export class Anonymizer extends Context.Tag("Anonymizer")<
  * Internal implementation class
  */
 class AnonymizerImpl {
-  private static processReplacements = (replacements: Record<string, string>, sharedTimestamp?: string): Record<string, string> => {
+  private static processReplacements = (replacements: Record<string, string | undefined>, sharedTimestamp?: string): Record<string, string> => {
     const processed: Record<string, string> = {}
     const timestamp = sharedTimestamp || Date.now().toString().slice(-7)
 
@@ -110,7 +110,9 @@ class AnonymizerImpl {
       // Add custom special handlers if enabled
       if (config.useCustomHandlers) {
         const tagsToRemove = config.tagsToRemove || []
-        const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove)
+        // For individual files, use the Study Instance UID as the cache key
+        const studyId = file.metadata?.studyInstanceUID || 'unknown'
+        const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId)
         deidentifierConfig.specialHandlers = specialHandlers
       }
 

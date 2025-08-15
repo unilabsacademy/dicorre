@@ -128,25 +128,25 @@ export function useFileProcessing() {
 
       // Phase 2: Save to OPFS (70-95%)
       const opfs = yield* OPFSStorage
-      
+
       for (let i = 0; i < parsedFiles.length; i++) {
         const file = parsedFiles[i]
         const saveProgress = Math.round(70 + ((i + 1) / parsedFiles.length) * 25) // 70% to 95%
-        
+
         fileProcessingState.value = {
           ...fileProcessingState.value,
           currentStep: `Saving file to storage: ${file.fileName}`,
           progress: saveProgress,
           currentFileIndex: i + 1
         }
-        
+
         // Save file to OPFS and verify it exists
         yield* opfs.saveFile(file.id, file.arrayBuffer)
         const exists = yield* opfs.fileExists(file.id)
         if (!exists) {
           return yield* Effect.fail(new Error(`Failed to verify file in storage: ${file.fileName}`))
         }
-        
+
         console.log(`File ${file.id} successfully saved and verified in OPFS`)
       }
 

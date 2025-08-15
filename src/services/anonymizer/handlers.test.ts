@@ -230,7 +230,7 @@ describe('anonymizationHandlers', () => {
 
   describe('createValueReplacementHandler', () => {
     it('should replace PatientName with "Anonymous"', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       const element = createMockElement({
         keyword: 'PatientName',
         value: 'John Doe'
@@ -243,7 +243,7 @@ describe('anonymizationHandlers', () => {
     })
 
     it('should generate consistent PatientID values', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       const element1 = createMockElement({
         keyword: 'PatientID',
         value: 'ORIGINAL123'
@@ -261,7 +261,7 @@ describe('anonymizationHandlers', () => {
     })
 
     it('should generate different values for different original values', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       const element1 = createMockElement({
         keyword: 'PatientID',
         value: 'ORIGINAL123'
@@ -278,7 +278,7 @@ describe('anonymizationHandlers', () => {
     })
 
     it('should generate StudyInstanceUID in correct format', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       const element = createMockElement({
         keyword: 'StudyInstanceUID',
         value: '1.2.3.4.5.6.7.8.9'
@@ -292,7 +292,7 @@ describe('anonymizationHandlers', () => {
     })
 
     it('should generate AccessionNumber in correct format', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       const element = createMockElement({
         keyword: 'AccessionNumber',
         value: 'ACC123456'
@@ -305,7 +305,7 @@ describe('anonymizationHandlers', () => {
     })
 
     it('should not process non-string values', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       const element = createMockElement({
         keyword: 'PatientName'
         // value is undefined by default
@@ -320,7 +320,7 @@ describe('anonymizationHandlers', () => {
     })
 
     it('should not process unrecognized field names', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       const element = createMockElement({
         keyword: 'UnknownField',
         value: 'SomeValue'
@@ -377,7 +377,7 @@ describe('anonymizationHandlers', () => {
 
   describe('clearValueCache', () => {
     it('should clear the value cache', () => {
-      const handler = createValueReplacementHandler()
+      const handler = createValueReplacementHandler('test-study-id')
       
       // Generate a value first
       const element1 = createMockElement({

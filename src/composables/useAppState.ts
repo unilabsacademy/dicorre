@@ -30,7 +30,7 @@ export function useAppState(runtime: RuntimeType) {
   // Initialize composables
   const fileProcessing = useFileProcessing()
   const dragAndDrop = useDragAndDrop()
-  const dicomSender = useDicomSender()
+  const dicomSender = useDicomSender(runtime)
   const anonymizer = useAnonymizer()
 
   // Progress management

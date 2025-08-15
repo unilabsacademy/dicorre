@@ -1,6 +1,4 @@
 import { Effect, Context, Layer } from "effect"
-import { api } from 'dicomweb-client'
-const { DICOMwebClient } = api
 import type { DicomFile } from '@/types/dicom'
 import { NetworkError, ValidationError, type DicomSenderError } from '@/types/effects'
 import { ConfigService } from '../config'
@@ -93,7 +91,7 @@ class DicomSenderImpl {
           console.log(`Sending DICOM file: ${file.fileName}`)
 
           const headers: Record<string, string> = {
-            'Accept': 'multipart/related; type="application/dicom"',
+            'Accept': 'application/dicom+json',
             ...config.headers
           }
 
@@ -106,19 +104,53 @@ class DicomSenderImpl {
             }
           }
 
-          const client = new DICOMwebClient({
-            url: config.url,
-            singlepart: false,
-            headers
-          })
-
-          // Convert ArrayBuffer to Uint8Array for dicomweb-client
+          // Convert ArrayBuffer to Uint8Array
           const uint8Array = new Uint8Array(file.arrayBuffer)
 
+          // Create proper multipart form data for STOW-RS
+          const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substring(2)}`
+          const contentType = `multipart/related; type="application/dicom"; boundary=${boundary}`
+          
+          // Build multipart body
+          const textPart = [
+            `--${boundary}`,
+            'Content-Type: application/dicom',
+            '',
+            ''
+          ].join('\r\n')
+          
+          const endBoundary = `\r\n--${boundary}--`
+          
+          // Create the full body with binary data
+          const textPartBytes = new TextEncoder().encode(textPart)
+          const endBoundaryBytes = new TextEncoder().encode(endBoundary)
+          
+          // Combine text part + DICOM data + end boundary
+          const totalLength = textPartBytes.length + uint8Array.length + endBoundaryBytes.length
+          const body = new Uint8Array(totalLength)
+          
+          let offset = 0
+          body.set(textPartBytes, offset)
+          offset += textPartBytes.length
+          body.set(uint8Array, offset)
+          offset += uint8Array.length
+          body.set(endBoundaryBytes, offset)
+
           // Store instance using DICOM web STOW-RS
-          await client.storeInstances({
-            datasets: [uint8Array]
+          const stowUrl = `${config.url}/studies`
+          const response = await fetch(stowUrl, {
+            method: 'POST',
+            headers: {
+              ...headers,
+              'Content-Type': contentType
+            },
+            body: body
           })
+
+          if (!response.ok) {
+            const errorText = await response.text()
+            throw new Error(`STOW-RS failed: ${response.status} ${response.statusText} - ${errorText}`)
+          }
 
           console.log(`Successfully sent ${file.fileName} to DICOM server`)
         },
@@ -143,14 +175,20 @@ class DicomSenderImpl {
         }))
       }
 
-      // Validate URL format
-      try {
-        new URL(config.url)
-      } catch (error) {
+      // Validate URL format (allow relative URLs for browser proxying)
+      if (config.url.startsWith('http')) {
+        try {
+          new URL(config.url)
+        } catch (error) {
+          return yield* Effect.fail(new ValidationError({
+            message: `Invalid DICOM server URL: ${config.url}`,
+            fileName: 'config'
+          }))
+        }
+      } else if (!config.url.startsWith('/')) {
         return yield* Effect.fail(new ValidationError({
-          message: `Invalid DICOM server URL: ${config.url}`,
-          fileName: 'config',
-          cause: error
+          message: `DICOM server URL must be absolute (http/https) or relative starting with /: ${config.url}`,
+          fileName: 'config'
         }))
       }
 
