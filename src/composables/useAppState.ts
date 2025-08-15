@@ -10,6 +10,7 @@ import { useFileProcessing } from '@/composables/useFileProcessing'
 import { useDragAndDrop } from '@/composables/useDragAndDrop'
 import { useDicomSender } from '@/composables/useDicomSender'
 import { useAnonymizer } from '@/composables/useAnonymizer'
+import { clearStudyCache } from '@/services/anonymizer/handlers'
 
 type RuntimeType = ReturnType<typeof ManagedRuntime.make<any, any>>
 
@@ -33,7 +34,7 @@ export function useAppState(runtime: RuntimeType) {
   const dicomSender = useDicomSender(runtime)
   const anonymizer = useAnonymizer()
 
-  // Progress management
+  // Progress and UI state management
   const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
   const { setStudySendingProgress, removeStudySendingProgress, clearAllSendingProgress } = useSendingProgress()
   const { getSelectedStudies, clearSelection } = useTableState()
@@ -168,7 +169,7 @@ export function useAppState(runtime: RuntimeType) {
                   })
                   removeStudyProgress(event.studyId)
                   console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
-                  
+
                   // Immediately regenerate studies structure to reflect the anonymized data
                   runtime.runPromise(
                     Effect.gen(function* () {
@@ -206,7 +207,7 @@ export function useAppState(runtime: RuntimeType) {
 
       // Run all study streams concurrently with result tracking
       await runtime.runPromise(
-        Effect.all(studyStreamEffects.map((effect, index) => 
+        Effect.all(studyStreamEffects.map((effect, index) =>
           effect.pipe(
             Effect.map(() => {
               successfulStudies.push(selectedStudies.value[index].studyInstanceUID)
@@ -228,7 +229,7 @@ export function useAppState(runtime: RuntimeType) {
       } else {
         successMessage.value = `Anonymized ${successfulStudies.length} of ${selectedStudies.value.length} studies. ${failedStudies.length} failed.`
       }
-      
+
       clearSelection()
 
     } catch (error) {
@@ -247,25 +248,106 @@ export function useAppState(runtime: RuntimeType) {
   }
 
   const handleSendSelected = async (selectedStudiesToSend: DicomStudy[]) => {
+    if (selectedStudiesToSend.length === 0) {
+      return
+    }
+
     try {
       successMessage.value = ''
+      
+      // Process all studies concurrently using Effect.all for true parallelism (same pattern as anonymization)
+      const studyStreamEffects = selectedStudiesToSend.map(study => {
+        const studyFiles = study.series.flatMap(series => series.files).filter(file => file.anonymized)
+
+        return dicomSender.sendStudyStream(
+          study.studyInstanceUID,
+          studyFiles,
+          concurrency.value
+        ).pipe(
+          Stream.tap((event) =>
+            Effect.sync(() => {
+              // React to each event in the stream
+              switch (event._tag) {
+                case "SendingStarted":
+                  setStudySendingProgress(event.studyId, {
+                    isProcessing: true,
+                    progress: 0,
+                    totalFiles: event.totalFiles,
+                    currentFile: undefined
+                  })
+                  break
+
+                case "SendingProgress":
+                  setStudySendingProgress(event.studyId, {
+                    isProcessing: true,
+                    progress: Math.round((event.completed / event.total) * 100),
+                    totalFiles: event.total,
+                    currentFile: event.currentFile
+                  })
+                  break
+
+                case "StudySent":
+                  // Update files with sent status
+                  event.files.forEach(sentFile => {
+                    const fileIndex = dicomFiles.value.findIndex(f => f.id === sentFile.id)
+                    if (fileIndex !== -1) {
+                      dicomFiles.value[fileIndex] = { ...dicomFiles.value[fileIndex], sent: true }
+                    }
+                  })
+                  removeStudySendingProgress(event.studyId)
+                  console.log(`Study ${event.studyId} sent successfully with ${event.files.length} files`)
+                  
+                  // Clear the anonymization cache for this study to prevent UID conflicts
+                  clearStudyCache(event.studyId)
+                  break
+
+                case "SendingError":
+                  console.error(`Sending error for study ${event.studyId}:`, event.error)
+                  removeStudySendingProgress(event.studyId)
+                  break
+              }
+            })
+          ),
+          Stream.runDrain,
+          Effect.catchAll(error =>
+            Effect.sync(() => {
+              console.error(`Error sending study ${study.studyInstanceUID}:`, error)
+              removeStudySendingProgress(study.studyInstanceUID)
+              // Don't rethrow to prevent stopping other concurrent studies
+            })
+          )
+        )
+      })
+
+      // Track successful and failed studies
+      const failedStudies: string[] = []
+      const successfulStudies: string[] = []
+
+      // Run all study streams concurrently with result tracking
       await runtime.runPromise(
-        dicomSender.handleSendSelectedEffect(selectedStudiesToSend, {
-          concurrency: concurrency.value,
-          dicomFiles: dicomFiles.value,
-          onUpdateFiles: (updatedFiles) => {
-            dicomFiles.value = updatedFiles
-          },
-          onUpdateStudies: (updatedStudies) => {
-            studies.value = updatedStudies
-          },
-          onSetSendingProgress: setStudySendingProgress,
-          onRemoveSendingProgress: removeStudySendingProgress,
-          onSuccessMessage: (message) => {
-            successMessage.value = message
-          }
-        })
+        Effect.all(studyStreamEffects.map((effect, index) =>
+          effect.pipe(
+            Effect.map(() => {
+              successfulStudies.push(selectedStudiesToSend[index].studyInstanceUID)
+              return true
+            }),
+            Effect.catchAll(() => {
+              failedStudies.push(selectedStudiesToSend[index].studyInstanceUID)
+              return Effect.succeed(false)
+            })
+          )
+        ), { concurrency: "unbounded" })
       )
+
+      // Show appropriate success/error message based on results
+      if (failedStudies.length === 0) {
+        successMessage.value = `Successfully sent ${successfulStudies.length} studies`
+      } else if (successfulStudies.length === 0) {
+        setAppError(new Error(`Failed to send all ${failedStudies.length} studies`))
+      } else {
+        successMessage.value = `Sent ${successfulStudies.length} of ${selectedStudiesToSend.length} studies. ${failedStudies.length} failed.`
+      }
+
     } catch (error) {
       console.error('Error in sending:', error)
       setAppError(error as Error)

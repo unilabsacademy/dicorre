@@ -6,7 +6,6 @@ import type { AnonymizationProgress } from '@/services/anonymizer'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'
 
 export function useAnonymizer() {
-  // UI state management with Vue refs
   const loading = ref(false)
   const error = ref<Error | null>(null)
   const progress = ref<AnonymizationProgress | null>(null)
@@ -68,12 +67,10 @@ export function useAnonymizer() {
   const progressPercentage = computed(() => progress.value?.percentage || 0)
 
   return {
-    // UI state
     loading,
     error,
     progress,
     progressPercentage,
-    // Stream-based anonymization
     anonymizeStudyStream,
     reset
   }
