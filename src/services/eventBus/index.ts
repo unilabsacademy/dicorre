@@ -1,33 +1,21 @@
 import { Effect, Context, Layer, PubSub } from "effect"
 import type { AnonymizationEvent, SendingEvent, FileProcessingEvent } from '@/types/events'
 
-/**
- * Event bus for anonymization events
- */
 export class AnonymizationEventBus extends Context.Tag("AnonymizationEventBus")<
   AnonymizationEventBus,
   PubSub.PubSub<AnonymizationEvent>
->() {}
+>() { }
 
-/**
- * Event bus for sending events
- */
 export class SendingEventBus extends Context.Tag("SendingEventBus")<
   SendingEventBus,
   PubSub.PubSub<SendingEvent>
->() {}
+>() { }
 
-/**
- * Event bus for file processing events
- */
 export class FileProcessingEventBus extends Context.Tag("FileProcessingEventBus")<
   FileProcessingEventBus,
   PubSub.PubSub<FileProcessingEvent>
->() {}
+>() { }
 
-/**
- * Layer for anonymization event bus
- */
 export const AnonymizationEventBusLive = Layer.scoped(
   AnonymizationEventBus,
   Effect.gen(function* () {
@@ -37,9 +25,6 @@ export const AnonymizationEventBusLive = Layer.scoped(
   })
 )
 
-/**
- * Layer for sending event bus
- */
 export const SendingEventBusLive = Layer.scoped(
   SendingEventBus,
   Effect.gen(function* () {
@@ -49,9 +34,6 @@ export const SendingEventBusLive = Layer.scoped(
   })
 )
 
-/**
- * Layer for file processing event bus
- */
 export const FileProcessingEventBusLive = Layer.scoped(
   FileProcessingEventBus,
   Effect.gen(function* () {
@@ -61,9 +43,6 @@ export const FileProcessingEventBusLive = Layer.scoped(
   })
 )
 
-/**
- * Combined event bus layer
- */
 export const EventBusLayer = Layer.mergeAll(
   AnonymizationEventBusLive,
   SendingEventBusLive,
