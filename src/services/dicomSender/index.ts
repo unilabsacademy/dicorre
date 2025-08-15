@@ -25,9 +25,6 @@ export class DicomSender extends Context.Tag("DicomSender")<
   }
 >() { }
 
-/**
- * Internal implementation class
- */
 class DicomSenderImpl {
   private static config: DicomServerConfig | null = null
 
@@ -110,7 +107,7 @@ class DicomSenderImpl {
           // Create proper multipart form data for STOW-RS
           const boundary = `boundary_${Date.now()}_${Math.random().toString(36).substring(2)}`
           const contentType = `multipart/related; type="application/dicom"; boundary=${boundary}`
-          
+
           // Build multipart body
           const textPart = [
             `--${boundary}`,
@@ -118,17 +115,17 @@ class DicomSenderImpl {
             '',
             ''
           ].join('\r\n')
-          
+
           const endBoundary = `\r\n--${boundary}--`
-          
+
           // Create the full body with binary data
           const textPartBytes = new TextEncoder().encode(textPart)
           const endBoundaryBytes = new TextEncoder().encode(endBoundary)
-          
+
           // Combine text part + DICOM data + end boundary
           const totalLength = textPartBytes.length + uint8Array.length + endBoundaryBytes.length
           const body = new Uint8Array(totalLength)
-          
+
           let offset = 0
           body.set(textPartBytes, offset)
           offset += textPartBytes.length

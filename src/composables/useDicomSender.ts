@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { Stream, Effect } from 'effect'
-import type { DicomFile, DicomStudy } from '@/types/dicom'
+import type { DicomFile } from '@/types/dicom'
 import type { SendingEvent } from '@/types/events'
 import { getSendingWorkerManager } from '@/workers/workerManager'
 import { ConfigService } from '@/services/config'

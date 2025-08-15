@@ -254,7 +254,7 @@ export function useAppState(runtime: RuntimeType) {
 
     try {
       successMessage.value = ''
-      
+
       // Process all studies concurrently using Effect.all for true parallelism (same pattern as anonymization)
       const studyStreamEffects = selectedStudiesToSend.map(study => {
         const studyFiles = study.series.flatMap(series => series.files).filter(file => file.anonymized)
@@ -288,15 +288,26 @@ export function useAppState(runtime: RuntimeType) {
 
                 case "StudySent":
                   // Update files with sent status
+                  console.log("StudySent", event)
                   event.files.forEach(sentFile => {
                     const fileIndex = dicomFiles.value.findIndex(f => f.id === sentFile.id)
                     if (fileIndex !== -1) {
                       dicomFiles.value[fileIndex] = { ...dicomFiles.value[fileIndex], sent: true }
                     }
                   })
+
+                  runtime.runPromise(
+                    Effect.gen(function* () {
+                      const processor = yield* DicomProcessor
+                      const updatedStudies = yield* processor.groupFilesByStudy(dicomFiles.value)
+                      studies.value = updatedStudies
+                      console.log(`Studies updated after ${event.studyId} completion`)
+                    })
+                  )
+
                   removeStudySendingProgress(event.studyId)
                   console.log(`Study ${event.studyId} sent successfully with ${event.files.length} files`)
-                  
+
                   // Clear the anonymization cache for this study to prevent UID conflicts
                   clearStudyCache(event.studyId)
                   break
