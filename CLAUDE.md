@@ -69,6 +69,10 @@ TODO
 
 When testing the web app with Playwright e2e test or using the Playwright MCP:
 
+### NEVER USE TIMEOUTS
+- Never use timouts to wait for processes to complete
+- Prefer playright tools like { waitUntil: 'networkIdle' } or waiting for expected UI state
+
 ### File Upload Testing
 - **Issue**: File uploads require clicking the file label to trigger the browser's file chooser
 - **Solution**:
@@ -98,3 +102,10 @@ When testing the web app with Playwright e2e test or using the Playwright MCP:
 - You find examples of .py and .ts scripts in the /scripts folder
 - Delete scripts if only used temporarily but keet them if they can be useful for reference in the future
 - For python scripts use uv to run with requirements in header as in examples
+
+# Documentation
+-----------------
+Some documentation can be found in /docs folder but be aware that much of it is outdated.
+
+Vue: https://vuejs.org/llms.txt
+Nuxt: https://nuxt.com/llms.txt

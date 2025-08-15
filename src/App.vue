@@ -19,12 +19,15 @@ import {
 } from '@/components/ui/dropdown-menu'
 import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
+import ConfigLoader from '@/components/ConfigLoader.vue'
+import { Toaster } from '@/components/ui/sonner'
 import {
   Shield,
   Send,
   Trash2,
   Settings2,
-  Wifi
+  Wifi,
+  Server
 } from 'lucide-vue-next'
 
 const runtime = ManagedRuntime.make(AppLayer)
@@ -94,6 +97,10 @@ async function handleSendSelected(selectedStudiesToSend: DicomStudy[]) {
 function clearFiles() {
   appState.clearFiles()
   clearSession()
+}
+
+function handleConfigLoaded() {
+  appState.handleConfigReload()
 }
 
 const {
@@ -228,6 +235,16 @@ onUnmounted(() => {
             variant="default"
             data-testid="selected-count-badge"
           >{{ appState.selectedStudiesCount }} Selected</Badge>
+          
+          <!-- Display current config info -->
+          <div class="flex items-center gap-2 ml-4 text-sm text-muted-foreground">
+            <span data-testid="current-profile">{{ appState.config.value?.profile || 'basic' }}</span>
+            <span class="text-muted-foreground/50">|</span>
+            <span class="flex items-center gap-1" data-testid="server-url-display">
+              <Server class="w-3 h-3" />
+              {{ appState.serverUrl.value || 'No server configured' }}
+            </span>
+          </div>
         </div>
 
         <div class="flex items-center gap-2">
@@ -263,6 +280,8 @@ onUnmounted(() => {
             Clear All
           </Button>
 
+          <ConfigLoader @config-loaded="handleConfigLoaded" />
+          
           <DropdownMenu>
             <DropdownMenuTrigger asChild>
               <Button
@@ -360,5 +379,8 @@ onUnmounted(() => {
 
     <!-- Worker Debug Panel -->
     <WorkerDebugPanel />
+    
+    <!-- Toast Notifications -->
+    <Toaster />
   </div>
 </template>

@@ -27,6 +27,7 @@ export function useAppState(runtime: RuntimeType) {
   const config = ref<AnonymizationConfig | null>(null)
   const configLoading = ref(false)
   const configError = ref<Error | null>(null)
+  const serverUrl = ref<string>('')
 
   // Initialize composables
   const fileProcessing = useFileProcessing()
@@ -73,6 +74,29 @@ export function useAppState(runtime: RuntimeType) {
     } finally {
       configLoading.value = false
     }
+  }
+
+  // Load server URL from config
+  const loadServerUrl = async () => {
+    try {
+      const url = await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          const config = yield* configService.getServerConfig
+          return config.url
+        })
+      )
+      serverUrl.value = url
+    } catch (err) {
+      console.error('Failed to load server URL:', err)
+      serverUrl.value = ''
+    }
+  }
+
+  // Handle config reload event
+  const handleConfigReload = async () => {
+    await loadConfig()
+    await loadServerUrl()
   }
 
   const processNewFiles = async (newFiles: File[], isAppReady: boolean) => {
@@ -388,6 +412,7 @@ export function useAppState(runtime: RuntimeType) {
   // Load configuration on mount
   onMounted(() => {
     loadConfig()
+    loadServerUrl()
   })
 
   return {
@@ -401,6 +426,7 @@ export function useAppState(runtime: RuntimeType) {
     config,
     configLoading,
     configError,
+    serverUrl,
 
     // Computed
     selectedStudies,
@@ -416,6 +442,8 @@ export function useAppState(runtime: RuntimeType) {
     setAppError,
     clearAppError,
     loadConfig,
+    loadServerUrl,
+    handleConfigReload,
     processNewFiles,
     addFilesToUploaded,
     processFiles,

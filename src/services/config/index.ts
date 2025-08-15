@@ -2,6 +2,7 @@ import { Effect, Context, Layer } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig } from '@/types/dicom'
 import { ConfigurationError, ValidationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
+import { validateAppConfig, type ValidatedAppConfig } from './schema'
 
 /**
  * Configuration service as proper Effect service
@@ -11,11 +12,13 @@ export class ConfigService extends Context.Tag("ConfigService")<
   {
     readonly getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType>
     readonly getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
-    readonly getAnonymizationPreset: (presetName: string) => Effect.Effect<AnonymizationConfig, ConfigurationErrorType | ValidationError>
+    readonly getAnonymizationPreset: (presetName: string) => Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
     readonly getPresets: Effect.Effect<Record<string, { profile: string; description: string }>, never>
     readonly getTagDescription: (tagId: string) => Effect.Effect<string, never>
     readonly getTagsToRemove: Effect.Effect<string[], never>
     readonly validateConfig: (config: AppConfig) => Effect.Effect<void, ConfigurationErrorType>
+    readonly loadConfig: (configData: unknown) => Effect.Effect<void, ConfigurationErrorType>
+    readonly getCurrentConfig: Effect.Effect<AppConfig, never>
   }
 >() { }
 
@@ -89,12 +92,13 @@ class ConfigServiceImpl {
   /**
    * Get anonymization preset by name
    */
-  static getAnonymizationPreset = (presetName: string): Effect.Effect<AnonymizationConfig, ConfigurationErrorType | ValidationError> =>
+  static getAnonymizationPreset = (presetName: string): Effect.Effect<AnonymizationConfig, ConfigurationErrorType> =>
     Effect.gen(function* () {
       if (!presetName || presetName.trim() === '') {
-        return yield* Effect.fail(new ValidationError({
+        return yield* Effect.fail(new ConfigurationError({
           message: 'Preset name cannot be empty',
-          fileName: presetName
+          setting: `presets.${presetName}`,
+          value: presetName
         }))
       }
 
@@ -156,6 +160,74 @@ class ConfigServiceImpl {
    */
   static getTagsToRemove: Effect.Effect<string[], never> =
     Effect.succeed(ConfigServiceImpl.config.anonymization.tagsToRemove || [])
+
+  /**
+   * Load and validate a new configuration
+   */
+  static loadConfig = (configData: unknown): Effect.Effect<void, ConfigurationErrorType> =>
+    Effect.gen(function* () {
+      // Validate the configuration using Schema
+      const validationResult = yield* validateAppConfig(configData).pipe(
+        Effect.mapError((error) => {
+          // Parse the error to extract meaningful user-friendly message
+          const errorMessage = error.message
+          
+          // Extract specific validation errors from the detailed schema error
+          if (errorMessage.includes('DICOM server URL is required') || errorMessage.includes('is missing')) {
+            return new ConfigurationError({
+              message: 'DICOM server URL is required',
+              setting: 'dicomServer.url',
+              value: configData
+            })
+          }
+          
+          if (errorMessage.includes('URL must start with / or http')) {
+            return new ConfigurationError({
+              message: 'URL must start with / or http',
+              setting: 'dicomServer.url',
+              value: configData
+            })
+          }
+          
+          if (errorMessage.includes('dateJitterDays must be <= 365') || (errorMessage.includes('dateJitterDays') && errorMessage.includes('365'))) {
+            return new ConfigurationError({
+              message: 'Invalid dateJitterDays: must be between 0 and 365',
+              setting: 'anonymization.dateJitterDays',
+              value: configData
+            })
+          }
+          
+          if (errorMessage.includes('Expected "basic"') || errorMessage.includes('Expected "clean"') || errorMessage.includes('Expected "very-clean"') || errorMessage.includes('"basic" | "clean" | "very-clean"') || (errorMessage.includes('actual') && (errorMessage.includes('"basic"') || errorMessage.includes('"clean"') || errorMessage.includes('"very-clean"')))) {
+            return new ConfigurationError({
+              message: 'Invalid anonymization profile',
+              setting: 'anonymization.profile',
+              value: configData
+            })
+          }
+          
+          // Fallback for other validation errors
+          return new ConfigurationError({
+            message: `Configuration validation failed: ${errorMessage}`,
+            setting: 'config',
+            value: configData
+          })
+        })
+      )
+
+      // Additional business logic validation
+      yield* ConfigServiceImpl.validateConfig(validationResult as AppConfig)
+
+      // If validation passes, update the internal config
+      ConfigServiceImpl.config = validationResult as AppConfig
+
+      console.log('Configuration loaded successfully:', ConfigServiceImpl.config)
+    })
+
+  /**
+   * Get the current configuration
+   */
+  static getCurrentConfig: Effect.Effect<AppConfig, never> =
+    Effect.succeed(ConfigServiceImpl.config)
 }
 
 /**
@@ -170,7 +242,9 @@ export const ConfigServiceLive = Layer.succeed(
     getPresets: ConfigServiceImpl.getPresets,
     getTagDescription: ConfigServiceImpl.getTagDescription,
     getTagsToRemove: ConfigServiceImpl.getTagsToRemove,
-    validateConfig: ConfigServiceImpl.validateConfig
+    validateConfig: ConfigServiceImpl.validateConfig,
+    loadConfig: ConfigServiceImpl.loadConfig,
+    getCurrentConfig: ConfigServiceImpl.getCurrentConfig
   })
 )
 

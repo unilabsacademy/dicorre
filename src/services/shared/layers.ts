@@ -92,7 +92,24 @@ export const TestConfigLayer = Layer.succeed(
     getPresets: Effect.succeed({}),
     getTagDescription: (tagId: string) => Effect.succeed(tagId),
     getTagsToRemove: Effect.succeed([]),
-    validateConfig: (config: AppConfig) => Effect.succeed(undefined)
+    validateConfig: (config: AppConfig) => Effect.succeed(undefined),
+    loadConfig: (configData: unknown) => Effect.succeed(undefined),
+    getCurrentConfig: Effect.succeed({
+      dicomServer: {
+        url: 'http://localhost:8042',
+        description: 'Test server'
+      },
+      anonymization: {
+        profile: 'basic',
+        removePrivateTags: true,
+        useCustomHandlers: true,
+        dateJitterDays: 30,
+        preserveTags: [],
+        tagsToRemove: [],
+        customReplacements: {},
+        replacements: {}
+      }
+    })
   })
 )
 

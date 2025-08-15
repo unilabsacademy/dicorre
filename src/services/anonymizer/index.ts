@@ -8,7 +8,7 @@ import {
 } from '@umessen/dicom-deidentifier'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
-import { getAllSpecialHandlers, clearStudyCache } from './handlers'
+import { getAllSpecialHandlers } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
 import { AnonymizationError, type AnonymizerError } from '@/types/effects'
 
