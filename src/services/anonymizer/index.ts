@@ -83,8 +83,17 @@ class AnonymizerImpl {
       const deidentifierConfig: DeidentifyOptions = {
         profileOptions,
         dummies: {
-          default: processedReplacements.default,
-          lookup: config.customReplacements || {},
+          default: processedReplacements.default || 'REMOVED',
+          lookup: {
+            // Use config replacements with fallbacks
+            '00100010': processedReplacements.patientName || 'ANONYMOUS', // Patient Name
+            '00100020': processedReplacements.patientId || 'ANON001', // Patient ID
+            '00100030': processedReplacements.patientBirthDate || '19000101', // Patient Birth Date
+            '00080080': processedReplacements.institution || 'ANONYMIZED', // Institution Name
+            '00080050': processedReplacements.accessionNumber || 'ANON0000000', // Accession Number
+            // Add any custom replacements
+            ...config.customReplacements
+          }
         },
         keep: config.preserveTags,
         getReferenceDate: getDicomReferenceDate,

@@ -103,7 +103,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         replacements: {
           accessionNumber: 'ACA{timestamp}',
           patientId: 'PAT{timestamp}',
-          patientName: 'ANONYMOUS'
+          patientName: 'ANONYMOUS TEST'
         }
       }
 
@@ -125,7 +125,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         if (typeof result.metadata.patientName === 'string') {
           expect(result.metadata.patientName).toBe('ANONYMOUS')
         } else if (result.metadata.patientName && typeof result.metadata.patientName === 'object') {
-          expect((result.metadata.patientName as any).Alphabetic).toBe('ANONYMOUS')
+          expect((result.metadata.patientName as any).Alphabetic).toBe('ANONYMOUS TEST')
         }
       }
     })
