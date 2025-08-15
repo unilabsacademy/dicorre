@@ -4,7 +4,6 @@
  */
 
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
-import { OPFSWorkerHelper } from '../services/opfsStorage/opfsWorkerHelper'
 
 // Debug message interface
 export interface DebugMessage {
@@ -328,64 +327,22 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
   }
 
   protected async prepareJobData(job: AnonymizationJob): Promise<any> {
-    // Save files to OPFS and create file references
-    this.logDebug('message', `Saving ${job.files.length} files to OPFS for worker processing`, undefined, job.studyId)
+    this.logDebug('message', `Preparing ${job.files.length} files for worker processing`, undefined, job.studyId)
     
-    // Create minimal file references for worker - only essential data
-    const fileReferences = await Promise.all(
-      job.files.map(async (file, index) => {
-        // Generate unique OPFS file ID if not already set
-        const opfsFileId = file.opfsFileId || `${job.studyId}_${file.id}_${Date.now()}_${index}`
-        
-        // Save file to OPFS if not already there (establish source of truth)
-        if (!file.opfsFileId) {
-          this.logDebug('message', `Saving file ${file.fileName} to OPFS (${opfsFileId})`, undefined, job.studyId)
-          await OPFSWorkerHelper.saveFile(opfsFileId, file.arrayBuffer)
-        }
+    // Pass full files to worker - worker will handle OPFS storage
+    const files = job.files.map((file, index) => ({
+      id: file.id,
+      fileName: file.fileName,
+      arrayBuffer: file.arrayBuffer,
+      opfsFileId: file.opfsFileId || `${job.studyId}_${file.id}_${Date.now()}_${index}`
+    }))
 
-        // Return minimal reference - only what worker needs
-        return {
-          id: file.id,
-          fileName: file.fileName,
-          opfsFileId
-        }
-      })
-    )
-
-    this.logDebug('message', `Sending ${fileReferences.length} file references and config to worker`, undefined, job.studyId)
-
-    // Create serializable config - only include essential properties
-    const serializableConfig = {
-      profile: job.config.profile,
-      removePrivateTags: job.config.removePrivateTags,
-      useCustomHandlers: job.config.useCustomHandlers,
-      dateJitterDays: job.config.dateJitterDays,
-      organizationRoot: job.config.organizationRoot,
-      replacements: job.config.replacements ? 
-        Object.fromEntries(
-          Object.entries(job.config.replacements).filter(([k, v]) => 
-            typeof k === 'string' && typeof v === 'string'
-          )
-        ) : undefined,
-      preserveTags: Array.isArray(job.config.preserveTags) ? 
-        job.config.preserveTags.filter(tag => typeof tag === 'string') : undefined,
-      tagsToRemove: Array.isArray(job.config.tagsToRemove) ?
-        job.config.tagsToRemove.filter(tag => typeof tag === 'string') : undefined,
-      customReplacements: job.config.customReplacements ? 
-        Object.fromEntries(
-          Object.entries(job.config.customReplacements).filter(([k, v]) => 
-            typeof k === 'string' && typeof v === 'string'
-          )
-        ) : undefined
-    }
-
-    // Send job to worker with file references and serializable configuration
     return {
       type: 'anonymize_study',
       data: {
         studyId: job.studyId,
-        files: fileReferences,
-        config: serializableConfig, // Pass serializable config
+        files,
+        config: job.config,
         concurrency: job.concurrency
       }
     }
@@ -406,43 +363,22 @@ export class SendingWorkerManager extends WorkerManager<SendingJob> {
   }
 
   protected async prepareJobData(job: SendingJob): Promise<any> {
-    // For sending, we need files to be available in OPFS
     this.logDebug('message', `Preparing ${job.files.length} files for sending`, undefined, job.studyId)
     
-    // Ensure all files are in OPFS and create minimal file references
-    const fileReferences = await Promise.all(
-      job.files.map(async (file, index) => {
-        // Use existing OPFS file ID if available, otherwise generate one
-        const opfsFileId = file.opfsFileId || `${job.studyId}_${file.id}_${Date.now()}_${index}`
-        
-        // Save file to OPFS if not already there
-        if (!file.opfsFileId) {
-          this.logDebug('message', `Saving file ${file.fileName} to OPFS (${opfsFileId})`, undefined, job.studyId)
-          await OPFSWorkerHelper.saveFile(opfsFileId, file.arrayBuffer)
-        }
-
-        // Return minimal serializable reference - only what worker needs
-        return {
-          id: file.id,
-          fileName: file.fileName,
-          opfsFileId: file.opfsFileId || opfsFileId,
-          // Only include essential metadata that can be serialized
-          metadata: file.metadata ? {
-            sopInstanceUID: file.metadata.sopInstanceUID,
-            studyInstanceUID: file.metadata.studyInstanceUID,
-            seriesInstanceUID: file.metadata.seriesInstanceUID
-          } : undefined
-        }
-      })
-    )
-
-    this.logDebug('message', `Sending ${fileReferences.length} file references to sending worker`, undefined, job.studyId)
+    // Pass full files to worker - worker will handle OPFS storage
+    const files = job.files.map((file, index) => ({
+      id: file.id,
+      fileName: file.fileName,
+      arrayBuffer: file.arrayBuffer,
+      opfsFileId: file.opfsFileId || `${job.studyId}_${file.id}_${Date.now()}_${index}`,
+      metadata: file.metadata
+    }))
 
     return {
       type: 'send_study',
       data: {
         studyId: job.studyId,
-        files: fileReferences,
+        files,
         serverConfig: job.serverConfig,
         concurrency: job.concurrency
       }
