@@ -125,8 +125,6 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <Toaster />
-
   <div
     class="min-h-screen bg-background p-6 relative"
     @dragenter="(event) => handleGlobalDragEnter(event)"
@@ -385,5 +383,8 @@ onUnmounted(() => {
 
     <!-- Worker Debug Panel -->
     <WorkerDebugPanel />
+
+    <!-- Toast Notifications -->
+    <Toaster />
   </div>
 </template>
