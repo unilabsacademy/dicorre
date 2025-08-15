@@ -117,9 +117,6 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <pre>
-  {{ studiesData[0] }}
-  </pre>
   <div
     class="min-h-screen bg-background p-6 relative"
     @dragenter="(event) => handleGlobalDragEnter(event)"

@@ -141,6 +141,14 @@ describe('ConfigService (Effect Service Testing)', () => {
   })
 
   describe('Error handling', () => {
-    // Error handling tests for configuration-related operations
+    it('should handle service errors gracefully', async () => {
+      // Basic error handling test
+      await expect(
+        runTest(Effect.gen(function* () {
+          const configService = yield* ConfigService
+          return yield* configService.getAnonymizationPreset('invalid-preset')
+        }))
+      ).rejects.toThrow()
+    })
   })
 })

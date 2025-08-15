@@ -255,7 +255,7 @@ export function useAppState(runtime: RuntimeType) {
     try {
       successMessage.value = ''
 
-      // Process all studies concurrently using Effect.all for true parallelism (same pattern as anonymization)
+      // Filter out any files that are not marked as anonymized
       const studyStreamEffects = selectedStudiesToSend.map(study => {
         const studyFiles = study.series.flatMap(series => series.files).filter(file => file.anonymized)
 
@@ -266,7 +266,6 @@ export function useAppState(runtime: RuntimeType) {
         ).pipe(
           Stream.tap((event) =>
             Effect.sync(() => {
-              // React to each event in the stream
               switch (event._tag) {
                 case "SendingStarted":
                   setStudySendingProgress(event.studyId, {
@@ -296,6 +295,7 @@ export function useAppState(runtime: RuntimeType) {
                     }
                   })
 
+                  // Update studies with dicomFiles to reflect changes in UI
                   runtime.runPromise(
                     Effect.gen(function* () {
                       const processor = yield* DicomProcessor
