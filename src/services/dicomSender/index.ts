@@ -37,7 +37,7 @@ export class DicomSender extends Context.Tag("DicomSender")<
     readonly getAllTransmissionStates: Effect.Effect<any[], never>
     readonly isTransmitting: (studyId: string) => Effect.Effect<boolean, never>
   }
->() {}
+>() { }
 
 /**
  * Internal implementation class
@@ -45,9 +45,6 @@ export class DicomSender extends Context.Tag("DicomSender")<
 class DicomSenderImpl {
   private static config: DicomServerConfig | null = null
 
-  /**
-   * Initialize with config from ConfigService
-   */
   private static initConfig(): Effect.Effect<void, DicomSenderError, ConfigService> {
     return Effect.gen(function* () {
       const configService = yield* ConfigService
@@ -55,9 +52,6 @@ class DicomSenderImpl {
     })
   }
 
-  /**
-   * Get current config or initialize from ConfigService
-   */
   private static getConfigInternal(): Effect.Effect<DicomServerConfig, DicomSenderError, ConfigService> {
     return Effect.gen(function* () {
       if (!DicomSenderImpl.config) {
@@ -67,9 +61,6 @@ class DicomSenderImpl {
     })
   }
 
-  /**
-   * Effect-based connection testing
-   */
   static testConnection: Effect.Effect<boolean, DicomSenderError, ConfigService> = Effect.gen(function* () {
     const config = yield* DicomSenderImpl.getConfigInternal()
 
@@ -84,7 +75,6 @@ class DicomSenderImpl {
       },
       catch: (error) => new NetworkError({
         message: `Failed to connect to DICOM server: ${config.url}`,
-        serverUrl: config.url,
         cause: error
       })
     })
@@ -92,14 +82,10 @@ class DicomSenderImpl {
     return result
   })
 
-  /**
-   * Effect-based file sending
-   */
   static sendFile = (file: DicomFile): Effect.Effect<void, DicomSenderError, ConfigService> =>
     Effect.gen(function* () {
       const config = yield* DicomSenderImpl.getConfigInternal()
 
-      // Validate file
       if (!file.arrayBuffer || file.arrayBuffer.byteLength === 0) {
         return yield* Effect.fail(new ValidationError({
           message: `File ${file.fileName} has no data`,
@@ -117,8 +103,7 @@ class DicomSenderImpl {
       yield* Effect.tryPromise({
         try: async () => {
           console.log(`Sending DICOM file: ${file.fileName}`)
-          
-          // Prepare headers with auth if provided
+
           const headers: Record<string, string> = {
             'Accept': 'multipart/related; type="application/dicom"',
             ...config.headers
@@ -141,7 +126,7 @@ class DicomSenderImpl {
 
           // Convert ArrayBuffer to Uint8Array for dicomweb-client
           const uint8Array = new Uint8Array(file.arrayBuffer)
-          
+
           // Store instance using DICOM web STOW-RS
           await client.storeInstances({
             datasets: [uint8Array]
@@ -150,9 +135,7 @@ class DicomSenderImpl {
           console.log(`Successfully sent ${file.fileName} to DICOM server`)
         },
         catch: (error) => new NetworkError({
-          message: `Failed to send file ${file.fileName} to DICOM server`,
-          serverUrl: config.url,
-          fileName: file.fileName,
+          message: `Failed to send file ${file.fileName} to DICOM server - ${config.url}`,
           cause: error
         })
       })
@@ -184,13 +167,13 @@ class DicomSenderImpl {
 
       // Get transmission tracker
       const transmissionTracker = getTransmissionTracker()
-      
+
       // Start tracking transmission
       transmissionTracker.startTransmission(study.studyInstanceUID, allFiles.length)
 
       // Convert to worker-compatible format
       const workerManager = getSendingWorkerManager()
-      
+
       // Create a promise that will be resolved when the worker completes
       const sendingPromise = new Promise<DicomFile[]>((resolve, reject) => {
         const sendingJob: SendingJob = {
@@ -211,7 +194,7 @@ class DicomSenderImpl {
               percentage: progress.percentage,
               currentFile: progress.currentFile
             })
-            
+
             // Convert worker progress format to DicomSender progress format
             onProgress({
               total: progress.total,

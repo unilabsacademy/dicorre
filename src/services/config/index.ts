@@ -12,7 +12,6 @@ export class ConfigService extends Context.Tag("ConfigService")<
     readonly getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType>
     readonly getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
     readonly getAnonymizationPreset: (presetName: string) => Effect.Effect<AnonymizationConfig, ConfigurationErrorType | ValidationError>
-    readonly processReplacements: (replacements: Record<string, string>, sharedTimestamp?: string) => Effect.Effect<Record<string, string>, ConfigurationErrorType | ValidationError>
     readonly getPresets: Effect.Effect<Record<string, { profile: string; description: string }>, never>
     readonly getTagDescription: (tagId: string) => Effect.Effect<string, never>
     readonly getTagsToRemove: Effect.Effect<string[], never>
@@ -127,45 +126,6 @@ class ConfigServiceImpl {
       return mergedConfig
     })
 
-  /**
-   * Process replacement patterns (e.g., {timestamp} -> actual timestamp)
-   * Optional timestamp parameter ensures consistent values across multiple files
-   */
-  static processReplacements = (replacements: Record<string, string>, sharedTimestamp?: string): Effect.Effect<Record<string, string>, ConfigurationErrorType | ValidationError> =>
-    Effect.gen(function* () {
-      if (!replacements || typeof replacements !== 'object') {
-        return yield* Effect.fail(new ValidationError({
-          message: 'Replacements must be a valid object',
-          fileName: 'replacements'
-        }))
-      }
-
-      const processed: Record<string, string> = {}
-      // Use shared timestamp if provided, otherwise generate new one
-      const timestamp = sharedTimestamp || Date.now().toString().slice(-7)
-
-      for (const [key, value] of Object.entries(replacements)) {
-        if (typeof value !== 'string') {
-          return yield* Effect.fail(new ConfigurationError({
-            message: `Replacement value for '${key}' must be a string`,
-            setting: `replacements.${key}`,
-            value: value
-          }))
-        }
-
-        try {
-          processed[key] = value.replace('{timestamp}', timestamp)
-        } catch (error) {
-          return yield* Effect.fail(new ConfigurationError({
-            message: `Failed to process replacement for '${key}': ${error}`,
-            setting: `replacements.${key}`,
-            value: value,
-          }))
-        }
-      }
-
-      return processed
-    })
 
   /**
    * Get all available presets
@@ -207,7 +167,6 @@ export const ConfigServiceLive = Layer.succeed(
     getServerConfig: ConfigServiceImpl.getServerConfig,
     getAnonymizationConfig: ConfigServiceImpl.getAnonymizationConfig,
     getAnonymizationPreset: ConfigServiceImpl.getAnonymizationPreset,
-    processReplacements: ConfigServiceImpl.processReplacements,
     getPresets: ConfigServiceImpl.getPresets,
     getTagDescription: ConfigServiceImpl.getTagDescription,
     getTagsToRemove: ConfigServiceImpl.getTagsToRemove,

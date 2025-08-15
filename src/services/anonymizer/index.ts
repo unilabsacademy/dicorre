@@ -8,7 +8,6 @@ import {
 } from '@umessen/dicom-deidentifier'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
-import { ConfigService } from '../config'
 import { getAllSpecialHandlers } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
 import { AnonymizationError, type AnonymizerError } from '@/types/effects'
@@ -30,8 +29,8 @@ export interface StudyAnonymizationResult {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string) => Effect.Effect<DicomFile, AnonymizerError, DicomProcessor | ConfigService>
-    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor | ConfigService>
+    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string) => Effect.Effect<DicomFile, AnonymizerError, DicomProcessor>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor>
   }
 >() { }
 
@@ -39,13 +38,21 @@ export class Anonymizer extends Context.Tag("Anonymizer")<
  * Internal implementation class
  */
 class AnonymizerImpl {
-  /**
-   * Effect-based file anonymization with service dependencies
-   * Optional sharedTimestamp parameter to ensure consistent values across multiple files
-   */
-  static anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string): Effect.Effect<DicomFile, AnonymizerError, DicomProcessor | ConfigService> =>
+  private static processReplacements = (replacements: Record<string, string>, sharedTimestamp?: string): Record<string, string> => {
+    const processed: Record<string, string> = {}
+    const timestamp = sharedTimestamp || Date.now().toString().slice(-7)
+
+    for (const [key, value] of Object.entries(replacements)) {
+      if (typeof value === 'string') {
+        processed[key] = value.replace('{timestamp}', timestamp)
+      }
+    }
+
+    return processed
+  }
+
+  static anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string): Effect.Effect<DicomFile, AnonymizerError, DicomProcessor> =>
     Effect.gen(function* () {
-      const configService = yield* ConfigService
       const dicomProcessor = yield* DicomProcessor
 
       // Check if file has metadata
@@ -58,10 +65,10 @@ class AnonymizerImpl {
 
       console.log(`Starting anonymization of file: ${file.fileName}`)
 
-      // Get processed replacements from config service with optional shared timestamp
+      // Process replacements with optional shared timestamp
       console.log('Processing replacements from config:', config.replacements)
-      const processedReplacements = yield* configService.processReplacements(
-        (config.replacements || {}) as Record<string, string>,
+      const processedReplacements = AnonymizerImpl.processReplacements(
+        config.replacements || {},
         sharedTimestamp
       )
       console.log('Processed replacements result:', processedReplacements)
@@ -169,16 +176,12 @@ class AnonymizerImpl {
       return finalFile
     })
 
-  /**
-   * Anonymize study with coordinated file processing
-   * This is the main orchestration method that should be used for study-level anonymization
-   */
   static anonymizeStudy = (
     studyId: string,
     files: DicomFile[],
     config: AnonymizationConfig,
     options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void } = {}
-  ): Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor | ConfigService> =>
+  ): Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor> =>
     Effect.gen(function* () {
       const { concurrency = 3, onProgress } = options
 
@@ -240,9 +243,6 @@ class AnonymizerImpl {
     })
 }
 
-/**
- * Live implementation layer with dependencies
- */
 export const AnonymizerLive = Layer.succeed(
   Anonymizer,
   Anonymizer.of({

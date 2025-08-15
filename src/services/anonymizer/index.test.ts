@@ -4,7 +4,6 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { Anonymizer, AnonymizerLive } from './index'
 import { DicomProcessor, DicomProcessorLive } from '../dicomProcessor'
-import { ConfigService, ConfigServiceLive } from '../config'
 import { EventBusLayer } from '../eventBus'
 import { Layer } from 'effect'
 import { clearValueCache } from './handlers'
@@ -31,8 +30,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
   const testLayer = Layer.mergeAll(
     EventBusLayer,
     AnonymizerLive,
-    DicomProcessorLive,
-    ConfigServiceLive
+    DicomProcessorLive
   )
 
   const runTest = <A, E>(effect: Effect.Effect<A, E, any>) =>
@@ -42,48 +40,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
     clearValueCache()
   })
 
-  describe('Configuration processing', () => {
-    it('should process replacement patterns correctly', async () => {
-      const replacements = {
-        accessionNumber: 'ACA{timestamp}',
-        patientId: 'PAT{timestamp}',
-        patientName: 'ANONYMOUS'
-      }
-
-      const result = await runTest(Effect.gen(function* () {
-        const configService = yield* ConfigService
-        return yield* configService.processReplacements(replacements)
-      }))
-
-      expect(result.accessionNumber).toMatch(/^ACA\d{7}$/)
-      expect(result.patientId).toMatch(/^PAT\d{7}$/)
-      expect(result.patientName).toBe('ANONYMOUS')
-    })
-  })
-
   describe('Configuration integration', () => {
-    it('should process timestamp patterns from config correctly', async () => {
-      const configWithTimestamps: AnonymizationConfig = {
-        profile: 'basic',
-        removePrivateTags: true,
-        useCustomHandlers: true,
-        replacements: {
-          accessionNumber: 'ACA{timestamp}',
-          patientId: 'PAT{timestamp}',
-          patientName: 'ANONYMOUS'
-        }
-      }
-
-      const result = await runTest(Effect.gen(function* () {
-        const configService = yield* ConfigService
-        return yield* configService.processReplacements(configWithTimestamps.replacements as Record<string, string>)
-      }))
-
-      expect(result.accessionNumber).toMatch(/^ACA\d{7}$/)
-      expect(result.patientId).toMatch(/^PAT\d{7}$/)
-      expect(result.patientName).toBe('ANONYMOUS')
-    })
-
     it('should anonymize file using config-based replacements', async () => {
       const dicomFile = loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
       console.log(dicomFile)

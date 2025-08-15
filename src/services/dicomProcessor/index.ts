@@ -13,13 +13,7 @@ export class DicomProcessor extends Context.Tag("DicomProcessor")<
   }
 >() { }
 
-/**
- * Internal implementation class
- */
 class DicomProcessorImpl {
-  /**
-   * Effect-based DICOM file validation
-   */
   static validateFile = (file: DicomFile): Effect.Effect<void, ValidationError> =>
     Effect.gen(function* () {
       if (!file.arrayBuffer || file.arrayBuffer.byteLength === 0) {
@@ -60,23 +54,17 @@ class DicomProcessorImpl {
       }
     })
 
-  /**
-   * Effect-based DICOM file parsing
-   */
   static parseFile = (file: DicomFile): Effect.Effect<DicomFile, DicomProcessorError> =>
     Effect.gen(function* () {
-      // Validate the file first
       yield* DicomProcessorImpl.validateFile(file)
 
       const result = yield* Effect.try({
         try: () => {
           console.log(`Parsing DICOM file: ${file.fileName}`)
 
-          // Parse with dcmjs
           const dataset = dcmjs.data.DicomMessage.readFile(file.arrayBuffer)
           const dict = dataset.dict
 
-          // Extract metadata
           const metadata: DicomMetadata = {
             accessionNumber: dict['00080050']?.Value?.[0] || '',
             patientName: dict['00100010']?.Value?.[0] || 'Unknown',
@@ -114,9 +102,6 @@ class DicomProcessorImpl {
       return result
     })
 
-  /**
-   * Parse multiple files concurrently
-   */
   static parseFiles = (files: DicomFile[], concurrency = 3): Effect.Effect<DicomFile[], DicomProcessorError> =>
     Effect.gen(function* () {
       if (files.length === 0) {
@@ -136,9 +121,6 @@ class DicomProcessorImpl {
       return successfulResults
     })
 
-  /**
-   * Group files by patient/study/series
-   */
   static groupFilesByStudy = (files: DicomFile[]): Effect.Effect<DicomStudy[], DicomProcessorError> =>
     Effect.sync(() => {
       const studyMap = new Map<string, DicomStudy>()
@@ -161,10 +143,8 @@ class DicomProcessorImpl {
           modality
         } = file.metadata
 
-        // Create study key that includes both patient and study info
         const studyKey = `${patientId}|${studyInstanceUID}`
 
-        // Get or create study
         if (!studyMap.has(studyKey)) {
           studyMap.set(studyKey, {
             accessionNumber: accessionNumber || '',
@@ -179,7 +159,6 @@ class DicomProcessorImpl {
 
         const study = studyMap.get(studyKey)!
 
-        // Find or create series
         let series = study.series.find(s => s.seriesInstanceUID === seriesInstanceUID)
         if (!series) {
           series = {
@@ -191,7 +170,6 @@ class DicomProcessorImpl {
           study.series.push(series)
         }
 
-        // Add file to series
         series.files.push(file)
       }
 
@@ -214,9 +192,6 @@ class DicomProcessorImpl {
     })
 }
 
-/**
- * Live implementation layer with ConfigService dependency
- */
 export const DicomProcessorLive = Layer.succeed(
   DicomProcessor,
   DicomProcessor.of({

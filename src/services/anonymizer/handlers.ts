@@ -15,13 +15,13 @@ const valueCache = new Map<string, Map<string, string>>()
 function generateUID(): string {
   // Using a sample organization root - should be configured per deployment
   const ORG_ROOT = '1.2.826.0.1.3680043.8.498'
-  
+
   // Generate a UUID-based identifier
   const uuid = crypto.randomUUID().replace(/-/g, '')
   const bigintUid = parseInt(uuid.substring(0, 16), 16).toString()
-  
+
   const fullUid = `${ORG_ROOT}.${bigintUid}`
-  
+
   // DICOM UID is limited to 64 characters
   return fullUid.substring(0, 64)
 }
@@ -57,15 +57,15 @@ function getCachedValue(fieldName: string, originalValue: string): string {
   if (!valueCache.has(fieldName)) {
     valueCache.set(fieldName, new Map())
   }
-  
+
   const fieldCache = valueCache.get(fieldName)!
-  
+
   if (fieldCache.has(originalValue)) {
     return fieldCache.get(originalValue)!
   }
-  
+
   let newValue: string
-  
+
   switch (fieldName) {
     case 'AccessionNumber':
       newValue = generateAccessionNumber()
@@ -84,7 +84,7 @@ function getCachedValue(fieldName: string, originalValue: string): string {
     default:
       newValue = generateUID()
   }
-  
+
   fieldCache.set(originalValue, newValue)
   return newValue
 }
@@ -94,13 +94,13 @@ function getCachedValue(fieldName: string, originalValue: string): string {
  */
 function parseDicomDate(dateStr: string): Date | null {
   if (!dateStr || dateStr.length !== 8) return null
-  
+
   const year = parseInt(dateStr.substring(0, 4))
   const month = parseInt(dateStr.substring(4, 6)) - 1 // Month is 0-indexed
   const day = parseInt(dateStr.substring(6, 8))
-  
+
   if (isNaN(year) || isNaN(month) || isNaN(day)) return null
-  
+
   return new Date(year, month, day)
 }
 
@@ -111,7 +111,7 @@ function formatDicomDate(date: Date): string {
   const year = date.getFullYear().toString().padStart(4, '0')
   const month = (date.getMonth() + 1).toString().padStart(2, '0')
   const day = date.getDate().toString().padStart(2, '0')
-  
+
   return `${year}${month}${day}`
 }
 
@@ -121,16 +121,16 @@ function formatDicomDate(date: Date): string {
 function applyDateJitter(dateStr: string, maxDays: number): string {
   const date = parseDicomDate(dateStr)
   if (!date) return dateStr
-  
+
   // Generate random offset between -maxDays and +maxDays (excluding 0)
   let offset = Math.floor(Math.random() * (2 * maxDays + 1)) - maxDays
   if (offset === 0) {
     offset = Math.random() > 0.5 ? 1 : -1
   }
-  
+
   const jitteredDate = new Date(date)
   jitteredDate.setDate(date.getDate() + offset)
-  
+
   return formatDicomDate(jitteredDate)
 }
 
@@ -158,7 +158,7 @@ export function createRemoveTagsHandler(tagsToRemove: string[] = []) {
   return (element: DicomElement, options: any) => {
     // Try different ways to get the tag name based on library implementation
     const tagName = element.keyword || element.name || element.tag?.toString() || ''
-    
+
     // Check if this tag should be removed
     for (const pattern of tagsToRemove) {
       if (matchesPattern(tagName, pattern)) {
@@ -174,7 +174,7 @@ export function createRemoveTagsHandler(tagsToRemove: string[] = []) {
         return true // Skip further processing
       }
     }
-    
+
     return false // Continue with default processing
   }
 }
@@ -186,7 +186,7 @@ export function createDateJitterHandler(maxDays: number = 31) {
   return (element: DicomElement, options: any) => {
     const tagName = element.keyword || element.name || ''
     const vr = element.vr || element.VR
-    
+
     // Apply jitter to date fields ending with 'Date'
     if (tagName.endsWith('Date') && vr === 'DA') {
       const originalValue = element.value || element.getValue?.()
@@ -200,7 +200,7 @@ export function createDateJitterHandler(maxDays: number = 31) {
         return true // Skip further processing
       }
     }
-    
+
     return false // Continue with default processing
   }
 }
@@ -213,11 +213,11 @@ export function createValueReplacementHandler() {
     const tagName = element.keyword || element.name || ''
     const tagNumber = element.tag?.toString() || ''
     const originalValue = element.value || element.getValue?.()
-    
+
     if (typeof originalValue !== 'string') return false
-    
+
     let newValue: string | null = null
-    
+
     // Match by keyword name or DICOM tag number
     switch (tagName) {
       case 'PatientName':
@@ -244,7 +244,7 @@ export function createValueReplacementHandler() {
         newValue = getCachedValue('SOPInstanceUID', originalValue)
         break
     }
-    
+
     // Also check by DICOM tag number if name didn't match
     if (!newValue) {
       switch (tagNumber) {
@@ -268,7 +268,7 @@ export function createValueReplacementHandler() {
           break
       }
     }
-    
+
     if (newValue) {
       if (element.setValue) {
         element.setValue(newValue)
@@ -277,7 +277,7 @@ export function createValueReplacementHandler() {
       }
       return true // Skip further processing
     }
-    
+
     return false // Continue with default processing
   }
 }

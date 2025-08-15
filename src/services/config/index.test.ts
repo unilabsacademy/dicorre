@@ -101,20 +101,6 @@ describe('ConfigService (Effect Service Testing)', () => {
       expect(['basic', 'clean', 'very-clean']).toContain(config.profile)
     })
 
-    it('should process timestamp replacements correctly', async () => {
-      const replacements = {
-        patientName: 'PATIENT_{timestamp}',
-        studyDate: '2024{timestamp}'
-      }
-
-      const result = await runTest(Effect.gen(function* () {
-        const configService = yield* ConfigService
-        return yield* configService.processReplacements(replacements)
-      }))
-      
-      expect(result.patientName).toMatch(/^PATIENT_\d{7}$/)
-      expect(result.studyDate).toMatch(/^2024\d{7}$/)
-    })
 
     it('should handle missing presets gracefully', async () => {
       await expect(
@@ -155,27 +141,6 @@ describe('ConfigService (Effect Service Testing)', () => {
   })
 
   describe('Error handling', () => {
-    it('should handle invalid replacement objects', async () => {
-      await expect(
-        runTest(Effect.gen(function* () {
-          const configService = yield* ConfigService
-          return yield* configService.processReplacements(null as any)
-        }))
-      ).rejects.toThrow('Replacements must be a valid object')
-    })
-
-    it('should reject non-string replacement values', async () => {
-      const invalidReplacements = {
-        patientName: 'PATIENT_{timestamp}',
-        invalidValue: 123 as any
-      }
-
-      await expect(
-        runTest(Effect.gen(function* () {
-          const configService = yield* ConfigService
-          return yield* configService.processReplacements(invalidReplacements)
-        }))
-      ).rejects.toThrow('Replacement value for \'invalidValue\' must be a string')
-    })
+    // Error handling tests for configuration-related operations
   })
 })
