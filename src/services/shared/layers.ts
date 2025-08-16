@@ -133,6 +133,7 @@ export const TestOPFSStorageLayer = Layer.succeed(
   OPFSStorage.of({
     saveFile: (fileId: string, arrayBuffer: ArrayBuffer) => Effect.succeed(undefined),
     loadFile: (fileId: string) => Effect.succeed(new ArrayBuffer(100)),
+    fileExists: (fileId: string) => Effect.succeed(true),
     deleteFile: (fileId: string) => Effect.succeed(undefined),
     listFiles: Effect.succeed([]),
     clearAllFiles: Effect.succeed(undefined),

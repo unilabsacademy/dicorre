@@ -33,7 +33,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
     DicomProcessorLive
   )
 
-  const runTest = <A, E>(effect: Effect.Effect<A, E, any>) =>
+  const runTest = <A, E>(effect: Effect.Effect<A, E, DicomProcessor | Anonymizer>) =>
     Effect.runPromise(effect.pipe(Effect.provide(testLayer)))
 
   beforeEach(() => {

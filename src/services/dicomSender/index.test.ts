@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Effect, Layer } from 'effect'
 import { DicomSender, DicomSenderLive, type DicomServerConfig } from './index'
-import { ConfigServiceLive } from '../config'
+import { ConfigService, ConfigServiceLive } from '../config'
 import type { DicomFile } from '@/types/dicom'
 
 describe('DicomSender Service (Effect Service Testing)', () => {
@@ -11,7 +11,7 @@ describe('DicomSender Service (Effect Service Testing)', () => {
     ConfigServiceLive
   )
   
-  const runTest = <A, E>(effect: Effect.Effect<A, E, DicomSender>) =>
+  const runTest = <A, E>(effect: Effect.Effect<A, E, DicomSender | ConfigService>) =>
     Effect.runPromise(effect.pipe(Effect.provide(testLayer)))
 
   describe('Connection testing', () => {

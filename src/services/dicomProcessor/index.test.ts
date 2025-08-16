@@ -115,17 +115,16 @@ describe('DicomProcessor Service (Effect Service Testing)', () => {
       const { readFileSync } = await import('fs')
       const { FileHandler, FileHandlerLive } = await import('@/services/fileHandler')
       
-      const runFileHandlerTest = <A, E>(effect: Effect.Effect<A, E, FileHandler>) =>
-        Effect.runPromise(effect.pipe(Effect.provide(FileHandlerLive)))
-      
       const zipPath = join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip')
       const zipFile = new File([readFileSync(zipPath)], '3_cases_each_with_3_series_6_images.zip')
       
       // Extract and parse DICOM files
-      const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
-        const fileHandler = yield* FileHandler
-        return yield* fileHandler.extractZipFile(zipFile)
-      }))
+      const extractedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const fileHandler = yield* FileHandler
+          return yield* fileHandler.extractZipFile(zipFile)
+        }).pipe(Effect.provide(FileHandlerLive))
+      )
       expect(extractedFiles.length).toBe(18)
       
       const result = await runTest(Effect.gen(function* () {
@@ -144,7 +143,7 @@ describe('DicomProcessor Service (Effect Service Testing)', () => {
       const patientIds = new Set<string>()
       
       for (const study of result) {
-        patientIds.add(study.patientId)
+        patientIds.add(study.patientId || '')
         totalSeries += study.series.length
         expect(study.series.length).toBe(3) // Each study should have 3 series
         
@@ -170,17 +169,16 @@ describe('DicomProcessor Service (Effect Service Testing)', () => {
       const { readFileSync } = await import('fs')
       const { FileHandler, FileHandlerLive } = await import('@/services/fileHandler')
       
-      const runFileHandlerTest = <A, E>(effect: Effect.Effect<A, E, FileHandler>) =>
-        Effect.runPromise(effect.pipe(Effect.provide(FileHandlerLive)))
-      
       const zipPath = join(process.cwd(), 'test-data/CASES/1_case_3_series_6_images.zip')
       const zipFile = new File([readFileSync(zipPath)], '1_case_3_series_6_images.zip')
       
       // Extract and parse DICOM files
-      const extractedFiles = await runFileHandlerTest(Effect.gen(function* () {
-        const fileHandler = yield* FileHandler
-        return yield* fileHandler.extractZipFile(zipFile)
-      }))
+      const extractedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const fileHandler = yield* FileHandler
+          return yield* fileHandler.extractZipFile(zipFile)
+        }).pipe(Effect.provide(FileHandlerLive))
+      )
       expect(extractedFiles.length).toBe(6)
       
       const result = await runTest(Effect.gen(function* () {

@@ -18,8 +18,8 @@ export interface DicomServerConfig {
 export class DicomSender extends Context.Tag("DicomSender")<
   DicomSender,
   {
-    readonly testConnection: Effect.Effect<boolean, DicomSenderError>
-    readonly sendFile: (file: DicomFile) => Effect.Effect<void, DicomSenderError>
+    readonly testConnection: Effect.Effect<boolean, DicomSenderError, ConfigService>
+    readonly sendFile: (file: DicomFile) => Effect.Effect<void, DicomSenderError, ConfigService>
     readonly updateConfig: (config: DicomServerConfig) => Effect.Effect<void, ValidationError>
     readonly getConfig: Effect.Effect<DicomServerConfig, never>
   }

@@ -7,7 +7,7 @@ export class DicomProcessor extends Context.Tag("DicomProcessor")<
   DicomProcessor,
   {
     readonly parseFile: (file: DicomFile) => Effect.Effect<DicomFile, DicomProcessorError>
-    readonly parseFiles: (files: DicomFile[], concurrency?: number) => Effect.Effect<DicomFile[], DicomProcessorError>
+    readonly parseFiles: (files: DicomFile[], concurrency?: number, options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }) => Effect.Effect<DicomFile[], DicomProcessorError>
     readonly groupFilesByStudy: (files: DicomFile[]) => Effect.Effect<DicomStudy[], DicomProcessorError>
     readonly validateFile: (file: DicomFile) => Effect.Effect<void, ValidationError>
   }

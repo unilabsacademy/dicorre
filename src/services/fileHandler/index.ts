@@ -6,7 +6,7 @@ import { FileHandlerError, ValidationError, type FileHandlerErrorType } from '@/
 export class FileHandler extends Context.Tag("FileHandler")<
   FileHandler,
   {
-    readonly extractZipFile: (file: File) => Effect.Effect<DicomFile[], FileHandlerErrorType>
+    readonly extractZipFile: (file: File, options?: { onProgress?: (completed: number, total: number, currentFile?: string) => void }) => Effect.Effect<DicomFile[], FileHandlerErrorType>
     readonly readSingleDicomFile: (file: File) => Effect.Effect<DicomFile, FileHandlerErrorType>
     readonly validateDicomFile: (arrayBuffer: ArrayBuffer, fileName: string) => Effect.Effect<boolean, ValidationError>
   }

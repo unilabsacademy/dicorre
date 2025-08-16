@@ -1,9 +1,11 @@
 <script setup lang="ts">
-import TheWelcome from '../components/TheWelcome.vue'
 </script>
 
 <template>
   <main>
-    <TheWelcome />
+    <div class="welcome">
+      <h1>Welcome to Ratatoskr</h1>
+      <p>DICOM Anonymization and Sending Tool</p>
+    </div>
   </main>
 </template>
