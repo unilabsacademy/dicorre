@@ -339,7 +339,7 @@ onUnmounted(() => {
               >Drop DICOM files here or</p>
               <input
                 type="file"
-                accept=".dcm,.zip"
+                accept=".dcm,.zip,.jpg,.jpeg,.png,.bmp"
                 multiple
                 @change="(event) => handleFileInput(event, { onFilesAdded: addFilesToUploaded, onProcessFiles: processNewFiles })"
                 class="hidden"
