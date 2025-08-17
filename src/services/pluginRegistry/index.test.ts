@@ -1,15 +1,15 @@
 import { describe, it, expect } from 'vitest'
 import { Effect } from 'effect'
-import { PluginRegistry, PluginRegistryLive } from '@/services/pluginRegistry'
-import { imageConverterPlugin } from '../imageConverter'
-import { sendLoggerPlugin } from '../sendLogger'
-import { initializePlugins } from '../index'
+import { PluginRegistry, PluginRegistryLive } from './index'
+import { imageConverterPlugin } from '@/plugins/imageConverter'
+import { sendLoggerPlugin } from '@/plugins/sendLogger'
+import { initializePlugins } from '@/plugins/index'
 
-describe('Plugin System', () => {
+describe('PluginRegistry Service', () => {
   const runTest = <A, E>(effect: Effect.Effect<A, E, PluginRegistry>) =>
     Effect.runPromise(effect.pipe(Effect.provide(PluginRegistryLive)))
 
-  describe('Plugin Registry', () => {
+  describe('Plugin Registration', () => {
     it('should register plugins', async () => {
       const result = await runTest(Effect.gen(function* () {
         const registry = yield* PluginRegistry
@@ -76,7 +76,9 @@ describe('Plugin System', () => {
       expect(result.jpgPlugin?.id).toBe('image-converter')
       expect(result.dcmPlugin).toBeUndefined() // No plugin should handle DCM files
     })
+  })
 
+  describe('Plugin Configuration', () => {
     it('should load plugin configuration', async () => {
       const config = {
         enabled: ['image-converter'],
@@ -116,30 +118,6 @@ describe('Plugin System', () => {
       expect(result).toHaveLength(2)
       expect(result.map(p => p.id)).toContain('image-converter')
       expect(result.map(p => p.id)).toContain('send-logger')
-    })
-  })
-
-  describe('Image Converter Plugin', () => {
-    it('should identify supported image files', async () => {
-      const jpgFile = new File(['fake jpg data'], 'test.jpg', { type: 'image/jpeg' })
-      const pngFile = new File(['fake png data'], 'test.png', { type: 'image/png' })
-      const txtFile = new File(['text data'], 'test.txt', { type: 'text/plain' })
-      
-      const jpgResult = await Effect.runPromise(imageConverterPlugin.canProcess(jpgFile))
-      const pngResult = await Effect.runPromise(imageConverterPlugin.canProcess(pngFile))
-      const txtResult = await Effect.runPromise(imageConverterPlugin.canProcess(txtFile))
-      
-      expect(jpgResult).toBe(true)
-      expect(pngResult).toBe(true)
-      expect(txtResult).toBe(false)
-    })
-  })
-
-  describe('Send Logger Plugin', () => {
-    it('should have proper hook structure', () => {
-      expect(sendLoggerPlugin.hooks.afterSend).toBeDefined()
-      expect(sendLoggerPlugin.hooks.beforeSend).toBeDefined()
-      expect(sendLoggerPlugin.hooks.onSendError).toBeDefined()
     })
   })
 })
