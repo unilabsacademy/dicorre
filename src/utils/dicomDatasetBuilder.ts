@@ -1,15 +1,19 @@
+import * as dcmjs from 'dcmjs'
 import type { DicomMetadata } from '@/types/dicom'
 
 /**
- * Utility for building DICOM datasets from metadata and pixel data
- * This centralizes DICOM dataset creation logic for all converter plugins
+ * Utility for building DICOM files from metadata and pixel data
+ * Uses template-based approach to avoid dcmjs dataset creation issues
  */
 export class DicomDatasetBuilder {
+  // Base64-encoded minimal DICOM template (created from existing valid DICOM)
+  private static readonly TEMPLATE_BASE64 = 'data:application/dicom;base64,UElDTQ==' // Placeholder - will be replaced with actual template
+  
   /**
-   * Create a DICOM dataset from metadata and pixel data
-   * Pure function - no business logic, just format conversion
+   * Create a DICOM ArrayBuffer from metadata and pixel data
+   * Uses template modification approach to avoid dcmjs creation issues
    */
-  static createDataset(
+  static async createDicomBuffer(
     width: number,
     height: number,
     pixelData: Uint8Array,
@@ -23,70 +27,107 @@ export class DicomDatasetBuilder {
       pixelRepresentation: number
       planarConfiguration: number
     }
-  ): any {
-    // Start with the provided metadata and convert to DICOM format
-    const dataset: any = {}
-
-    // File Meta Information (required for DICOM files) - use only provided values
-    dataset._meta = {}
+  ): Promise<ArrayBuffer> {
+    // For now, use a fallback approach that creates a minimal valid DICOM
+    // This is a temporary solution until we can implement proper template handling
     
-    // Required DICOM file header elements
-    if (metadata.sopInstanceUID) {
-      dataset._meta['00020001'] = { vr: 'OB', Value: [new Uint8Array([0, 1])] } // FileMetaInformationVersion
-      dataset._meta['00020003'] = { vr: 'UI', Value: [metadata.sopInstanceUID] } // MediaStorageSOPInstanceUID
+    // Load existing template DICOM file from test data
+    const templateUrl = '/test-data/IM-0001-0001.dcm'
+    const response = await fetch(templateUrl)
+    const templateBuffer = await response.arrayBuffer()
+    
+    // Parse template with dcmjs
+    const templateDicom = dcmjs.data.DicomMessage.readFile(templateBuffer)
+    
+    // Modify the instance's dataset directly (preserves syntax metadata)
+    this.applyMetadataToDataset(templateDicom.dict, metadata)
+    
+    // Update image-specific tags
+    this.applyImageDataToDataset(templateDicom.dict, width, height, pixelData, imageFormat)
+    
+    // Use the instance write method (preserves syntax metadata)
+    try {
+      return (templateDicom as any).write()
+    } catch (error) {
+      throw new Error(`Failed to create DICOM buffer: ${error}`)
     }
-    if (metadata.transferSyntaxUID) {
-      dataset._meta['00020010'] = { vr: 'UI', Value: [metadata.transferSyntaxUID] } // TransferSyntaxUID
+  }
+  
+  /**
+   * Apply provided metadata to DICOM dataset
+   */
+  private static applyMetadataToDataset(dataset: any, metadata: DicomMetadata): void {
+    // Update meta information for Secondary Capture
+    if (dataset._meta) {
+      dataset._meta['00020002'] = { vr: 'UI', Value: ['1.2.840.10008.5.1.4.1.1.7'] } // MediaStorageSOPClassUID
+      if (metadata.sopInstanceUID) {
+        dataset._meta['00020003'] = { vr: 'UI', Value: [metadata.sopInstanceUID] } // MediaStorageSOPInstanceUID
+      }
+      if (metadata.transferSyntaxUID) {
+        dataset._meta['00020010'] = { vr: 'UI', Value: [metadata.transferSyntaxUID] } // TransferSyntaxUID
+      }
     }
-
-    // Convert all provided metadata to DICOM format
+    
+    // Set Secondary Capture specific values
+    dataset['00080016'] = { vr: 'UI', Value: ['1.2.840.10008.5.1.4.1.1.7'] } // SOPClassUID
+    dataset['00180060'] = { vr: 'CS', Value: ['WSD'] } // ConversionType
+    
+    // Apply all provided metadata
     if (metadata.sopInstanceUID) {
-      dataset['00080018'] = { vr: 'UI', Value: [metadata.sopInstanceUID] } // SOPInstanceUID
+      dataset['00080018'] = { vr: 'UI', Value: [metadata.sopInstanceUID] }
     }
     if (metadata.patientName) {
-      dataset['00100010'] = { vr: 'PN', Value: [metadata.patientName] } // PatientName
+      dataset['00100010'] = { vr: 'PN', Value: [metadata.patientName] }
     }
     if (metadata.patientId) {
-      dataset['00100020'] = { vr: 'LO', Value: [metadata.patientId] } // PatientID
+      dataset['00100020'] = { vr: 'LO', Value: [metadata.patientId] }
     }
     if (metadata.studyInstanceUID) {
-      dataset['0020000D'] = { vr: 'UI', Value: [metadata.studyInstanceUID] } // StudyInstanceUID
+      dataset['0020000D'] = { vr: 'UI', Value: [metadata.studyInstanceUID] }
     }
     if (metadata.seriesInstanceUID) {
-      dataset['0020000E'] = { vr: 'UI', Value: [metadata.seriesInstanceUID] } // SeriesInstanceUID
+      dataset['0020000E'] = { vr: 'UI', Value: [metadata.seriesInstanceUID] }
     }
     if (metadata.studyDate) {
-      dataset['00080020'] = { vr: 'DA', Value: [metadata.studyDate] } // StudyDate
+      dataset['00080020'] = { vr: 'DA', Value: [metadata.studyDate] }
     }
     if (metadata.studyDescription) {
-      dataset['00081030'] = { vr: 'LO', Value: [metadata.studyDescription] } // StudyDescription
+      dataset['00081030'] = { vr: 'LO', Value: [metadata.studyDescription] }
     }
     if (metadata.seriesDescription) {
-      dataset['0008103E'] = { vr: 'LO', Value: [metadata.seriesDescription] } // SeriesDescription
+      dataset['0008103E'] = { vr: 'LO', Value: [metadata.seriesDescription] }
     }
     if (metadata.modality) {
-      dataset['00080060'] = { vr: 'CS', Value: [metadata.modality] } // Modality
+      dataset['00080060'] = { vr: 'CS', Value: [metadata.modality] }
     }
     if (metadata.accessionNumber) {
-      dataset['00080050'] = { vr: 'SH', Value: [metadata.accessionNumber] } // AccessionNumber
+      dataset['00080050'] = { vr: 'SH', Value: [metadata.accessionNumber] }
     }
     if (metadata.instanceNumber) {
-      dataset['00200013'] = { vr: 'IS', Value: [metadata.instanceNumber] } // InstanceNumber
-      dataset['00200011'] = { vr: 'IS', Value: [metadata.instanceNumber] } // SeriesNumber
+      dataset['00200013'] = { vr: 'IS', Value: [metadata.instanceNumber] }
+      dataset['00200011'] = { vr: 'IS', Value: [metadata.instanceNumber] }
     }
-
-    // Set image-specific DICOM elements based on the provided format
-    dataset['00280002'] = { vr: 'US', Value: [imageFormat.samplesPerPixel] } // SamplesPerPixel
-    dataset['00280004'] = { vr: 'CS', Value: [imageFormat.photometricInterpretation] } // PhotometricInterpretation
-    dataset['00280010'] = { vr: 'US', Value: [height] } // Rows
-    dataset['00280011'] = { vr: 'US', Value: [width] } // Columns
-    dataset['00280100'] = { vr: 'US', Value: [imageFormat.bitsAllocated] } // BitsAllocated
-    dataset['00280101'] = { vr: 'US', Value: [imageFormat.bitsStored] } // BitsStored
-    dataset['00280102'] = { vr: 'US', Value: [imageFormat.highBit] } // HighBit
-    dataset['00280103'] = { vr: 'US', Value: [imageFormat.pixelRepresentation] } // PixelRepresentation
-    dataset['00280006'] = { vr: 'US', Value: [imageFormat.planarConfiguration] } // PlanarConfiguration
-    dataset['7FE00010'] = { vr: 'OB', Value: [pixelData] } // PixelData
-
-    return dataset
+  }
+  
+  /**
+   * Apply image data and format to DICOM dataset
+   */
+  private static applyImageDataToDataset(
+    dataset: any, 
+    width: number, 
+    height: number, 
+    pixelData: Uint8Array,
+    imageFormat: any
+  ): void {
+    dataset['00280002'] = { vr: 'US', Value: [imageFormat.samplesPerPixel] }
+    dataset['00280004'] = { vr: 'CS', Value: [imageFormat.photometricInterpretation] }
+    dataset['00280010'] = { vr: 'US', Value: [height] }
+    dataset['00280011'] = { vr: 'US', Value: [width] }
+    dataset['00280100'] = { vr: 'US', Value: [imageFormat.bitsAllocated] }
+    dataset['00280101'] = { vr: 'US', Value: [imageFormat.bitsStored] }
+    dataset['00280102'] = { vr: 'US', Value: [imageFormat.highBit] }
+    dataset['00280103'] = { vr: 'US', Value: [imageFormat.pixelRepresentation] }
+    dataset['00280006'] = { vr: 'US', Value: [imageFormat.planarConfiguration] }
+    dataset['7FE00010'] = { vr: 'OB', Value: [pixelData] }
   }
 }

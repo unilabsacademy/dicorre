@@ -111,25 +111,29 @@ export class ImageConverterPlugin implements FileFormatPlugin {
         })
       })
 
-      // Create DICOM dataset using the utility
-      const dataset = DicomDatasetBuilder.createDataset(
-        imageInfo.width,
-        imageInfo.height,
-        pixelData,
-        metadata,
-        {
-          samplesPerPixel: 3, // RGB
-          photometricInterpretation: 'RGB',
-          bitsAllocated: 8,
-          bitsStored: 8,
-          highBit: 7,
-          pixelRepresentation: 0, // unsigned
-          planarConfiguration: 0 // color-by-pixel
-        }
-      )
-
-      // Convert dataset to ArrayBuffer using DicomMessage
-      const dicomBuffer = dcmjs.data.DicomMessage.write(dataset)
+      // Create DICOM buffer using the utility (template-based approach)
+      const dicomBuffer = yield* Effect.tryPromise({
+        try: () => DicomDatasetBuilder.createDicomBuffer(
+          imageInfo.width,
+          imageInfo.height,
+          pixelData,
+          metadata,
+          {
+            samplesPerPixel: 3, // RGB
+            photometricInterpretation: 'RGB',
+            bitsAllocated: 8,
+            bitsStored: 8,
+            highBit: 7,
+            pixelRepresentation: 0, // unsigned
+            planarConfiguration: 0 // color-by-pixel
+          }
+        ),
+        catch: (error) => new PluginError({
+          message: `Failed to create DICOM buffer for ${file.name}: ${error}`,
+          pluginId,
+          cause: error
+        })
+      })
 
       // Generate file ID
       const fileId = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
