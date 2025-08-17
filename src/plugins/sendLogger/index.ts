@@ -20,7 +20,7 @@ export class SendLoggerPlugin implements HookPlugin {
      * Called after a study has been successfully sent
      */
     afterSend: (study: DicomStudy): Effect.Effect<void, PluginError> =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         const timestamp = new Date().toISOString()
         const fileCount = study.series.reduce((total, series) => total + series.files.length, 0)
         
@@ -62,7 +62,7 @@ export class SendLoggerPlugin implements HookPlugin {
      * Called before a study is sent
      */
     beforeSend: (study: DicomStudy): Effect.Effect<void, PluginError> =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         const fileCount = study.series.reduce((total, series) => total + series.files.length, 0)
         console.log(`📤 SendLogger: Preparing to send study - Patient: ${study.patientName} (${study.patientId}), Files: ${fileCount}`)
       }),
@@ -71,7 +71,7 @@ export class SendLoggerPlugin implements HookPlugin {
      * Called if send fails
      */
     onSendError: (study: DicomStudy, error: Error): Effect.Effect<void, PluginError> =>
-      Effect.gen(function* () {
+      Effect.sync(() => {
         const fileCount = study.series.reduce((total, series) => total + series.files.length, 0)
         
         console.error('╔══════════════════════════════════════════════════════════════╗')

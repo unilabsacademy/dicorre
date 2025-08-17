@@ -162,7 +162,7 @@ function matchesPattern(tagName: string, pattern: string): boolean {
  * @param tagsToRemove Array of tag patterns to remove
  */
 export function createRemoveTagsHandler(tagsToRemove: string[] = []) {
-  return (element: DicomElement, options: any) => {
+  return (element: DicomElement, _options: any) => {
     // Try different ways to get the tag name based on library implementation
     const tagName = element.keyword || element.name || element.tag?.toString() || ''
 
@@ -190,7 +190,7 @@ export function createRemoveTagsHandler(tagsToRemove: string[] = []) {
  * Special handler for date jittering
  */
 export function createDateJitterHandler(maxDays: number = 31) {
-  return (element: DicomElement, options: any) => {
+  return (element: DicomElement, _options: any) => {
     const tagName = element.keyword || element.name || ''
     const vr = element.vr || element.VR
 
@@ -216,7 +216,7 @@ export function createDateJitterHandler(maxDays: number = 31) {
  * Special handler for value replacements
  */
 export function createValueReplacementHandler(studyId: string) {
-  return (element: DicomElement, options: any) => {
+  return (element: DicomElement, _options: any) => {
     const tagName = element.keyword || element.name || ''
     const tagNumber = element.tag?.toString() || ''
     const originalValue = element.value || element.getValue?.()
@@ -238,7 +238,7 @@ export function createValueReplacementHandler(studyId: string) {
         break
       case 'AccessionNumber':
         // Use StudyInstanceUID as fallback if AccessionNumber is empty
-        const keyValue = originalValue || originalValue // Simplified for now
+        const keyValue = originalValue || studyId // Use studyId as fallback
         newValue = getCachedValue('AccessionNumber', keyValue, studyId)
         break
       case 'StudyInstanceUID':
@@ -293,7 +293,7 @@ export function createValueReplacementHandler(studyId: string) {
  * Special handler to add PatientIdentityRemoved tag
  */
 export function createAddTagsHandler() {
-  return (element: DicomElement, options: any) => {
+  return (_element: DicomElement, _options: any) => {
     // This would typically be handled at the dataset level
     // For now, we'll let the anonymizer handle this through configuration
     return false

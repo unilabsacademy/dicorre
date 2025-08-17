@@ -41,7 +41,7 @@ type WorkerResponse =
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
 
 // Main worker function
-async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, serverConfig: ServerConfig, concurrency = 2) {
+async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, serverConfig: ServerConfig, _concurrency = 2) {
   try {
     await runtime.runPromise(
       Effect.gen(function* () {

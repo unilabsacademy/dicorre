@@ -76,14 +76,17 @@ export class ImageConverterPlugin implements FileFormatPlugin {
    */
   convertToDicom = (file: File, options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
     const pluginId = this.id
-    const self = this
+    const readFileAsDataURL = this.readFileAsDataURL.bind(this)
+    const loadImage = this.loadImage.bind(this)
+    const getPixelData = this.getPixelData.bind(this)
+    const createDicomDataset = this.createDicomDataset.bind(this)
     
     return Effect.gen(function* () {
       console.log(`Converting image ${file.name} to DICOM using ImageConverterPlugin`)
 
       // Load image data
       const imageDataUrl = yield* Effect.tryPromise({
-        try: () => self.readFileAsDataURL(file),
+        try: () => readFileAsDataURL(file),
         catch: (error) => new PluginError({
           message: `Failed to read image file: ${file.name}`,
           pluginId,
@@ -93,7 +96,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
 
       // Load image to get dimensions
       const imageInfo = yield* Effect.tryPromise({
-        try: () => self.loadImage(imageDataUrl),
+        try: () => loadImage(imageDataUrl),
         catch: (error) => new PluginError({
           message: `Failed to load image: ${file.name}`,
           pluginId,
@@ -103,7 +106,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
 
       // Convert image to pixel data
       const pixelData = yield* Effect.tryPromise({
-        try: () => self.getPixelData(imageInfo.img, imageInfo.width, imageInfo.height),
+        try: () => getPixelData(imageInfo.img, imageInfo.width, imageInfo.height),
         catch: (error) => new PluginError({
           message: `Failed to extract pixel data from image: ${file.name}`,
           pluginId,
@@ -112,7 +115,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
       })
 
       // Create DICOM dataset
-      const dataset = self.createDicomDataset(
+      const dataset = createDicomDataset(
         file.name,
         imageInfo.width,
         imageInfo.height,

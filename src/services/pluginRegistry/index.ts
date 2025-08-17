@@ -1,4 +1,4 @@
-import { Effect, Context, Layer, Ref } from "effect"
+import { Effect, Context, Layer } from "effect"
 import type { Plugin, FileFormatPlugin, HookPlugin, PluginConfig } from '@/types/plugins'
 import { isFileFormatPlugin, isHookPlugin } from '@/types/plugins'
 import { PluginError, type PluginErrorType } from '@/types/effects'
@@ -177,7 +177,7 @@ class PluginRegistryImpl {
    * Load plugin configuration
    */
   static loadPluginConfig = (config: PluginConfig): Effect.Effect<void, PluginErrorType> =>
-    Effect.gen(function* () {
+    Effect.sync(() => {
       PluginRegistryImpl.pluginConfig = config
       
       // Update enabled status for all plugins

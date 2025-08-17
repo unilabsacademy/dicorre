@@ -35,8 +35,8 @@ export const TestConfigLayer = Layer.succeed(
     getPresets: Effect.succeed({}),
     getTagDescription: (tagId: string) => Effect.succeed(tagId),
     getTagsToRemove: Effect.succeed([]),
-    validateConfig: (config: AppConfig) => Effect.succeed(undefined),
-    loadConfig: (configData: unknown) => Effect.succeed(undefined),
+    validateConfig: (_config: AppConfig) => Effect.succeed(undefined),
+    loadConfig: (_configData: unknown) => Effect.succeed(undefined),
     getCurrentConfig: Effect.succeed({
       dicomServer: {
         url: 'http://localhost:8042',
@@ -75,7 +75,7 @@ export const TestPluginRegistryLayer = Layer.succeed(
 export const TestFileHandlerLayer = Layer.succeed(
   FileHandler,
   FileHandler.of({
-    extractZipFile: (file: File) => Effect.succeed([]),
+    extractZipFile: (_file: File) => Effect.succeed([]),
     readSingleDicomFile: (file: File) => Effect.tryPromise({
       try: async () => {
         const arrayBuffer = await file.arrayBuffer()
@@ -171,17 +171,17 @@ export const TestFileHandlerLayer = Layer.succeed(
 
         return false
       }),
-    processFile: (file: File) => Effect.succeed([])
+    processFile: (_file: File) => Effect.succeed([])
   })
 )
 
 export const TestOPFSStorageLayer = Layer.succeed(
   OPFSStorage,
   OPFSStorage.of({
-    saveFile: (fileId: string, arrayBuffer: ArrayBuffer) => Effect.succeed(undefined),
-    loadFile: (fileId: string) => Effect.succeed(new ArrayBuffer(100)),
-    fileExists: (fileId: string) => Effect.succeed(true),
-    deleteFile: (fileId: string) => Effect.succeed(undefined),
+    saveFile: (_fileId: string, _arrayBuffer: ArrayBuffer) => Effect.succeed(undefined),
+    loadFile: (_fileId: string) => Effect.succeed(new ArrayBuffer(100)),
+    fileExists: (_fileId: string) => Effect.succeed(true),
+    deleteFile: (_fileId: string) => Effect.succeed(undefined),
     listFiles: Effect.succeed([]),
     clearAllFiles: Effect.succeed(undefined),
     getStorageInfo: Effect.succeed({ used: 0, quota: 1000 })

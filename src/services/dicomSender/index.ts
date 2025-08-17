@@ -176,7 +176,7 @@ class DicomSenderImpl {
       if (config.url.startsWith('http')) {
         try {
           new URL(config.url)
-        } catch (error) {
+        } catch (_error) {
           return yield* Effect.fail(new ValidationError({
             message: `Invalid DICOM server URL: ${config.url}`,
             fileName: 'config'
@@ -205,14 +205,12 @@ class DicomSenderImpl {
 /**
  * Live implementation layer with ConfigService dependency
  */
-export const DicomSenderLive = Layer.effect(
+export const DicomSenderLive = Layer.succeed(
   DicomSender,
-  Effect.gen(function* () {
-    return DicomSender.of({
-      testConnection: DicomSenderImpl.testConnection,
-      sendFile: DicomSenderImpl.sendFile,
-      updateConfig: DicomSenderImpl.updateConfig,
-      getConfig: DicomSenderImpl.getConfig
-    })
+  DicomSender.of({
+    testConnection: DicomSenderImpl.testConnection,
+    sendFile: DicomSenderImpl.sendFile,
+    updateConfig: DicomSenderImpl.updateConfig,
+    getConfig: DicomSenderImpl.getConfig
   })
 )
