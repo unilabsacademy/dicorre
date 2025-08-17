@@ -1,8 +1,9 @@
 import { Effect } from "effect"
 import * as dcmjs from 'dcmjs'
 import type { FileFormatPlugin, ConversionOptions } from '@/types/plugins'
-import type { DicomFile } from '@/types/dicom'
+import type { DicomFile, DicomMetadata } from '@/types/dicom'
 import { PluginError } from '@/types/effects'
+import { DicomDatasetBuilder } from '@/utils/dicomDatasetBuilder'
 
 /**
  * Image to DICOM Secondary Capture Converter Plugin
@@ -74,19 +75,15 @@ export class ImageConverterPlugin implements FileFormatPlugin {
   /**
    * Convert image to DICOM Secondary Capture
    */
-  convertToDicom = (file: File, options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
+  convertToDicom = (file: File, metadata: DicomMetadata, options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
     const pluginId = this.id
-    const readFileAsDataURL = this.readFileAsDataURL.bind(this)
-    const loadImage = this.loadImage.bind(this)
-    const getPixelData = this.getPixelData.bind(this)
-    const createDicomDataset = this.createDicomDataset.bind(this)
     
     return Effect.gen(function* () {
       console.log(`Converting image ${file.name} to DICOM using ImageConverterPlugin`)
 
       // Load image data
       const imageDataUrl = yield* Effect.tryPromise({
-        try: () => readFileAsDataURL(file),
+        try: () => ImageConverterPlugin.readFileAsDataURL(file),
         catch: (error) => new PluginError({
           message: `Failed to read image file: ${file.name}`,
           pluginId,
@@ -96,7 +93,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
 
       // Load image to get dimensions
       const imageInfo = yield* Effect.tryPromise({
-        try: () => loadImage(imageDataUrl),
+        try: () => ImageConverterPlugin.loadImage(imageDataUrl),
         catch: (error) => new PluginError({
           message: `Failed to load image: ${file.name}`,
           pluginId,
@@ -106,7 +103,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
 
       // Convert image to pixel data
       const pixelData = yield* Effect.tryPromise({
-        try: () => getPixelData(imageInfo.img, imageInfo.width, imageInfo.height),
+        try: () => ImageConverterPlugin.getPixelData(imageInfo.img, imageInfo.width, imageInfo.height),
         catch: (error) => new PluginError({
           message: `Failed to extract pixel data from image: ${file.name}`,
           pluginId,
@@ -114,18 +111,25 @@ export class ImageConverterPlugin implements FileFormatPlugin {
         })
       })
 
-      // Create DICOM dataset
-      const dataset = createDicomDataset(
-        file.name,
+      // Create DICOM dataset using the utility
+      const dataset = DicomDatasetBuilder.createDataset(
         imageInfo.width,
         imageInfo.height,
         pixelData,
-        options
+        metadata,
+        {
+          samplesPerPixel: 3, // RGB
+          photometricInterpretation: 'RGB',
+          bitsAllocated: 8,
+          bitsStored: 8,
+          highBit: 7,
+          pixelRepresentation: 0, // unsigned
+          planarConfiguration: 0 // color-by-pixel
+        }
       )
 
       // Convert dataset to ArrayBuffer using DicomMessage
-      const dicomMessage = new dcmjs.data.DicomMessage(dataset)
-      const dicomBuffer = dicomMessage.write()
+      const dicomBuffer = dcmjs.data.DicomMessage.write(dataset)
 
       // Generate file ID
       const fileId = `img-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
@@ -148,7 +152,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
   /**
    * Read file as data URL
    */
-  private readFileAsDataURL(file: File): Promise<string> {
+  private static readFileAsDataURL(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
       reader.onload = (e) => resolve(e.target?.result as string)
@@ -160,7 +164,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
   /**
    * Load image and get dimensions
    */
-  private loadImage(dataUrl: string): Promise<{ img: HTMLImageElement; width: number; height: number }> {
+  private static loadImage(dataUrl: string): Promise<{ img: HTMLImageElement; width: number; height: number }> {
     return new Promise((resolve, reject) => {
       const img = new Image()
       img.onload = () => {
@@ -178,7 +182,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
   /**
    * Extract pixel data from image
    */
-  private getPixelData(img: HTMLImageElement, width: number, height: number): Promise<Uint8Array> {
+  private static getPixelData(img: HTMLImageElement, width: number, height: number): Promise<Uint8Array> {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas')
       canvas.width = width
@@ -203,154 +207,6 @@ export class ImageConverterPlugin implements FileFormatPlugin {
     })
   }
 
-  /**
-   * Create DICOM dataset for Secondary Capture
-   */
-  private createDicomDataset(
-    fileName: string,
-    width: number,
-    height: number,
-    pixelData: Uint8Array,
-    options?: ConversionOptions
-  ): any {
-    // Generate UIDs using proper UID generation
-    const studyInstanceUID = `2.25.${Math.floor(Math.random() * 1e15)}`
-    const seriesInstanceUID = `2.25.${Math.floor(Math.random() * 1e15)}`
-    const sopInstanceUID = `2.25.${Math.floor(Math.random() * 1e15)}`
-
-    // Get current date/time
-    const now = new Date()
-    const studyDate = options?.studyDate || now.toISOString().slice(0, 10).replace(/-/g, '')
-    const studyTime = now.toISOString().slice(11, 19).replace(/:/g, '')
-
-    // Build DICOM dataset
-    const dataset = {
-      _meta: {
-        FileMetaInformationVersion: {
-          Value: [new Uint8Array([0, 1])],
-          vr: 'OB'
-        },
-        MediaStorageSOPClassUID: {
-          Value: ['1.2.840.10008.5.1.4.1.1.7'], // Secondary Capture
-          vr: 'UI'
-        },
-        MediaStorageSOPInstanceUID: {
-          Value: [sopInstanceUID],
-          vr: 'UI'
-        },
-        TransferSyntaxUID: {
-          Value: ['1.2.840.10008.1.2.1'], // Explicit VR Little Endian
-          vr: 'UI'
-        },
-        ImplementationClassUID: {
-          Value: ['1.2.826.0.1.3680043.8.1055.1'],
-          vr: 'UI'
-        }
-      },
-      PatientName: {
-        Value: [options?.patientName || 'Image^Converted'],
-        vr: 'PN'
-      },
-      PatientID: {
-        Value: [options?.patientId || 'IMG-' + Date.now()],
-        vr: 'LO'
-      },
-      StudyInstanceUID: {
-        Value: [studyInstanceUID],
-        vr: 'UI'
-      },
-      SeriesInstanceUID: {
-        Value: [seriesInstanceUID],
-        vr: 'UI'
-      },
-      SOPInstanceUID: {
-        Value: [sopInstanceUID],
-        vr: 'UI'
-      },
-      SOPClassUID: {
-        Value: ['1.2.840.10008.5.1.4.1.1.7'], // Secondary Capture
-        vr: 'UI'
-      },
-      StudyDate: {
-        Value: [studyDate],
-        vr: 'DA'
-      },
-      StudyTime: {
-        Value: [studyTime],
-        vr: 'TM'
-      },
-      AccessionNumber: {
-        Value: [options?.accessionNumber || ''],
-        vr: 'SH'
-      },
-      Modality: {
-        Value: [options?.modality || 'OT'], // Other
-        vr: 'CS'
-      },
-      ConversionType: {
-        Value: ['WSD'], // Workstation
-        vr: 'CS'
-      },
-      StudyDescription: {
-        Value: [options?.studyDescription || `Converted from ${fileName}`],
-        vr: 'LO'
-      },
-      SeriesDescription: {
-        Value: [options?.seriesDescription || 'Image Conversion'],
-        vr: 'LO'
-      },
-      PatientOrientation: {
-        Value: [''],
-        vr: 'CS'
-      },
-      SamplesPerPixel: {
-        Value: [3], // RGB
-        vr: 'US'
-      },
-      PhotometricInterpretation: {
-        Value: ['RGB'],
-        vr: 'CS'
-      },
-      Rows: {
-        Value: [height],
-        vr: 'US'
-      },
-      Columns: {
-        Value: [width],
-        vr: 'US'
-      },
-      BitsAllocated: {
-        Value: [8],
-        vr: 'US'
-      },
-      BitsStored: {
-        Value: [8],
-        vr: 'US'
-      },
-      HighBit: {
-        Value: [7],
-        vr: 'US'
-      },
-      PixelRepresentation: {
-        Value: [0], // Unsigned
-        vr: 'US'
-      },
-      PlanarConfiguration: {
-        Value: [0], // Color-by-pixel (RGBRGBRGB...)
-        vr: 'US'
-      },
-      PixelData: {
-        Value: [pixelData],
-        vr: 'OB'
-      },
-      InstanceNumber: {
-        Value: [1],
-        vr: 'IS'
-      }
-    }
-
-    return dataset
-  }
 }
 
 // Export singleton instance

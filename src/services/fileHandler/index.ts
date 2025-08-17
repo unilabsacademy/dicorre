@@ -244,7 +244,23 @@ class FileHandlerImpl {
       
       if (plugin) {
         console.log(`Using plugin ${plugin.id} to process ${file.name}`)
-        return yield* plugin.convertToDicom(file)
+        
+        // Create complete metadata for file conversion - all required fields
+        const defaultMetadata = {
+          patientName: 'Converted^File',
+          patientId: `CONV-${Date.now()}`,
+          studyInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
+          seriesInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
+          sopInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
+          studyDate: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+          modality: 'SC', // Secondary Capture
+          studyDescription: `Converted from ${file.name}`,
+          seriesDescription: 'File Conversion',
+          instanceNumber: 1,
+          transferSyntaxUID: '1.2.840.10008.1.2.1' // Explicit VR Little Endian
+        }
+        
+        return yield* plugin.convertToDicom(file, defaultMetadata)
           .pipe(
             Effect.mapError((error) => new FileHandlerError({
               message: `Plugin ${plugin.id} failed to convert ${file.name}: ${error.message}`,

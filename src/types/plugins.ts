@@ -1,5 +1,5 @@
 import { Effect } from "effect"
-import type { DicomFile, DicomStudy } from '@/types/dicom'
+import type { DicomFile, DicomStudy, DicomMetadata } from '@/types/dicom'
 import type { PluginError } from '@/types/effects'
 
 /**
@@ -44,7 +44,7 @@ export interface FileFormatPlugin extends Plugin {
   canProcess: (file: File) => Effect.Effect<boolean, PluginError>
   
   /** Convert the file to DICOM format */
-  convertToDicom: (file: File, options?: ConversionOptions) => Effect.Effect<DicomFile[], PluginError>
+  convertToDicom: (file: File, metadata: DicomMetadata, options?: ConversionOptions) => Effect.Effect<DicomFile[], PluginError>
   
   /** Validate that the file is valid for this converter */
   validateFile?: (file: File) => Effect.Effect<boolean, PluginError>

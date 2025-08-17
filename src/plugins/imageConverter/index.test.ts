@@ -52,4 +52,5 @@ describe('ImageConverter Plugin', () => {
       expect(imageConverterPlugin.supportedExtensions).toContain('.bmp')
     })
   })
+
 })
