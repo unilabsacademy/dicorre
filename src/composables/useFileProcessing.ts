@@ -54,51 +54,19 @@ export function useFileProcessing() {
           currentFileIndex: i
         }
 
-        if (file.name.toLowerCase().endsWith('.zip')) {
-          // Real progress tracking for ZIP extraction (0-30%)
-          const extractedFiles = yield* fileHandler.extractZipFile(file, {
-            onProgress: (completed: number, total: number, currentFile?: string) => {
-              const extractionProgress = Math.round((completed / total) * 30) // 0% to 30%
-              fileProcessingState.value = {
-                isProcessing: true,
-                fileName: fileProcessingState.value?.fileName || file.name,
-                currentStep: `Extracting from ZIP: ${currentFile || 'processing...'}`,
-                progress: extractionProgress,
-                currentFileIndex: completed,
-                totalFiles: total
-              }
-            }
-          })
-          localDicomFiles.push(...extractedFiles)
-
+        // Use the new processFile method that handles plugins
+        const processedFiles = yield* fileHandler.processFile(file)
+        
+        if (processedFiles.length > 0) {
+          localDicomFiles.push(...processedFiles)
+          
           fileProcessingState.value = {
             isProcessing: true,
-            fileName: fileProcessingState.value?.fileName || file.name,
-            currentStep: `Extracted ${extractedFiles.length} DICOM files from ZIP`,
-            progress: 30,
-            currentFileIndex: fileProcessingState.value?.currentFileIndex,
-            totalFiles: fileProcessingState.value?.totalFiles
-          }
-        } else {
-          fileProcessingState.value = {
-            isProcessing: true,
-            fileName: fileProcessingState.value?.fileName || file.name,
-            currentStep: fileProcessingState.value?.currentStep || 'Reading DICOM file...',
-            progress: 50,
-            currentFileIndex: fileProcessingState.value?.currentFileIndex,
-            totalFiles: fileProcessingState.value?.totalFiles
-          }
-
-          const dicomFile = yield* fileHandler.readSingleDicomFile(file)
-          localDicomFiles.push(dicomFile)
-
-          fileProcessingState.value = {
-            isProcessing: true,
-            fileName: fileProcessingState.value?.fileName || file.name,
-            currentStep: 'File processed',
-            progress: 100,
-            currentFileIndex: fileProcessingState.value?.currentFileIndex,
-            totalFiles: fileProcessingState.value?.totalFiles
+            fileName: file.name,
+            currentStep: `Processed ${processedFiles.length} file(s)`,
+            progress: Math.round(((i + 1) / newUploadedFiles.length) * 100),
+            currentFileIndex: i + 1,
+            totalFiles: newUploadedFiles.length
           }
         }
       }

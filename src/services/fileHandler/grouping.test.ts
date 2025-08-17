@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest'
 import { readFileSync } from 'fs'
 import { join } from 'path'
-import { Effect } from 'effect'
+import { Effect, Layer } from 'effect'
 import { FileHandler, FileHandlerLive } from './index'
 import { DicomProcessor, DicomProcessorLive } from '../dicomProcessor'
+import { PluginRegistryLive } from '../pluginRegistry'
 import type { DicomFile } from '@/types/dicom'
 
 // Helper to group DICOM files by patient/study/series
@@ -55,8 +56,11 @@ function groupDicomFiles(files: DicomFile[]) {
 }
 
 describe('DICOM File Grouping', () => {
+  // Use real services for these integration tests since we want to test actual DICOM parsing
   const runFileHandlerTest = <A, E>(effect: Effect.Effect<A, E, FileHandler>) =>
-    Effect.runPromise(effect.pipe(Effect.provide(FileHandlerLive)))
+    Effect.runPromise(effect.pipe(
+      Effect.provide(Layer.merge(FileHandlerLive, PluginRegistryLive))
+    ))
     
   const runDicomProcessorTest = <A, E>(effect: Effect.Effect<A, E, DicomProcessor>) =>
     Effect.runPromise(effect.pipe(Effect.provide(DicomProcessorLive)))

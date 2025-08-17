@@ -3,6 +3,7 @@ import { ManagedRuntime, Effect, Stream } from 'effect'
 import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { ConfigService } from '@/services/config'
+import { PluginRegistry } from '@/services/pluginRegistry'
 import { useTableState } from '@/composables/useTableState'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
 import { useSendingProgress } from '@/composables/useSendingProgress'
@@ -90,6 +91,35 @@ export function useAppState(runtime: RuntimeType) {
     } catch (err) {
       console.error('Failed to load server URL:', err)
       serverUrl.value = ''
+    }
+  }
+
+  // Load plugins from configuration
+  const loadPlugins = async () => {
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          const config = yield* configService.getCurrentConfig
+          
+          if ((config as any).plugins) {
+            const registry = yield* PluginRegistry
+            
+            // Load configuration into registry
+            yield* registry.loadPluginConfig((config as any).plugins)
+            
+            // Import and register plugins
+            const { initializePlugins } = yield* Effect.tryPromise({
+              try: () => import('@/plugins'),
+              catch: (error) => new Error(`Failed to import plugins: ${error}`)
+            })
+            
+            yield* initializePlugins()
+          }
+        })
+      )
+    } catch (err) {
+      console.error('Failed to load plugins:', err)
     }
   }
 
@@ -283,11 +313,29 @@ export function useAppState(runtime: RuntimeType) {
       const studyStreamEffects = selectedStudiesToSend.map(study => {
         const studyFiles = study.series.flatMap(series => series.files).filter(file => file.anonymized)
 
-        return dicomSender.sendStudyStream(
-          study.studyInstanceUID,
-          studyFiles,
-          concurrency.value
-        ).pipe(
+        // Call beforeSend hooks
+        const callBeforeSendHooks = Effect.gen(function* () {
+          const registry = yield* PluginRegistry
+          const hookPlugins = yield* registry.getHookPlugins()
+          
+          for (const plugin of hookPlugins) {
+            if (plugin.hooks.beforeSend) {
+              yield* plugin.hooks.beforeSend(study).pipe(
+                Effect.catchAll((error) => {
+                  console.error(`Plugin ${plugin.id} beforeSend hook failed:`, error)
+                  return Effect.succeed(undefined)
+                })
+              )
+            }
+          }
+        })
+
+        return Stream.fromEffect(callBeforeSendHooks).pipe(
+          Stream.flatMap(() => dicomSender.sendStudyStream(
+            study.studyInstanceUID,
+            studyFiles,
+            concurrency.value
+          )),
           Stream.tap((event) =>
             Effect.sync(() => {
               switch (event._tag) {
@@ -326,6 +374,24 @@ export function useAppState(runtime: RuntimeType) {
                       const updatedStudies = yield* processor.groupFilesByStudy(dicomFiles.value)
                       studies.value = updatedStudies
                       console.log(`Studies updated after ${event.studyId} completion`)
+                      
+                      // Call afterSend hooks
+                      const registry = yield* PluginRegistry
+                      const hookPlugins = yield* registry.getHookPlugins()
+                      const sentStudy = updatedStudies.find(s => s.studyInstanceUID === event.studyId)
+                      
+                      if (sentStudy) {
+                        for (const plugin of hookPlugins) {
+                          if (plugin.hooks.afterSend) {
+                            yield* plugin.hooks.afterSend(sentStudy).pipe(
+                              Effect.catchAll((error) => {
+                                console.error(`Plugin ${plugin.id} afterSend hook failed:`, error)
+                                return Effect.succeed(undefined)
+                              })
+                            )
+                          }
+                        }
+                      }
                     })
                   )
 
@@ -339,6 +405,28 @@ export function useAppState(runtime: RuntimeType) {
                 case "SendingError":
                   console.error(`Sending error for study ${event.studyId}:`, event.error)
                   removeStudySendingProgress(event.studyId)
+                  
+                  // Call onSendError hooks
+                  runtime.runPromise(
+                    Effect.gen(function* () {
+                      const registry = yield* PluginRegistry
+                      const hookPlugins = yield* registry.getHookPlugins()
+                      const errorStudy = studies.value.find(s => s.studyInstanceUID === event.studyId)
+                      
+                      if (errorStudy) {
+                        for (const plugin of hookPlugins) {
+                          if (plugin.hooks.onSendError) {
+                            yield* plugin.hooks.onSendError(errorStudy, event.error).pipe(
+                              Effect.catchAll((error) => {
+                                console.error(`Plugin ${plugin.id} onSendError hook failed:`, error)
+                                return Effect.succeed(undefined)
+                              })
+                            )
+                          }
+                        }
+                      }
+                    })
+                  )
                   break
               }
             })
@@ -410,9 +498,10 @@ export function useAppState(runtime: RuntimeType) {
   }
 
   // Load configuration on mount
-  onMounted(() => {
-    loadConfig()
-    loadServerUrl()
+  onMounted(async () => {
+    await loadConfig()
+    await loadServerUrl()
+    await loadPlugins()
   })
 
   return {

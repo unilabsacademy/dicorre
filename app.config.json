@@ -132,5 +132,17 @@
       "dateJitterDays": 31,
       "description": "Matches Python deid package configuration with custom handlers"
     }
+  },
+  "plugins": {
+    "enabled": ["image-converter", "send-logger"],
+    "settings": {
+      "image-converter": {
+        "defaultModality": "OT",
+        "defaultSeriesDescription": "Converted Image"
+      },
+      "send-logger": {
+        "logLevel": "detailed"
+      }
+    }
   }
 }

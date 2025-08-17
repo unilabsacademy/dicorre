@@ -112,6 +112,7 @@ export interface AnonymizationPreset {
 
 // Import DicomServerConfig for use in AppConfig
 import type { DicomServerConfig } from '@/composables/useDicomSender'
+import type { PluginConfig } from '@/types/plugins'
 
 export interface AppConfig {
   dicomServer: DicomServerConfig
@@ -119,6 +120,7 @@ export interface AppConfig {
     tagDescriptions?: Record<string, string>
   }
   presets?: Record<string, AnonymizationPreset>
+  plugins?: PluginConfig
 }
 
 // Re-export DicomServerConfig for convenience

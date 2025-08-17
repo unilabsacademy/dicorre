@@ -57,9 +57,16 @@ export class StorageError extends Data.TaggedError("StorageError")<{
   readonly cause?: unknown
 }> { }
 
+export class PluginError extends Data.TaggedError("PluginError")<{
+  readonly message: string
+  readonly pluginId?: string
+  readonly cause?: unknown
+}> { }
+
 // Union types for different service error domains
 export type DicomProcessorError = ParseError | ValidationError | FileSystemError
 export type AnonymizerError = AnonymizationError | ConfigurationError | FileSystemError | ParseError | ValidationError
 export type DicomSenderError = NetworkError | ValidationError | ConfigurationError
 export type FileHandlerErrorType = FileHandlerError | ValidationError | FileSystemError
 export type StorageErrorType = StorageError | ValidationError
+export type PluginErrorType = PluginError | ValidationError

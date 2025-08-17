@@ -9,12 +9,14 @@ import { ConfigServiceLive } from '@/services/config'
 import { DicomProcessorLive } from '@/services/dicomProcessor'
 import { OPFSStorage, OPFSStorageLive } from '@/services/opfsStorage'
 import { FileHandlerLive } from '@/services/fileHandler'
+import { PluginRegistryLive } from '@/services/pluginRegistry'
 import type { AnonymizationConfig, DicomFile } from '@/types/dicom'
 
 // Worker services layer - same as main thread
 const WorkerLayer = Layer.mergeAll(
   ConfigServiceLive,
-  FileHandlerLive,
+  PluginRegistryLive,
+  FileHandlerLive.pipe(Layer.provide(PluginRegistryLive)),
   OPFSStorageLive,
   DicomProcessorLive,
   AnonymizerLive
