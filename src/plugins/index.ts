@@ -1,6 +1,7 @@
 import { Effect } from "effect"
 import { PluginRegistry } from '@/services/pluginRegistry'
 import { imageConverterPlugin } from './imageConverter'
+import { pdfConverterPlugin } from './pdfConverter'
 import { sendLoggerPlugin } from './sendLogger'
 import type { PluginConfig } from '@/types/plugins'
 import { PluginError } from '@/types/effects'
@@ -22,6 +23,7 @@ export const loadPlugins = (config?: PluginConfig) =>
     // Register built-in plugins
     const plugins = [
       imageConverterPlugin,
+      pdfConverterPlugin,
       sendLoggerPlugin
     ]
     
@@ -48,7 +50,7 @@ export const loadPlugins = (config?: PluginConfig) =>
  */
 export const initializePlugins = () => {
   const defaultConfig: PluginConfig = {
-    enabled: ['image-converter', 'send-logger']
+    enabled: ['image-converter', 'pdf-converter', 'send-logger']
   }
   
   return loadPlugins(defaultConfig)

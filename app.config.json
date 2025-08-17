@@ -134,11 +134,15 @@
     }
   },
   "plugins": {
-    "enabled": ["image-converter", "send-logger"],
+    "enabled": ["image-converter", "pdf-converter", "send-logger"],
     "settings": {
       "image-converter": {
         "defaultModality": "OT",
         "defaultSeriesDescription": "Converted Image"
+      },
+      "pdf-converter": {
+        "defaultModality": "DOC",
+        "defaultSeriesDescription": "PDF Conversion"
       },
       "send-logger": {
         "logLevel": "detailed"
