@@ -101,19 +101,19 @@ export function useAppState(runtime: RuntimeType) {
         Effect.gen(function* () {
           const configService = yield* ConfigService
           const config = yield* configService.getCurrentConfig
-          
+
           if ((config as any).plugins) {
             const registry = yield* PluginRegistry
-            
+
             // Load configuration into registry
             yield* registry.loadPluginConfig((config as any).plugins)
-            
+
             // Import and register plugins
             const { initializePlugins } = yield* Effect.tryPromise({
               try: () => import('@/plugins'),
               catch: (error) => new Error(`Failed to import plugins: ${error}`)
             })
-            
+
             yield* initializePlugins()
           }
         })
@@ -317,7 +317,7 @@ export function useAppState(runtime: RuntimeType) {
         const callBeforeSendHooks = Effect.gen(function* () {
           const registry = yield* PluginRegistry
           const hookPlugins = yield* registry.getHookPlugins()
-          
+
           for (const plugin of hookPlugins) {
             if (plugin.hooks.beforeSend) {
               yield* plugin.hooks.beforeSend(study).pipe(
@@ -374,12 +374,12 @@ export function useAppState(runtime: RuntimeType) {
                       const updatedStudies = yield* processor.groupFilesByStudy(dicomFiles.value)
                       studies.value = updatedStudies
                       console.log(`Studies updated after ${event.studyId} completion`)
-                      
+
                       // Call afterSend hooks
                       const registry = yield* PluginRegistry
                       const hookPlugins = yield* registry.getHookPlugins()
                       const sentStudy = updatedStudies.find(s => s.studyInstanceUID === event.studyId)
-                      
+
                       if (sentStudy) {
                         for (const plugin of hookPlugins) {
                           if (plugin.hooks.afterSend) {
@@ -405,14 +405,14 @@ export function useAppState(runtime: RuntimeType) {
                 case "SendingError":
                   console.error(`Sending error for study ${event.studyId}:`, event.error)
                   removeStudySendingProgress(event.studyId)
-                  
+
                   // Call onSendError hooks
                   runtime.runPromise(
                     Effect.gen(function* () {
                       const registry = yield* PluginRegistry
                       const hookPlugins = yield* registry.getHookPlugins()
                       const errorStudy = studies.value.find(s => s.studyInstanceUID === event.studyId)
-                      
+
                       if (errorStudy) {
                         for (const plugin of hookPlugins) {
                           if (plugin.hooks.onSendError) {
