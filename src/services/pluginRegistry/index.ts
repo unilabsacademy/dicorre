@@ -3,10 +3,6 @@ import type { Plugin, FileFormatPlugin, HookPlugin, PluginConfig } from '@/types
 import { isFileFormatPlugin, isHookPlugin } from '@/types/plugins'
 import { PluginError, type PluginErrorType } from '@/types/effects'
 
-/**
- * Plugin Registry Service
- * Manages plugin registration, discovery, and lifecycle
- */
 export class PluginRegistry extends Context.Tag("PluginRegistry")<
   PluginRegistry,
   {
@@ -23,17 +19,11 @@ export class PluginRegistry extends Context.Tag("PluginRegistry")<
   }
 >() { }
 
-/**
- * Internal implementation
- */
 class PluginRegistryImpl {
   private static plugins = new Map<string, Plugin>()
   private static enabledPlugins = new Set<string>()
   private static pluginConfig: PluginConfig = { enabled: [] }
 
-  /**
-   * Register a new plugin
-   */
   static registerPlugin = (plugin: Plugin): Effect.Effect<void, PluginErrorType> =>
     Effect.gen(function* () {
       if (PluginRegistryImpl.plugins.has(plugin.id)) {
@@ -54,9 +44,6 @@ class PluginRegistryImpl {
       }
     })
 
-  /**
-   * Unregister a plugin
-   */
   static unregisterPlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
     Effect.gen(function* () {
       if (!PluginRegistryImpl.plugins.has(pluginId)) {
@@ -71,46 +58,31 @@ class PluginRegistryImpl {
       console.log(`Unregistered plugin: ${pluginId}`)
     })
 
-  /**
-   * Get a specific plugin by ID
-   */
   static getPlugin = (pluginId: string): Effect.Effect<Plugin | undefined, never> =>
     Effect.sync(() => PluginRegistryImpl.plugins.get(pluginId))
 
-  /**
-   * Get all registered plugins
-   */
   static getAllPlugins = (): Effect.Effect<Plugin[], never> =>
     Effect.sync(() => Array.from(PluginRegistryImpl.plugins.values()))
 
-  /**
-   * Get all file format plugins
-   */
   static getFileFormatPlugins = (): Effect.Effect<FileFormatPlugin[], never> =>
     Effect.sync(() => {
       const plugins = Array.from(PluginRegistryImpl.plugins.values())
       return plugins.filter(isFileFormatPlugin).filter(p => p.enabled !== false)
     })
 
-  /**
-   * Get all hook plugins
-   */
   static getHookPlugins = (): Effect.Effect<HookPlugin[], never> =>
     Effect.sync(() => {
       const plugins = Array.from(PluginRegistryImpl.plugins.values())
       return plugins.filter(isHookPlugin).filter(p => p.enabled !== false)
     })
 
-  /**
-   * Find a plugin that can handle a specific file
-   */
   static getPluginForFile = (file: File): Effect.Effect<FileFormatPlugin | undefined, PluginErrorType> =>
     Effect.gen(function* () {
       const fileFormatPlugins = yield* PluginRegistryImpl.getFileFormatPlugins()
-      
+
       // Check by file extension
       const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
-      
+
       for (const plugin of fileFormatPlugins) {
         // Check if extension is supported
         if (plugin.supportedExtensions.some(ext => ext.toLowerCase() === fileExtension)) {
@@ -137,9 +109,6 @@ class PluginRegistryImpl {
       return undefined
     })
 
-  /**
-   * Enable a plugin
-   */
   static enablePlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
     Effect.gen(function* () {
       const plugin = PluginRegistryImpl.plugins.get(pluginId)
@@ -155,9 +124,6 @@ class PluginRegistryImpl {
       console.log(`Enabled plugin: ${pluginId}`)
     })
 
-  /**
-   * Disable a plugin
-   */
   static disablePlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
     Effect.gen(function* () {
       const plugin = PluginRegistryImpl.plugins.get(pluginId)
@@ -173,13 +139,10 @@ class PluginRegistryImpl {
       console.log(`Disabled plugin: ${pluginId}`)
     })
 
-  /**
-   * Load plugin configuration
-   */
   static loadPluginConfig = (config: PluginConfig): Effect.Effect<void, PluginErrorType> =>
     Effect.sync(() => {
       PluginRegistryImpl.pluginConfig = config
-      
+
       // Update enabled status for all plugins
       for (const [pluginId, plugin] of PluginRegistryImpl.plugins.entries()) {
         if (config.enabled.includes(pluginId)) {
@@ -190,14 +153,11 @@ class PluginRegistryImpl {
           plugin.enabled = false
         }
       }
-      
+
       console.log(`Loaded plugin config: ${config.enabled.length} plugins enabled`)
     })
 }
 
-/**
- * Live implementation layer
- */
 export const PluginRegistryLive = Layer.succeed(
   PluginRegistry,
   PluginRegistry.of({
