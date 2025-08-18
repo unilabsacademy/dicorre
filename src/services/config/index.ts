@@ -3,6 +3,7 @@ import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOpt
 import { ConfigurationError, ValidationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig, type ValidatedAppConfig } from './schema'
+import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'
 
 /**
  * Configuration service as proper Effect service
@@ -118,7 +119,29 @@ class ConfigServiceImpl {
   static getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType> = Effect.gen(function* () {
     yield* ConfigServiceImpl.validateConfig(ConfigServiceImpl.config)
     const { tagDescriptions: _tagDescriptions, ...anonymizationConfig } = ConfigServiceImpl.config.anonymization
-    return { ...anonymizationConfig }
+    
+    // Convert tag names to hex values for preserveTags
+    let preserveTags = anonymizationConfig.preserveTags
+    if (preserveTags) {
+      preserveTags = preserveTags.map(tag => {
+        // If it's already a hex value, keep it as is
+        if (/^[0-9A-Fa-f]{8}$/.test(tag)) {
+          return tag
+        }
+        // If it's a tag name, convert to hex
+        if (isValidTagName(tag)) {
+          const hex = tagNameToHex(tag)
+          if (hex) return hex
+        }
+        // Return as is if conversion fails (validation will catch invalid tags)
+        return tag
+      })
+    }
+    
+    return { 
+      ...anonymizationConfig,
+      preserveTags
+    }
   })
 
 

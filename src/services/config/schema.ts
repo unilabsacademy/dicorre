@@ -1,5 +1,6 @@
 import { Schema } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
+import { isValidTagName, isValidTagHex } from '@/utils/dicom-tag-dictionary'
 
 // DicomServerConfig Schema
 const DicomServerAuthSchema = Schema.Struct({
@@ -69,8 +70,11 @@ export const AnonymizationConfigSchema = Schema.Struct({
   profileOptions: AnonymizationProfileOptionsSchema,
   replacements: Schema.optional(ReplacementsSchema),
   preserveTags: Schema.optional(Schema.Array(Schema.String.pipe(
-    Schema.filter((tag) => /^[0-9A-Fa-f]{8}$/.test(tag), {
-      message: () => "Tag must be 8 hex characters (e.g., 00080016)"
+    Schema.filter((tag) => {
+      // Accept either valid tag names or hex values
+      return isValidTagName(tag) || isValidTagHex(tag)
+    }, {
+      message: () => "Tag must be a valid DICOM tag name (e.g., 'Modality') or 8 hex characters (e.g., 00080016)"
     })
   ))),
   tagsToRemove: Schema.optional(Schema.Array(Schema.String)),
@@ -97,8 +101,11 @@ export const AppConfigSchema = Schema.Struct({
     profileOptions: AnonymizationProfileOptionsSchema,
     replacements: Schema.optional(ReplacementsSchema),
     preserveTags: Schema.optional(Schema.Array(Schema.String.pipe(
-      Schema.filter((tag) => /^[0-9A-Fa-f]{8}$/.test(tag), {
-        message: () => "Tag must be 8 hex characters (e.g., 00080016)"
+      Schema.filter((tag) => {
+        // Accept either valid tag names or hex values
+        return isValidTagName(tag) || isValidTagHex(tag)
+      }, {
+        message: () => "Tag must be a valid DICOM tag name (e.g., 'Modality') or 8 hex characters (e.g., 00080016)"
       })
     ))),
     tagsToRemove: Schema.optional(Schema.Array(Schema.String)),

@@ -14,7 +14,7 @@ describe('Config Schema Validation', () => {
           description: 'Test server'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
@@ -31,7 +31,7 @@ describe('Config Schema Validation', () => {
           timeout: 30000
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
@@ -46,7 +46,7 @@ describe('Config Schema Validation', () => {
           headers: {}
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
@@ -61,7 +61,7 @@ describe('Config Schema Validation', () => {
           timeout: -1000
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
@@ -76,7 +76,7 @@ describe('Config Schema Validation', () => {
           timeout: 700000
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
@@ -92,7 +92,7 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'clean',
+          profileOptions: ['CleanDescOption'],
           removePrivateTags: false,
           dateJitterDays: 30,
           organizationRoot: '1.2.3.4.5',
@@ -100,13 +100,13 @@ describe('Config Schema Validation', () => {
             patientName: 'ANONYMOUS',
             patientId: 'ID_{timestamp}'
           },
-          preserveTags: ['00080016', '00080018'],
+          preserveTags: ['SOP Class UID', 'SOP Instance UID'],
           tagsToRemove: ['PatientAddress']
         }
       }
 
       const result = await Effect.runPromise(validateAppConfig(config))
-      expect(result.anonymization.profile).toBe('clean')
+      expect(result.anonymization.profileOptions).toEqual(['CleanDescOption'])
       expect(result.anonymization.dateJitterDays).toBe(30)
     })
 
@@ -116,7 +116,7 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'invalid-profile',
+          profileOptions: ['InvalidProfile'],
           removePrivateTags: true
         }
       }
@@ -130,7 +130,7 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true,
           dateJitterDays: -5
         }
@@ -145,7 +145,7 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true,
           dateJitterDays: 400
         }
@@ -160,13 +160,13 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true,
           preserveTags: ['00080016', 'INVALID', '12345'] // Invalid formats
         }
       }
 
-      await expect(Effect.runPromise(validateAppConfig(config))).rejects.toThrow(/Tag must be 8 hex characters/)
+      await expect(Effect.runPromise(validateAppConfig(config))).rejects.toThrow(/Tag must be a valid DICOM tag name/)
     })
 
     it('should reject invalid organization root', async () => {
@@ -175,7 +175,7 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true,
           organizationRoot: '1.2.abc.4' // Invalid: contains letters
         }
@@ -185,60 +185,6 @@ describe('Config Schema Validation', () => {
     })
   })
 
-  describe('Presets', () => {
-    it('should accept valid presets', async () => {
-      const config = {
-        dicomServer: {
-          url: '/api/test'
-        },
-        anonymization: {
-          profile: 'basic',
-          removePrivateTags: true
-        },
-        presets: {
-          minimal: {
-            profile: 'basic',
-            removePrivateTags: false,
-            description: 'Minimal anonymization'
-          },
-          maximum: {
-            profile: 'very-clean',
-            removePrivateTags: true,
-            description: 'Maximum anonymization',
-            dateJitterDays: 31
-          }
-        }
-      }
-
-      const result = await Effect.runPromise(validateAppConfig(config))
-      expect(result.presets).toBeDefined()
-      expect(result.presets?.minimal.profile).toBe('basic')
-      expect(result.presets?.maximum.dateJitterDays).toBe(31)
-    })
-
-    it('should accept presets with any structure (validation happens at business logic level)', async () => {
-      const config = {
-        dicomServer: {
-          url: '/api/test'
-        },
-        anonymization: {
-          profile: 'basic',
-          removePrivateTags: true
-        },
-        presets: {
-          custom: {
-            profile: 'unknown-profile', // This will be validated later by ConfigService
-            removePrivateTags: true,
-            description: 'Custom preset'
-          }
-        }
-      }
-
-      const result = await Effect.runPromise(validateAppConfig(config))
-      expect(result).toBeDefined()
-      expect(result.presets).toBeDefined()
-    })
-  })
 
   describe('Complete Config', () => {
     it('should accept the default config structure', async () => {
@@ -251,7 +197,7 @@ describe('Config Schema Validation', () => {
           description: 'Default DICOM server configuration'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile', 'RetainLongModifDatesOption', 'RetainUIDsOption'],
           removePrivateTags: true,
           useCustomHandlers: true,
           dateJitterDays: 31,
@@ -265,33 +211,23 @@ describe('Config Schema Validation', () => {
             institution: 'ANONYMIZED'
           },
           preserveTags: [
-            '00080016',
-            '00080018',
-            '0020000D',
-            '0020000E'
+            "Instance Number",
+            "Modality", 
+            "Manufacturer",
+            "Referring Physician's Name",
+            "Protocol Name"
           ],
-          tagDescriptions: {
-            '00080016': 'SOP Class UID',
-            '00080018': 'SOP Instance UID'
-          },
           tagsToRemove: [
             'PatientAddress',
             'PatientTelephoneNumber'
           ]
-        },
-        presets: {
-          minimal: {
-            profile: 'basic',
-            removePrivateTags: false,
-            description: 'Minimal anonymization'
-          }
         }
       }
 
       const result = await Effect.runPromise(validateAppConfig(defaultConfig))
       expect(result).toBeDefined()
       expect(result.dicomServer.url).toBe('/api/orthanc/dicom-web')
-      expect(result.anonymization.profile).toBe('basic')
+      expect(result.anonymization.profileOptions).toEqual(['BasicProfile', 'RetainLongModifDatesOption', 'RetainUIDsOption'])
     })
 
     it('should handle missing optional fields', async () => {
@@ -300,7 +236,7 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
@@ -309,7 +245,6 @@ describe('Config Schema Validation', () => {
       expect(result).toBeDefined()
       expect(result.dicomServer.headers).toBeUndefined()
       expect(result.anonymization.replacements).toBeUndefined()
-      expect(result.presets).toBeUndefined()
     })
   })
 
@@ -320,7 +255,7 @@ describe('Config Schema Validation', () => {
           url: '/api/test'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
@@ -334,7 +269,7 @@ describe('Config Schema Validation', () => {
       const config = {
         dicomServer: {},
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true
         }
       }
