@@ -22,7 +22,10 @@ const progressText = computed(() => {
 </script>
 
 <template>
-  <Card class="mb-4 border-primary/20 bg-primary/5">
+  <Card
+    class="mb-4 border-primary/20 bg-primary/5"
+    data-testid="file-processing-progress-card"
+  >
     <CardContent class="py-4">
       <div class="space-y-3">
         <div class="flex items-center justify-between">
@@ -32,9 +35,12 @@ const progressText = computed(() => {
           </div>
           <span class="text-xs text-muted-foreground">{{ progressText }}</span>
         </div>
-        
-        <Progress :model-value="progress" class="h-2" />
-        
+
+        <Progress
+          :model-value="progress"
+          class="h-2"
+        />
+
         <div class="text-xs text-muted-foreground">
           {{ currentStep }}
         </div>
