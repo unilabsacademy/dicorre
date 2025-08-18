@@ -12,6 +12,7 @@ import { useDragAndDrop } from '@/composables/useDragAndDrop'
 import { useDicomSender } from '@/composables/useDicomSender'
 import { useAnonymizer } from '@/composables/useAnonymizer'
 import { clearStudyCache } from '@/services/anonymizer/handlers'
+import { toast } from 'vue-sonner'
 
 type RuntimeType = ReturnType<typeof ManagedRuntime.make<any, any>>
 
@@ -264,11 +265,17 @@ export function useAppState(runtime: RuntimeType) {
         Effect.all(studyStreamEffects.map((effect, index) =>
           effect.pipe(
             Effect.map(() => {
-              successfulStudies.push(selectedStudies.value[index].studyInstanceUID)
+              const currentStudy = selectedStudies.value[index]
+              if (currentStudy) {
+                successfulStudies.push(currentStudy.studyInstanceUID)
+              }
               return true
             }),
             Effect.catchAll(() => {
-              failedStudies.push(selectedStudies.value[index].studyInstanceUID)
+              const currentStudy = selectedStudies.value[index]
+              if (currentStudy) {
+                failedStudies.push(currentStudy.studyInstanceUID)
+              }
               return Effect.succeed(false)
             })
           )
@@ -295,8 +302,16 @@ export function useAppState(runtime: RuntimeType) {
   const testConnection = async () => {
     try {
       await runtime.runPromise(dicomSender.testConnection())
+      toast.success('Connection successful', {
+        description: 'DICOM server is reachable',
+        duration: 3000
+      })
     } catch (error) {
       console.error('Connection test failed:', error)
+      toast.error('Connection failed', {
+        description: (error as Error).message,
+        duration: 5000
+      })
       setAppError(error as Error)
     }
   }
@@ -451,11 +466,17 @@ export function useAppState(runtime: RuntimeType) {
         Effect.all(studyStreamEffects.map((effect, index) =>
           effect.pipe(
             Effect.map(() => {
-              successfulStudies.push(selectedStudiesToSend[index].studyInstanceUID)
+              const currentStudy = selectedStudiesToSend[index]
+              if (currentStudy) {
+                successfulStudies.push(currentStudy.studyInstanceUID)
+              }
               return true
             }),
             Effect.catchAll(() => {
-              failedStudies.push(selectedStudiesToSend[index].studyInstanceUID)
+              const currentStudy = selectedStudiesToSend[index]
+              if (currentStudy) {
+                failedStudies.push(currentStudy.studyInstanceUID)
+              }
               return Effect.succeed(false)
             })
           )

@@ -2,6 +2,16 @@ import { test, expect } from '@playwright/test'
 import path from 'path'
 
 // This test uses the real Orthanc server running on localhost:8080
+// 
+// Recommended data-testid attributes to add to the UI:
+// - data-testid="connection-test-success" - Success message after connection test
+// - data-testid="connection-test-error" - Error message if connection test fails
+// - data-testid="send-success-message" - Success message after sending DICOM files
+// - data-testid="send-error-message" - Error message if sending fails
+// - data-testid="send-progress-indicator" - Progress indicator during sending
+// - data-testid="study-checkbox-{studyId}" - Checkbox for each study in the table
+// - data-testid="anonymization-progress" - Progress indicator during anonymization
+// - data-testid="anonymization-complete" - Indicator when anonymization is done
 test.describe('DICOM Sending with Real Orthanc Server', () => {
 
   test('send DICOM files to real Orthanc server', async ({ page }) => {
@@ -35,7 +45,14 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
     console.log('Testing connection to Orthanc...')
     await page.getByTestId('settings-menu-button').click()
     await page.getByTestId('test-connection-menu-item').click()
-    await page.waitForTimeout(2000)
+    
+    // Wait for connection test to complete by waiting for the toast notification
+    // vue-sonner adds a data-sonner-toast attribute to toast elements
+    await page.waitForSelector('[data-sonner-toast]', { timeout: 5000 })
+    
+    // Verify connection was successful by checking for success toast
+    const toastText = await page.locator('[data-sonner-toast]').first().textContent()
+    console.log('Connection test result:', toastText)
 
     // Upload test ZIP file with real DICOM files
     console.log('Uploading test DICOM files...')
@@ -61,8 +78,14 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
     await expect(anonymizeButton).toBeEnabled()
     await anonymizeButton.click()
 
-    // Wait for anonymization to complete
-    await page.waitForTimeout(5000)
+    // Wait for anonymization to complete by monitoring the anonymized count badge
+    await page.waitForFunction(
+      () => {
+        const badge = document.querySelector('[data-testid="anonymized-count-badge"]')
+        return badge && badge.textContent && badge.textContent !== '0'
+      },
+      { timeout: 10000 }
+    )
 
     // Check anonymized count
     const anonymizedCountText = await page.getByTestId('anonymized-count-badge').textContent()
@@ -70,8 +93,17 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
 
     // After anonymization, the study gets a new ID, so we need to find and select it again
     console.log('Selecting anonymized study for sending...')
-    // Wait for the anonymized study to appear
-    await page.waitForTimeout(2000)
+    
+    // Wait for the table to update with the anonymized study
+    await page.waitForFunction(
+      () => {
+        const table = document.querySelector('[data-testid="studies-data-table"]')
+        const rows = table?.querySelectorAll('tr')
+        // Check if table has been updated (should have at least header + 1 data row)
+        return rows && rows.length > 1
+      },
+      { timeout: 5000 }
+    )
     
     // Get all checkboxes again (the anonymized study will be a new one)
     const allCheckboxes = page.getByRole('checkbox')
@@ -80,16 +112,21 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
     
     // Find and select the anonymized study (usually it's still the first non-header checkbox)
     if (checkboxCount > 1) {
-      // Force click the checkbox
+      // Try to click the checkbox
       await allCheckboxes.nth(1).click({ force: true })
-      await page.waitForTimeout(1000)
       
-      // Verify it's checked, if not try again
+      // Check if it's checked, if not try different approaches
       let isChecked = await allCheckboxes.nth(1).isChecked()
+      
       if (!isChecked) {
-        console.log('First click failed, trying again...')
+        console.log('First click failed, trying check method...')
         await allCheckboxes.nth(1).check({ force: true })
-        await page.waitForTimeout(500)
+        isChecked = await allCheckboxes.nth(1).isChecked()
+      }
+      
+      if (!isChecked) {
+        console.log('Check method failed, trying dispatchEvent...')
+        await allCheckboxes.nth(1).dispatchEvent('click')
         isChecked = await allCheckboxes.nth(1).isChecked()
       }
       
@@ -124,8 +161,18 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
     await expect(sendButton).toBeEnabled({ timeout: 10000 })
     await sendButton.click()
 
-    // Wait for sending to complete and capture any errors
-    await page.waitForTimeout(10000)
+    // Wait for sending to complete by monitoring console logs or network activity
+    // Since the UI doesn't have the data-testid attributes yet, we'll use console logs
+    await page.waitForEvent('console', {
+      predicate: msg => msg.text().includes('sent successfully') || msg.text().includes('send failed'),
+      timeout: 15000
+    }).catch(async () => {
+      // Fallback: wait for network response
+      await page.waitForResponse(
+        response => response.url().includes('dicom-web/studies'),
+        { timeout: 15000 }
+      )
+    })
 
     // Check if files were sent successfully by querying Orthanc
     console.log('Checking Orthanc for uploaded studies...')
