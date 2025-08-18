@@ -1,5 +1,5 @@
 import { Schema } from "effect"
-import type { AppConfig, DicomServerConfig, AnonymizationConfig, AnonymizationPreset } from '@/types/dicom'
+import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
 
 // DicomServerConfig Schema
 const DicomServerAuthSchema = Schema.Struct({
@@ -28,8 +28,28 @@ export const DicomServerConfigSchema = Schema.Struct({
   })
 )
 
+// DICOM Profile Options Schema - based on @umessen/dicom-deidentifier standard
+const DicomProfileOptionSchema = Schema.Literal(
+  "BasicProfile",
+  "RetainLongModifDatesOption",
+  "RetainLongFullDatesOption",
+  "RetainUIDsOption",
+  "CleanGraphOption",
+  "RetainPatientCharsOption",
+  "RetainSafePrivateOption",
+  "CleanDescOption",
+  "RetainDeviceIdentOption",
+  "RetainInstIdentOption",
+  "CleanStructContOption"
+)
+
 // AnonymizationConfig Schema
-const AnonymizationProfileSchema = Schema.Literal("basic", "clean", "very-clean")
+const AnonymizationProfileOptionsSchema = Schema.Array(DicomProfileOptionSchema).pipe(
+  Schema.minItems(1, { message: () => "At least one profile option is required" }),
+  Schema.annotations({
+    description: "Array of DICOM standard profile options. BasicProfile is always available as fallback."
+  })
+)
 
 const ReplacementsSchema = Schema.Struct({
   default: Schema.optional(Schema.String),
@@ -46,7 +66,7 @@ const ReplacementsSchema = Schema.Struct({
 
 export const AnonymizationConfigSchema = Schema.Struct({
   removePrivateTags: Schema.Boolean,
-  profile: AnonymizationProfileSchema,
+  profileOptions: AnonymizationProfileOptionsSchema,
   replacements: Schema.optional(ReplacementsSchema),
   preserveTags: Schema.optional(Schema.Array(Schema.String.pipe(
     Schema.filter((tag) => /^[0-9A-Fa-f]{8}$/.test(tag), {
@@ -67,24 +87,14 @@ export const AnonymizationConfigSchema = Schema.Struct({
   ))
 })
 
-// AnonymizationPreset Schema
-const AnonymizationPresetSchema = Schema.Struct({
-  profile: AnonymizationProfileSchema,
-  removePrivateTags: Schema.Boolean,
-  description: Schema.String,
-  useCustomHandlers: Schema.optional(Schema.Boolean),
-  dateJitterDays: Schema.optional(Schema.Number.pipe(
-    Schema.greaterThanOrEqualTo(0),
-    Schema.lessThanOrEqualTo(365)
-  ))
-})
+// AnonymizationPreset Schema - removed
 
 // Complete AppConfig Schema
 export const AppConfigSchema = Schema.Struct({
   dicomServer: DicomServerConfigSchema,
   anonymization: Schema.Struct({
     removePrivateTags: Schema.Boolean,
-    profile: AnonymizationProfileSchema,
+    profileOptions: AnonymizationProfileOptionsSchema,
     replacements: Schema.optional(ReplacementsSchema),
     preserveTags: Schema.optional(Schema.Array(Schema.String.pipe(
       Schema.filter((tag) => /^[0-9A-Fa-f]{8}$/.test(tag), {
@@ -104,8 +114,7 @@ export const AppConfigSchema = Schema.Struct({
       })
     )),
     tagDescriptions: Schema.optional(Schema.Any)
-  }),
-  presets: Schema.optional(Schema.Any)
+  })
 })
 
 // Type extraction

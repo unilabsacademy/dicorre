@@ -1,5 +1,5 @@
 import { Effect, Context, Layer } from "effect"
-import type { AppConfig, DicomServerConfig, AnonymizationConfig } from '@/types/dicom'
+import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
 import { ConfigurationError, ValidationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig, type ValidatedAppConfig } from './schema'
@@ -12,8 +12,6 @@ export class ConfigService extends Context.Tag("ConfigService")<
   {
     readonly getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType>
     readonly getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
-    readonly getAnonymizationPreset: (presetName: string) => Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
-    readonly getPresets: Effect.Effect<Record<string, { profile: string; description: string }>, never>
     readonly getTagDescription: (tagId: string) => Effect.Effect<string, never>
     readonly getTagsToRemove: Effect.Effect<string[], never>
     readonly validateConfig: (config: AppConfig) => Effect.Effect<void, ConfigurationErrorType>
@@ -51,13 +49,47 @@ class ConfigServiceImpl {
         }))
       }
 
-      // Validate profile
-      if (!['basic', 'clean', 'very-clean'].includes(config.anonymization.profile)) {
+      // Validate profile options
+      if (!config.anonymization.profileOptions || !Array.isArray(config.anonymization.profileOptions)) {
         return yield* Effect.fail(new ConfigurationError({
-          message: `Invalid anonymization profile: ${config.anonymization.profile}`,
-          setting: 'anonymization.profile',
-          value: config.anonymization.profile
+          message: 'Profile options must be an array',
+          setting: 'anonymization.profileOptions',
+          value: config.anonymization.profileOptions
         }))
+      }
+
+      if (config.anonymization.profileOptions.length === 0) {
+        return yield* Effect.fail(new ConfigurationError({
+          message: 'At least one profile option is required',
+          setting: 'anonymization.profileOptions',
+          value: config.anonymization.profileOptions
+        }))
+      }
+
+      // Valid DICOM profile options
+      const validProfileOptions: DicomProfileOption[] = [
+        'BasicProfile',
+        'RetainLongModifDatesOption',
+        'RetainLongFullDatesOption',
+        'RetainUIDsOption',
+        'CleanGraphOption',
+        'RetainPatientCharsOption',
+        'RetainSafePrivateOption',
+        'CleanDescOption',
+        'RetainDeviceIdentOption',
+        'RetainInstIdentOption',
+        'CleanStructContOption'
+      ]
+
+      // Check each profile option is valid
+      for (const profileOption of config.anonymization.profileOptions) {
+        if (!validProfileOptions.includes(profileOption as DicomProfileOption)) {
+          return yield* Effect.fail(new ConfigurationError({
+            message: `Invalid profile option: ${profileOption}. Valid options are: ${validProfileOptions.join(', ')}`,
+            setting: 'anonymization.profileOptions',
+            value: profileOption
+          }))
+        }
       }
 
       // Validate date jitter if present
@@ -89,65 +121,6 @@ class ConfigServiceImpl {
     return { ...anonymizationConfig }
   })
 
-  /**
-   * Get anonymization preset by name
-   */
-  static getAnonymizationPreset = (presetName: string): Effect.Effect<AnonymizationConfig, ConfigurationErrorType> =>
-    Effect.gen(function* () {
-      if (!presetName || presetName.trim() === '') {
-        return yield* Effect.fail(new ConfigurationError({
-          message: 'Preset name cannot be empty',
-          setting: `presets.${presetName}`,
-          value: presetName
-        }))
-      }
-
-      const preset = ConfigServiceImpl.config.presets?.[presetName]
-      if (!preset) {
-        return yield* Effect.fail(new ConfigurationError({
-          message: `Preset '${presetName}' not found`,
-          setting: `presets.${presetName}`,
-          value: presetName
-        }))
-      }
-
-      // Merge preset with base anonymization config
-      const mergedConfig = {
-        ...ConfigServiceImpl.config.anonymization,
-        profile: preset.profile,
-        removePrivateTags: preset.removePrivateTags
-      }
-
-      // Validate the merged configuration
-      if (!['basic', 'clean', 'very-clean'].includes(mergedConfig.profile)) {
-        return yield* Effect.fail(new ConfigurationError({
-          message: `Invalid profile in preset '${presetName}': ${mergedConfig.profile}`,
-          setting: `presets.${presetName}.profile`,
-          value: mergedConfig.profile
-        }))
-      }
-
-      return mergedConfig
-    })
-
-
-  /**
-   * Get all available presets
-   */
-  static getPresets: Effect.Effect<Record<string, { profile: string; description: string }>, never> = Effect.succeed(() => {
-    const presets: Record<string, { profile: string; description: string }> = {}
-
-    if (ConfigServiceImpl.config.presets) {
-      for (const [key, preset] of Object.entries(ConfigServiceImpl.config.presets)) {
-        presets[key] = {
-          profile: preset.profile,
-          description: preset.description
-        }
-      }
-    }
-
-    return presets
-  }).pipe(Effect.map(fn => fn()))
 
   /**
    * Get tag description by tag ID
@@ -197,10 +170,10 @@ class ConfigServiceImpl {
             })
           }
           
-          if (errorMessage.includes('Expected "basic"') || errorMessage.includes('Expected "clean"') || errorMessage.includes('Expected "very-clean"') || errorMessage.includes('"basic" | "clean" | "very-clean"') || (errorMessage.includes('actual') && (errorMessage.includes('"basic"') || errorMessage.includes('"clean"') || errorMessage.includes('"very-clean"')))) {
+          if (errorMessage.includes('Expected "BasicProfile"') || errorMessage.includes('profile option') || errorMessage.includes('At least one profile option is required') || errorMessage.includes('profileOptions')) {
             return new ConfigurationError({
-              message: 'Invalid anonymization profile',
-              setting: 'anonymization.profile',
+              message: 'Invalid anonymization profile options',
+              setting: 'anonymization.profileOptions',
               value: configData
             })
           }
@@ -238,8 +211,6 @@ export const ConfigServiceLive = Layer.succeed(
   ConfigService.of({
     getServerConfig: ConfigServiceImpl.getServerConfig,
     getAnonymizationConfig: ConfigServiceImpl.getAnonymizationConfig,
-    getAnonymizationPreset: ConfigServiceImpl.getAnonymizationPreset,
-    getPresets: ConfigServiceImpl.getPresets,
     getTagDescription: ConfigServiceImpl.getTagDescription,
     getTagsToRemove: ConfigServiceImpl.getTagsToRemove,
     validateConfig: ConfigServiceImpl.validateConfig,

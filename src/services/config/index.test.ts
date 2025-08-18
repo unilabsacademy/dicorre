@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Effect } from 'effect'
 import { ConfigService, ConfigServiceLive } from './index'
-import type { AppConfig, AnonymizationConfig } from '@/types/dicom'
+import type { AppConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
 
 describe('ConfigService (Effect Service Testing)', () => {
   // Test the service through Effect.provide pattern
@@ -16,7 +16,7 @@ describe('ConfigService (Effect Service Testing)', () => {
           description: 'Test server'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true,
           useCustomHandlers: true,
           dateJitterDays: 30,
@@ -42,7 +42,7 @@ describe('ConfigService (Effect Service Testing)', () => {
           description: 'Test server'
         },
         anonymization: {
-          profile: 'basic',
+          profileOptions: ['BasicProfile'],
           removePrivateTags: true,
           useCustomHandlers: true
         }
@@ -63,7 +63,7 @@ describe('ConfigService (Effect Service Testing)', () => {
           description: 'Test server'
         },
         anonymization: {
-          profile: 'invalid-profile' as any,
+          profileOptions: ['invalid-profile' as DicomProfileOption],
           removePrivateTags: true,
           useCustomHandlers: true
         }
@@ -74,7 +74,7 @@ describe('ConfigService (Effect Service Testing)', () => {
           const configService = yield* ConfigService
           return yield* configService.validateConfig(invalidConfig)
         }))
-      ).rejects.toThrow('Invalid anonymization profile')
+      ).rejects.toThrow('Invalid profile option')
     })
   })
 
@@ -97,29 +97,12 @@ describe('ConfigService (Effect Service Testing)', () => {
       }))
       
       expect(config).toBeDefined()
-      expect(config.profile).toBeDefined()
-      expect(['basic', 'clean', 'very-clean']).toContain(config.profile)
+      expect(config.profileOptions).toBeDefined()
+      expect(Array.isArray(config.profileOptions)).toBe(true)
+      expect(config.profileOptions.length).toBeGreaterThan(0)
     })
 
 
-    it('should handle missing presets gracefully', async () => {
-      await expect(
-        runTest(Effect.gen(function* () {
-          const configService = yield* ConfigService
-          return yield* configService.getAnonymizationPreset('nonexistent')
-        }))
-      ).rejects.toThrow('Preset \'nonexistent\' not found')
-    })
-
-    it('should get presets', async () => {
-      const presets = await runTest(Effect.gen(function* () {
-        const configService = yield* ConfigService
-        return yield* configService.getPresets
-      }))
-      
-      expect(presets).toBeDefined()
-      expect(typeof presets).toBe('object')
-    })
 
     it('should get tag description', async () => {
       const description = await runTest(Effect.gen(function* () {
@@ -142,11 +125,22 @@ describe('ConfigService (Effect Service Testing)', () => {
 
   describe('Error handling', () => {
     it('should handle service errors gracefully', async () => {
-      // Basic error handling test
+      // Basic error handling test - just test basic validation
+      const invalidConfig: AppConfig = {
+        dicomServer: {
+          url: '',
+          description: 'Test server'
+        },
+        anonymization: {
+          profileOptions: ['BasicProfile'],
+          removePrivateTags: true
+        }
+      }
+
       await expect(
         runTest(Effect.gen(function* () {
           const configService = yield* ConfigService
-          return yield* configService.getAnonymizationPreset('invalid-preset')
+          return yield* configService.validateConfig(invalidConfig)
         }))
       ).rejects.toThrow()
     })

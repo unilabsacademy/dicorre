@@ -47,9 +47,23 @@ export interface DicomSeries {
   files: DicomFile[]
 }
 
+// DICOM standard profile options based on @umessen/dicom-deidentifier
+export type DicomProfileOption = 
+  | 'BasicProfile'
+  | 'RetainLongModifDatesOption'
+  | 'RetainLongFullDatesOption'
+  | 'RetainUIDsOption'
+  | 'CleanGraphOption'
+  | 'RetainPatientCharsOption'
+  | 'RetainSafePrivateOption'
+  | 'CleanDescOption'
+  | 'RetainDeviceIdentOption'
+  | 'RetainInstIdentOption'
+  | 'CleanStructContOption'
+
 export interface AnonymizationConfig {
   removePrivateTags: boolean
-  profile: 'basic' | 'clean' | 'very-clean'
+  profileOptions: DicomProfileOption[]
   replacements?: {
     default?: string
     patientName?: string
@@ -103,12 +117,7 @@ export interface DicomSeriesMetadata {
   files: DicomFileMetadata[]
 }
 
-// App configuration types
-export interface AnonymizationPreset {
-  profile: 'basic' | 'clean' | 'very-clean'
-  removePrivateTags: boolean
-  description: string
-}
+// App configuration types - presets removed
 
 // Import DicomServerConfig for use in AppConfig
 import type { DicomServerConfig } from '@/composables/useDicomSender'
@@ -119,7 +128,6 @@ export interface AppConfig {
   anonymization: AnonymizationConfig & {
     tagDescriptions?: Record<string, string>
   }
-  presets?: Record<string, AnonymizationPreset>
   plugins?: PluginConfig
 }
 

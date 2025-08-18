@@ -7,7 +7,7 @@
     "description": "Orthanc DICOM-Web server configuration"
   },
   "anonymization": {
-    "profile": "basic",
+    "profileOptions": ["BasicProfile"],
     "removePrivateTags": true,
     "useCustomHandlers": true,
     "dateJitterDays": 31,
@@ -108,30 +108,6 @@
       "InstitutionName"
     ],
     "customReplacements": {}
-  },
-  "presets": {
-    "minimal": {
-      "profile": "basic",
-      "removePrivateTags": false,
-      "description": "Minimal anonymization - keeps most metadata"
-    },
-    "standard": {
-      "profile": "clean",
-      "removePrivateTags": true,
-      "description": "Standard anonymization - removes identifying information"
-    },
-    "maximum": {
-      "profile": "very-clean",
-      "removePrivateTags": true,
-      "description": "Maximum anonymization - removes all potentially identifying data"
-    },
-    "deid-compatible": {
-      "profile": "basic",
-      "removePrivateTags": true,
-      "useCustomHandlers": true,
-      "dateJitterDays": 31,
-      "description": "Matches Python deid package configuration with custom handlers"
-    }
   },
   "plugins": {
     "enabled": ["image-converter", "pdf-converter", "send-logger"],
