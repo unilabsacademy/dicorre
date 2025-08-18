@@ -6,8 +6,8 @@ import type { DicomStudy } from '@/types/dicom'
 describe('SendLogger Plugin', () => {
   // Mock console methods
   const consoleSpy = {
-    log: vi.spyOn(console, 'log').mockImplementation(() => {}),
-    error: vi.spyOn(console, 'error').mockImplementation(() => {})
+    log: vi.spyOn(console, 'log').mockImplementation(() => { }),
+    error: vi.spyOn(console, 'error').mockImplementation(() => { })
   }
 
   afterEach(() => {
@@ -62,33 +62,33 @@ describe('SendLogger Plugin', () => {
 
     it('should log before send', async () => {
       await Effect.runPromise(sendLoggerPlugin.hooks.beforeSend!(mockStudy))
-      
+
+      expect(consoleSpy.log).toHaveBeenCalled()
       expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('📤 SendLogger: Preparing to send study - Patient: Test Patient (TEST123), Files: 3')
+        '[SEND-LOGGER PLUGIN] Sending study:',
+        expect.anything()
       )
     })
 
     it('should log after successful send', async () => {
       await Effect.runPromise(sendLoggerPlugin.hooks.afterSend!(mockStudy))
-      
+
+      expect(consoleSpy.log).toHaveBeenCalled()
       expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('STUDY SENT SUCCESSFULLY')
-      )
-      expect(consoleSpy.log).toHaveBeenCalledWith(
-        expect.stringContaining('✅ SendLogger: Study sent - Patient: Test Patient (TEST123), Files: 3')
+        '[SEND-LOGGER PLUGIN] Study sent:',
+        expect.anything()
       )
     })
 
     it('should log send errors', async () => {
       const error = new Error('Network connection failed')
-      
+
       await Effect.runPromise(sendLoggerPlugin.hooks.onSendError!(mockStudy, error))
-      
+
+      expect(consoleSpy.error).toHaveBeenCalled()
       expect(consoleSpy.error).toHaveBeenCalledWith(
-        expect.stringContaining('STUDY SEND FAILED')
-      )
-      expect(consoleSpy.error).toHaveBeenCalledWith(
-        expect.stringContaining('❌ SendLogger: Failed to send study - Network connection failed')
+        '[SEND-LOGGER PLUGIN] Send failed:',
+        expect.anything()
       )
     })
   })

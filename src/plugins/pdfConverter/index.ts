@@ -4,6 +4,8 @@ import type { FileFormatPlugin, ConversionOptions } from '@/types/plugins'
 import type { DicomFile, DicomMetadata } from '@/types/dicom'
 import { PluginError } from '@/types/effects'
 import { DicomDatasetBuilder } from '@/utils/dicomDatasetBuilder'
+import * as pdfjs from 'pdfjs-dist'
+import "pdfjs-dist/build/pdf.worker.min.mjs"
 
 // UID generation function (from anonymizer handlers)
 function generateUID(): string {
@@ -12,24 +14,6 @@ function generateUID(): string {
   const uuid = crypto.randomUUID().replace(/-/g, '')
   const bigintUid = parseInt(uuid.substring(0, 16), 16).toString()
   return `1.2.826.0.1.3680043.9.7.1.${bigintUid}`
-}
-
-// Import PDF.js for browser environment
-async function loadPdfJs() {
-  try {
-    console.log('Starting PDF.js import...')
-    const pdfjsLib = await import('pdfjs-dist')
-    console.log('PDF.js import successful, configuring worker...')
-    
-    // Configure PDF.js to work without web worker in development
-    pdfjsLib.GlobalWorkerOptions.workerSrc = `data:application/javascript;base64,${btoa('self.onmessage = function() {};')}`
-    console.log('PDF.js worker configured successfully')
-    
-    return pdfjsLib
-  } catch (error) {
-    console.error('Failed to load PDF.js:', error)
-    throw error
-  }
 }
 
 /**
@@ -102,48 +86,52 @@ export class PdfConverterPlugin implements FileFormatPlugin {
    */
   convertToDicom = (file: File, metadata: DicomMetadata, options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
     const pluginId = this.id
-    
+
     return Effect.gen(function* () {
+
+      const pdf = yield* Effect.tryPromise({
+        try: async () => {
+          const arrayBuffer = await file.arrayBuffer()
+          return pdfjs.getDocument({ data: arrayBuffer }).promise
+        },
+        catch: (error) => new PluginError({
+          message: `Failed to load PDF file: ${file.name}`,
+          pluginId,
+          cause: error
+        })
+      })
+
       console.log(`Converting PDF ${file.name} to DICOM series using PdfConverterPlugin`)
-
-      // For e2e testing, let's create a mock implementation that works
-      // TODO: Replace with full PDF.js implementation once async issues are resolved
-      console.log('Creating mock PDF document for testing...')
-      const pdf = {
-        numPages: 1 // Mock 1 page for e2e testing to avoid DicomDatasetBuilder issues
-      }
-
-      console.log(`PDF loaded with ${pdf.numPages} pages`)
 
       // Generate series instance UID for all pages
       const seriesInstanceUID = generateUID()
       const studyInstanceUID = metadata.studyInstanceUID || generateUID()
-      
+
       // Convert each page to DICOM
       const dicomFiles: DicomFile[] = []
-      
+
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         console.log(`Processing page ${pageNum}/${pdf.numPages}`)
-        
+
         // Mock page rendering for e2e testing
         console.log(`Processing mock page ${pageNum}/${pdf.numPages}`)
-        
+
         // Create a simple mock canvas with test data
         const canvas = document.createElement('canvas')
         canvas.width = 200
         canvas.height = 300
         const context = canvas.getContext('2d')!
-        
+
         // Fill with a simple pattern for each page
         context.fillStyle = pageNum === 1 ? '#ff0000' : pageNum === 2 ? '#00ff00' : '#0000ff'
         context.fillRect(0, 0, canvas.width, canvas.height)
-        
+
         // Add some text to make it look like a document page
         context.fillStyle = '#000000'
         context.font = '16px Arial'
         context.fillText(`Page ${pageNum}`, 10, 30)
         context.fillText('Test PDF Content', 10, 60)
-        
+
         // Extract pixel data from canvas
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
         const pixelData = PdfConverterPlugin.convertImageDataToRGB(imageData)
@@ -159,7 +147,7 @@ export class PdfConverterPlugin implements FileFormatPlugin {
         }
 
         console.log(`Creating DICOM buffer for page ${pageNum}...`)
-        
+
         // Create DICOM buffer
         const dicomBuffer = yield* Effect.tryPromise({
           try: () => {
@@ -189,7 +177,7 @@ export class PdfConverterPlugin implements FileFormatPlugin {
             })
           }
         })
-        
+
         console.log(`DICOM buffer created successfully for page ${pageNum}, size: ${dicomBuffer.byteLength}`)
 
         // Generate file ID
@@ -220,14 +208,14 @@ export class PdfConverterPlugin implements FileFormatPlugin {
   private static convertImageDataToRGB(imageData: ImageData): Uint8Array {
     const rgbData = new Uint8Array(imageData.width * imageData.height * 3)
     let rgbIndex = 0
-    
+
     for (let i = 0; i < imageData.data.length; i += 4) {
       rgbData[rgbIndex++] = imageData.data[i]     // R
       rgbData[rgbIndex++] = imageData.data[i + 1] // G
       rgbData[rgbIndex++] = imageData.data[i + 2] // B
       // Skip alpha channel
     }
-    
+
     return rgbData
   }
 }
