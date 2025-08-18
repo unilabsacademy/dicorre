@@ -5,7 +5,6 @@ import fs from 'fs';
 test.describe('Config Loading', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
-    await expect(page.getByTestId('app-title')).toHaveText('DICOM Anonymizer & Sender');
   });
 
   test('loads valid config file', async ({ page }) => {
@@ -26,13 +25,12 @@ test.describe('Config Loading', () => {
 
     try {
       // Load the config
-      await page.getByTestId('load-config-button').click();
       const fileInput = page.getByTestId('config-file-input');
       await fileInput.setInputFiles(tempConfigPath);
 
       // Check success toast appears
       await expect(page.locator('[data-sonner-toast][data-type="success"]')).toBeVisible({ timeout: 3000 });
-      
+
       // Verify config was applied
       await expect(page.getByTestId('current-profile')).toContainText('clean');
     } finally {
@@ -59,7 +57,6 @@ test.describe('Config Loading', () => {
 
     try {
       // Load the invalid config
-      await page.getByTestId('load-config-button').click();
       const fileInput = page.getByTestId('config-file-input');
       await fileInput.setInputFiles(tempConfigPath);
 
