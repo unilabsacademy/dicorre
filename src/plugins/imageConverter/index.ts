@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import * as dcmjs from 'dcmjs'
 import type { FileFormatPlugin, ConversionOptions } from '@/types/plugins'
 import type { DicomFile, DicomMetadata } from '@/types/dicom'
 import { PluginError } from '@/types/effects'
@@ -20,9 +19,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
   supportedExtensions = ['.jpg', '.jpeg', '.png', '.bmp']
   supportedMimeTypes = ['image/jpeg', 'image/png', 'image/bmp']
 
-  /**
-   * Check if this plugin can process the given file
-   */
+  /* Check if the plugin can process given file */
   canProcess = (file: File): Effect.Effect<boolean, PluginError> =>
     Effect.sync(() => {
       // Check file extension
@@ -39,9 +36,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
       return false
     })
 
-  /**
-   * Validate that the file is a valid image
-   */
+  /* Validate that the file is a valid image */
   validateFile = (file: File): Effect.Effect<boolean, PluginError> => {
     const pluginId = this.id
     return Effect.gen(function* () {
@@ -72,12 +67,10 @@ export class ImageConverterPlugin implements FileFormatPlugin {
     })
   }
 
-  /**
-   * Convert image to DICOM Secondary Capture
-   */
+  /* Convert image to DICOM Secondary Capture */
   convertToDicom = (file: File, metadata: DicomMetadata, options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
     const pluginId = this.id
-    
+
     return Effect.gen(function* () {
       console.log(`Converting image ${file.name} to DICOM using ImageConverterPlugin`)
 
@@ -153,9 +146,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
     })
   }
 
-  /**
-   * Read file as data URL
-   */
+  /* Read file as data URL */
   private static readFileAsDataURL(file: File): Promise<string> {
     return new Promise((resolve, reject) => {
       const reader = new FileReader()
@@ -165,9 +156,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
     })
   }
 
-  /**
-   * Load image and get dimensions
-   */
+  /* Load image and get dimensions */
   private static loadImage(dataUrl: string): Promise<{ img: HTMLImageElement; width: number; height: number }> {
     return new Promise((resolve, reject) => {
       const img = new Image()
@@ -183,30 +172,28 @@ export class ImageConverterPlugin implements FileFormatPlugin {
     })
   }
 
-  /**
-   * Extract pixel data from image
-   */
+  /* Extract pixel data from image */
   private static getPixelData(img: HTMLImageElement, width: number, height: number): Promise<Uint8Array> {
     return new Promise((resolve) => {
       const canvas = document.createElement('canvas')
       canvas.width = width
       canvas.height = height
       const ctx = canvas.getContext('2d')!
-      
+
       ctx.drawImage(img, 0, 0)
       const imageData = ctx.getImageData(0, 0, width, height)
-      
+
       // Convert RGBA to RGB
       const rgbData = new Uint8Array(width * height * 3)
       let rgbIndex = 0
-      
+
       for (let i = 0; i < imageData.data.length; i += 4) {
         rgbData[rgbIndex++] = imageData.data[i]     // R
         rgbData[rgbIndex++] = imageData.data[i + 1] // G
         rgbData[rgbIndex++] = imageData.data[i + 2] // B
         // Skip alpha channel
       }
-      
+
       resolve(rgbData)
     })
   }

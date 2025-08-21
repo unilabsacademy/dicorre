@@ -1,8 +1,8 @@
 import { Effect, Context, Layer } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
-import { ConfigurationError, ValidationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
+import { ConfigurationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
-import { validateAppConfig, type ValidatedAppConfig } from './schema'
+import { validateAppConfig } from './schema'
 import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'
 
 /**
@@ -13,7 +13,6 @@ export class ConfigService extends Context.Tag("ConfigService")<
   {
     readonly getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType>
     readonly getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType>
-    readonly getTagDescription: (tagId: string) => Effect.Effect<string, never>
     readonly getTagsToRemove: Effect.Effect<string[], never>
     readonly validateConfig: (config: AppConfig) => Effect.Effect<void, ConfigurationErrorType>
     readonly loadConfig: (configData: unknown) => Effect.Effect<void, ConfigurationErrorType>
@@ -21,15 +20,9 @@ export class ConfigService extends Context.Tag("ConfigService")<
   }
 >() { }
 
-/**
- * Internal implementation class
- */
 class ConfigServiceImpl {
   private static config: AppConfig = defaultConfig as AppConfig
 
-  /**
-   * Effect-based configuration validation
-   */
   static validateConfig = (config: AppConfig): Effect.Effect<void, ConfigurationErrorType> =>
     Effect.gen(function* () {
       // Validate DICOM server configuration
@@ -105,21 +98,17 @@ class ConfigServiceImpl {
       }
     })
 
-  /**
-   * Get default DICOM server configuration
-   */
+  /* Get default DICOM server configuration */
   static getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType> = Effect.gen(function* () {
     yield* ConfigServiceImpl.validateConfig(ConfigServiceImpl.config)
     return { ...ConfigServiceImpl.config.dicomServer }
   })
 
-  /**
-   * Get default anonymization configuration
-   */
+  /* Get default anonymization configuration */
   static getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType> = Effect.gen(function* () {
     yield* ConfigServiceImpl.validateConfig(ConfigServiceImpl.config)
     const { tagDescriptions: _tagDescriptions, ...anonymizationConfig } = ConfigServiceImpl.config.anonymization
-    
+
     // Convert tag names to hex values for preserveTags
     let preserveTags = anonymizationConfig.preserveTags
     if (preserveTags) {
@@ -137,29 +126,19 @@ class ConfigServiceImpl {
         return tag
       })
     }
-    
-    return { 
+
+    return {
       ...anonymizationConfig,
       preserveTags
     }
   })
 
 
-  /**
-   * Get tag description by tag ID
-   */
-  static getTagDescription = (tagId: string): Effect.Effect<string, never> =>
-    Effect.succeed(ConfigServiceImpl.config.anonymization.tagDescriptions?.[tagId] || tagId)
-
-  /**
-   * Get list of tags to remove during anonymization
-   */
+  /* Get list of tags to remove during anonymization */
   static getTagsToRemove: Effect.Effect<string[], never> =
     Effect.succeed(ConfigServiceImpl.config.anonymization.tagsToRemove || [])
 
-  /**
-   * Load and validate a new configuration
-   */
+  /* Load and validate a new configuration */
   static loadConfig = (configData: unknown): Effect.Effect<void, ConfigurationErrorType> =>
     Effect.gen(function* () {
       // Validate the configuration using Schema
@@ -167,7 +146,7 @@ class ConfigServiceImpl {
         Effect.mapError((error) => {
           // Parse the error to extract meaningful user-friendly message
           const errorMessage = error.message
-          
+
           // Extract specific validation errors from the detailed schema error
           if (errorMessage.includes('DICOM server URL is required') || errorMessage.includes('is missing')) {
             return new ConfigurationError({
@@ -176,7 +155,7 @@ class ConfigServiceImpl {
               value: configData
             })
           }
-          
+
           if (errorMessage.includes('URL must start with / or http')) {
             return new ConfigurationError({
               message: 'URL must start with / or http',
@@ -184,7 +163,7 @@ class ConfigServiceImpl {
               value: configData
             })
           }
-          
+
           if (errorMessage.includes('dateJitterDays must be <= 365') || (errorMessage.includes('dateJitterDays') && errorMessage.includes('365'))) {
             return new ConfigurationError({
               message: 'Invalid dateJitterDays: must be between 0 and 365',
@@ -192,7 +171,7 @@ class ConfigServiceImpl {
               value: configData
             })
           }
-          
+
           if (errorMessage.includes('Expected "BasicProfile"') || errorMessage.includes('profile option') || errorMessage.includes('At least one profile option is required') || errorMessage.includes('profileOptions')) {
             return new ConfigurationError({
               message: 'Invalid anonymization profile options',
@@ -200,7 +179,7 @@ class ConfigServiceImpl {
               value: configData
             })
           }
-          
+
           // Fallback for other validation errors
           return new ConfigurationError({
             message: `Configuration validation failed: ${errorMessage}`,
@@ -219,9 +198,7 @@ class ConfigServiceImpl {
       console.log('Configuration loaded successfully:', ConfigServiceImpl.config)
     })
 
-  /**
-   * Get the current configuration
-   */
+  /* Get the current configuration */
   static getCurrentConfig: Effect.Effect<AppConfig, never> =
     Effect.succeed(ConfigServiceImpl.config)
 }
@@ -234,7 +211,6 @@ export const ConfigServiceLive = Layer.succeed(
   ConfigService.of({
     getServerConfig: ConfigServiceImpl.getServerConfig,
     getAnonymizationConfig: ConfigServiceImpl.getAnonymizationConfig,
-    getTagDescription: ConfigServiceImpl.getTagDescription,
     getTagsToRemove: ConfigServiceImpl.getTagsToRemove,
     validateConfig: ConfigServiceImpl.validateConfig,
     loadConfig: ConfigServiceImpl.loadConfig,

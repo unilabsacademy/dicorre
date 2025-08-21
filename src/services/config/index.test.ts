@@ -84,7 +84,7 @@ describe('ConfigService (Effect Service Testing)', () => {
         const configService = yield* ConfigService
         return yield* configService.getServerConfig
       }))
-      
+
       expect(config).toBeDefined()
       expect(config.url).toBeDefined()
       expect(config.description).toBeDefined()
@@ -95,22 +95,11 @@ describe('ConfigService (Effect Service Testing)', () => {
         const configService = yield* ConfigService
         return yield* configService.getAnonymizationConfig
       }))
-      
+
       expect(config).toBeDefined()
       expect(config.profileOptions).toBeDefined()
       expect(Array.isArray(config.profileOptions)).toBe(true)
       expect(config.profileOptions.length).toBeGreaterThan(0)
-    })
-
-
-
-    it('should get tag description', async () => {
-      const description = await runTest(Effect.gen(function* () {
-        const configService = yield* ConfigService
-        return yield* configService.getTagDescription('00100010')
-      }))
-      
-      expect(typeof description).toBe('string')
     })
 
     it('should get tags to remove', async () => {
@@ -118,7 +107,7 @@ describe('ConfigService (Effect Service Testing)', () => {
         const configService = yield* ConfigService
         return yield* configService.getTagsToRemove
       }))
-      
+
       expect(Array.isArray(tags)).toBe(true)
     })
   })

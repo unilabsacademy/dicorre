@@ -33,7 +33,6 @@ export const TestConfigLayer = Layer.succeed(
       value: presetName
     })),
     getPresets: Effect.succeed({}),
-    getTagDescription: (tagId: string) => Effect.succeed(tagId),
     getTagsToRemove: Effect.succeed([]),
     validateConfig: (_config: AppConfig) => Effect.succeed(undefined),
     loadConfig: (_configData: unknown) => Effect.succeed(undefined),
@@ -93,7 +92,7 @@ export const TestFileHandlerLayer = Layer.succeed(
         cause: error
       })
     }),
-    validateDicomFile: (arrayBuffer: ArrayBuffer, fileName: string) => 
+    validateDicomFile: (arrayBuffer: ArrayBuffer, fileName: string) =>
       Effect.sync(() => {
         if (arrayBuffer.byteLength === 0) {
           throw new ValidationError({

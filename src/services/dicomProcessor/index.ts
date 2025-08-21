@@ -103,8 +103,8 @@ class DicomProcessorImpl {
     })
 
   static parseFiles = (
-    files: DicomFile[], 
-    concurrency = 3, 
+    files: DicomFile[],
+    concurrency = 3,
     options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
   ): Effect.Effect<DicomFile[], DicomProcessorError> =>
     Effect.gen(function* () {
@@ -118,9 +118,9 @@ class DicomProcessorImpl {
       const total = files.length
 
       // Create parsing effects with progress tracking
-      const parsingEffects = files.map(file => 
+      const parsingEffects = files.map(file =>
         DicomProcessorImpl.parseFile(file).pipe(
-          Effect.tap(parsedFile => 
+          Effect.tap(parsedFile =>
             Effect.sync(() => {
               completed++
               options?.onProgress?.(completed, total, parsedFile)
@@ -167,7 +167,7 @@ class DicomProcessorImpl {
             studyInstanceUID: studyInstanceUID || '',
             patientName: patientName || 'Unknown',
             patientId: patientId || 'Unknown',
-            studyDate: studyDate || new Date().toISOString().split('T')[0].replace(/-/g, ''),
+            studyDate: studyDate || new Date().toISOString().split('T')[0].replace(/-/g, ''), // Dicom date format: YYYYMMDD
             studyDescription: studyDescription || 'Unknown Study',
             series: []
           })

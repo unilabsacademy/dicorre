@@ -1,5 +1,4 @@
 import { Effect } from "effect"
-import * as dcmjs from 'dcmjs'
 import type { FileFormatPlugin, ConversionOptions } from '@/types/plugins'
 import type { DicomFile, DicomMetadata } from '@/types/dicom'
 import { PluginError } from '@/types/effects'
@@ -31,9 +30,7 @@ export class PdfConverterPlugin implements FileFormatPlugin {
   supportedExtensions = ['.pdf']
   supportedMimeTypes = ['application/pdf']
 
-  /**
-   * Check if this plugin can process the given file
-   */
+  /* Check if this plugin can process the given file */
   canProcess = (file: File): Effect.Effect<boolean, PluginError> =>
     Effect.sync(() => {
       // Check file extension
@@ -50,9 +47,7 @@ export class PdfConverterPlugin implements FileFormatPlugin {
       return false
     })
 
-  /**
-   * Validate that the file is a valid PDF
-   */
+  /* Validate that the file is a valid PDF */
   validateFile = (file: File): Effect.Effect<boolean, PluginError> => {
     const pluginId = this.id
     return Effect.gen(function* () {
@@ -81,9 +76,7 @@ export class PdfConverterPlugin implements FileFormatPlugin {
     })
   }
 
-  /**
-   * Convert PDF pages to DICOM Secondary Capture series
-   */
+  /* Convert PDF pages to DICOM Secondary Capture series */
   convertToDicom = (file: File, metadata: DicomMetadata, options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
     const pluginId = this.id
 
