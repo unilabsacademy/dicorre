@@ -9,6 +9,8 @@
  * anonymization process needs reference dates for proper anonymization.
  */
 
+import { tag } from '@/utils/dicom-tag-dictionary'
+
 /**
  * Get a reference date from DICOM dictionary for anonymization purposes.
  * 
@@ -23,10 +25,10 @@
  * 5. Default fallback (1970-01-01)
  */
 export function getDicomReferenceDate(dictionary: any): Date {
-  const studyDate = dictionary['00080020']?.Value?.[0]
-  const acquisitionDate = dictionary['00080022']?.Value?.[0]
-  const contentDate = dictionary['00080023']?.Value?.[0]
-  const patientBirthDate = dictionary['00100030']?.Value?.[0]
+  const studyDate = dictionary[tag('Study Date')]?.Value?.[0]
+  const acquisitionDate = dictionary[tag('Acquisition Date')]?.Value?.[0]
+  const contentDate = dictionary[tag('Content Date')]?.Value?.[0]
+  const patientBirthDate = dictionary[tag("Patient's Birth Date")]?.Value?.[0]
 
   if (patientBirthDate) {
     // Parse DICOM date format YYYYMMDD
@@ -68,9 +70,9 @@ export function getDicomReferenceDate(dictionary: any): Date {
  * 4. Default fallback (noon)
  */
 export function getDicomReferenceTime(dictionary: any): Date {
-  const studyTime = dictionary['00080030']?.Value?.[0]
-  const seriesTime = dictionary['00080031']?.Value?.[0]
-  const acquisitionTime = dictionary['00080032']?.Value?.[0]
+  const studyTime = dictionary[tag('Study Time')]?.Value?.[0]
+  const seriesTime = dictionary[tag('Series Time')]?.Value?.[0]
+  const acquisitionTime = dictionary[tag('Acquisition Time')]?.Value?.[0]
 
   if (studyTime) {
     // Parse DICOM time format HHMMSS.FFFFFF

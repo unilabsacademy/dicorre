@@ -162,7 +162,7 @@ describe('Config Schema Validation', () => {
         anonymization: {
           profileOptions: ['BasicProfile'],
           removePrivateTags: true,
-          preserveTags: ['00080016', 'INVALID', '12345'] // Invalid formats
+          preserveTags: ['00080016', 'SOP Class UID', 'INVALID', '12345'] // Mix of hex, name, and invalid
         }
       }
 
@@ -245,6 +245,23 @@ describe('Config Schema Validation', () => {
       expect(result).toBeDefined()
       expect(result.dicomServer.headers).toBeUndefined()
       expect(result.anonymization.replacements).toBeUndefined()
+    })
+
+    it('should accept mixed hex and tag name formats in preserveTags', async () => {
+      const config = {
+        dicomServer: {
+          url: '/api/test'
+        },
+        anonymization: {
+          profileOptions: ['BasicProfile'],
+          removePrivateTags: true,
+          preserveTags: ['00080016', 'Modality', '00200013', 'Manufacturer'] // Mix of hex and names
+        }
+      }
+
+      const result = await Effect.runPromise(validateAppConfig(config))
+      expect(result).toBeDefined()
+      expect(result.anonymization.preserveTags).toEqual(['00080016', 'Modality', '00200013', 'Manufacturer'])
     })
   })
 

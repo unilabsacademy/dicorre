@@ -11,6 +11,7 @@ import { DicomProcessor } from '../dicomProcessor'
 import { getAllSpecialHandlers } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
 import { AnonymizationError, type AnonymizerError } from '@/types/effects'
+import { tag } from '@/utils/dicom-tag-dictionary'
 
 export interface AnonymizationProgress {
   total: number
@@ -34,9 +35,6 @@ export class Anonymizer extends Context.Tag("Anonymizer")<
   }
 >() { }
 
-/**
- * Internal implementation class
- */
 class AnonymizerImpl {
   private static processReplacements = (replacements: Record<string, string | undefined>, sharedTimestamp?: string): Record<string, string> => {
     const processed: Record<string, string> = {}
@@ -93,11 +91,11 @@ class AnonymizerImpl {
           default: processedReplacements.default || 'REMOVED',
           lookup: {
             // Use config replacements with fallbacks
-            '00100010': processedReplacements.patientName || 'ANONYMOUS', // Patient Name
-            '00100020': processedReplacements.patientId || 'ANON001', // Patient ID
-            '00100030': processedReplacements.patientBirthDate || '19000101', // Patient Birth Date
-            '00080080': processedReplacements.institution || 'ANONYMIZED', // Institution Name
-            '00080050': processedReplacements.accessionNumber || 'ANON0000000', // Accession Number
+            [tag("Patient's Name")]: processedReplacements.patientName || 'ANONYMOUS',
+            [tag('Patient ID')]: processedReplacements.patientId || 'ANON001',
+            [tag("Patient's Birth Date")]: processedReplacements.patientBirthDate || '19000101',
+            [tag('Institution Name')]: processedReplacements.institution || 'ANONYMIZED',
+            [tag('Accession Number')]: processedReplacements.accessionNumber || 'ANON0000000',
             // Add any custom replacements
             ...config.customReplacements
           }

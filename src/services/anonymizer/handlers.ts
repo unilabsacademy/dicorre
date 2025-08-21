@@ -3,6 +3,8 @@
  * Replicates functionality from Python deid package
  */
 
+import { tag } from '@/utils/dicom-tag-dictionary'
+
 // Note: Using any type for DicomElement as the library types may be incomplete
 type DicomElement = any
 
@@ -255,22 +257,22 @@ export function createValueReplacementHandler(studyId: string) {
     // Also check by DICOM tag number if name didn't match
     if (!newValue) {
       switch (tagNumber) {
-        case '00100010': // Patient Name
+        case tag("Patient's Name"):
           newValue = 'Anonymous'
           break
-        case '00100020': // Patient ID
+        case tag('Patient ID'):
           newValue = getCachedValue('PatientID', originalValue, studyId)
           break
-        case '0020000D': // Study Instance UID
+        case tag('Study Instance UID'):
           newValue = getCachedValue('StudyInstanceUID', originalValue, studyId)
           break
-        case '0020000E': // Series Instance UID
+        case tag('Series Instance UID'):
           newValue = getCachedValue('SeriesInstanceUID', originalValue, studyId)
           break
-        case '00080018': // SOP Instance UID
+        case tag('SOP Instance UID'):
           newValue = getCachedValue('SOPInstanceUID', originalValue, studyId)
           break
-        case '00080050': // Accession Number
+        case tag('Accession Number'):
           newValue = getCachedValue('AccessionNumber', originalValue, studyId)
           break
       }
