@@ -6,6 +6,11 @@ import { DicomDatasetBuilder } from '@/utils/dicomDatasetBuilder'
 import * as pdfjs from 'pdfjs-dist'
 import "pdfjs-dist/build/pdf.worker.min.mjs"
 
+// Helper function to ensure PDF.js is properly loaded
+async function loadPdfJs() {
+  return pdfjs
+}
+
 // UID generation function (from anonymizer handlers)
 function generateUID(): string {
   // Generate a compliant DICOM UID using crypto.randomUUID()
@@ -106,26 +111,43 @@ export class PdfConverterPlugin implements FileFormatPlugin {
       for (let pageNum = 1; pageNum <= pdf.numPages; pageNum++) {
         console.log(`Processing page ${pageNum}/${pdf.numPages}`)
 
-        // Mock page rendering for e2e testing
-        console.log(`Processing mock page ${pageNum}/${pdf.numPages}`)
+        // Get the PDF page
+        const page = yield* Effect.tryPromise({
+          try: () => pdf.getPage(pageNum),
+          catch: (error) => new PluginError({
+            message: `Failed to get page ${pageNum} from PDF: ${file.name}`,
+            pluginId,
+            cause: error
+          })
+        })
 
-        // Create a simple mock canvas with test data
+        // Create viewport with configurable scale (default 1.5 for good quality)
+        const scale = options?.scale || 1.5
+        const viewport = page.getViewport({ scale })
+
+        // Create canvas with proper dimensions from PDF page
         const canvas = document.createElement('canvas')
-        canvas.width = 200
-        canvas.height = 300
+        canvas.width = viewport.width
+        canvas.height = viewport.height
         const context = canvas.getContext('2d')!
 
-        // Fill with a simple pattern for each page
-        context.fillStyle = pageNum === 1 ? '#ff0000' : pageNum === 2 ? '#00ff00' : '#0000ff'
-        context.fillRect(0, 0, canvas.width, canvas.height)
+        // Render PDF page to canvas using PDF.js
+        const renderContext = {
+          canvasContext: context,
+          viewport: viewport,
+          canvas: canvas
+        }
 
-        // Add some text to make it look like a document page
-        context.fillStyle = '#000000'
-        context.font = '16px Arial'
-        context.fillText(`Page ${pageNum}`, 10, 30)
-        context.fillText('Test PDF Content', 10, 60)
+        yield* Effect.tryPromise({
+          try: () => page.render(renderContext).promise,
+          catch: (error) => new PluginError({
+            message: `Failed to render page ${pageNum} from PDF: ${file.name}`,
+            pluginId,
+            cause: error
+          })
+        })
 
-        // Extract pixel data from canvas
+        // Extract pixel data from rendered canvas
         const imageData = context.getImageData(0, 0, canvas.width, canvas.height)
         const pixelData = PdfConverterPlugin.convertImageDataToRGB(imageData)
 
