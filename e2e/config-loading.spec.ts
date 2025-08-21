@@ -8,15 +8,20 @@ test.describe('Config Loading', () => {
   });
 
   test('loads valid config file', async ({ page }) => {
-    // Create a valid config file
     const validConfig = {
       dicomServer: {
-        url: "/api/test-server/dicom-web",
-        timeout: 60000
+        url: "/api/orthanc/dicom-web",
+        headers: {},
+        timeout: 30000,
+        auth: null,
+        description: "Orthanc DICOM-Web server configuration"
       },
       anonymization: {
-        profile: "clean",
-        removePrivateTags: false
+        profileOptions: ["BasicProfile", "RetainLongModifDatesOption", "RetainUIDsOption"],
+        removePrivateTags: true,
+        useCustomHandlers: true,
+        dateJitterDays: 31,
+        organizationRoot: "1.2.826.0.1.3680043.8.498",
       }
     };
 
@@ -32,7 +37,7 @@ test.describe('Config Loading', () => {
       await expect(page.locator('[data-sonner-toast][data-type="success"]')).toBeVisible({ timeout: 3000 });
 
       // Verify config was applied
-      await expect(page.getByTestId('current-profile')).toContainText('clean');
+      await expect(page.getByTestId('server-url')).toContainText('/api/orthanc/dicom-web');
     } finally {
       if (fs.existsSync(tempConfigPath)) {
         fs.unlinkSync(tempConfigPath);

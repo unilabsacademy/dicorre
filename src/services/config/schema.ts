@@ -1,8 +1,6 @@
 import { Schema } from "effect"
-import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
 import { isValidTagName, isValidTagHex } from '@/utils/dicom-tag-dictionary'
 
-// DicomServerConfig Schema
 const DicomServerAuthSchema = Schema.Struct({
   type: Schema.Literal("basic", "bearer"),
   credentials: Schema.String
@@ -44,7 +42,6 @@ const DicomProfileOptionSchema = Schema.Literal(
   "CleanStructContOption"
 )
 
-// AnonymizationConfig Schema
 const AnonymizationProfileOptionsSchema = Schema.Array(DicomProfileOptionSchema).pipe(
   Schema.minItems(1, { message: () => "At least one profile option is required" }),
   Schema.annotations({
@@ -91,37 +88,9 @@ export const AnonymizationConfigSchema = Schema.Struct({
   ))
 })
 
-// AnonymizationPreset Schema - removed
-
-// Complete AppConfig Schema
 export const AppConfigSchema = Schema.Struct({
   dicomServer: DicomServerConfigSchema,
-  anonymization: Schema.Struct({
-    removePrivateTags: Schema.Boolean,
-    profileOptions: AnonymizationProfileOptionsSchema,
-    replacements: Schema.optional(ReplacementsSchema),
-    preserveTags: Schema.optional(Schema.Array(Schema.String.pipe(
-      Schema.filter((tag) => {
-        // Accept either valid tag names or hex values
-        return isValidTagName(tag) || isValidTagHex(tag)
-      }, {
-        message: () => "Tag must be a valid DICOM tag name (e.g., 'Modality') or 8 hex characters (e.g., 00080016)"
-      })
-    ))),
-    tagsToRemove: Schema.optional(Schema.Array(Schema.String)),
-    customReplacements: Schema.optional(Schema.Any),
-    dateJitterDays: Schema.optional(Schema.Number.pipe(
-      Schema.greaterThanOrEqualTo(0, { message: () => "dateJitterDays must be >= 0" }),
-      Schema.lessThanOrEqualTo(365, { message: () => "dateJitterDays must be <= 365" })
-    )),
-    useCustomHandlers: Schema.optional(Schema.Boolean),
-    organizationRoot: Schema.optional(Schema.String.pipe(
-      Schema.filter((oid) => /^[0-9.]+$/.test(oid), {
-        message: () => "Organization root must be a valid OID (digits and dots only)"
-      })
-    )),
-    tagDescriptions: Schema.optional(Schema.Any)
-  })
+  anonymization: AnonymizationConfigSchema
 })
 
 // Type extraction
@@ -129,7 +98,7 @@ export type ValidatedAppConfig = Schema.Schema.Type<typeof AppConfigSchema>
 export type AppConfigInput = Schema.Schema.Encoded<typeof AppConfigSchema>
 
 // Validation function that returns Effect
-export const validateAppConfig = (input: unknown) => 
+export const validateAppConfig = (input: unknown) =>
   Schema.decodeUnknown(AppConfigSchema)(input)
 
 // Parse function that throws on error (for simpler integration)

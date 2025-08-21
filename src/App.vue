@@ -239,14 +239,14 @@ onUnmounted(() => {
 
           <!-- Display current config info -->
           <div class="flex items-center gap-2 ml-4 text-sm text-muted-foreground">
-            <span data-testid="current-profile">{{ appState.config.value?.profile || 'basic' }}</span>
-            <span class="text-muted-foreground/50">|</span>
             <span
               class="flex items-center gap-1"
               data-testid="server-url-display"
             >
               <Server class="w-3 h-3" />
-              {{ appState.serverUrl.value || 'No server configured' }}
+              <span data-testid="server-url">
+                {{ appState.serverUrl.value || 'No server configured' }}
+              </span>
             </span>
           </div>
         </div>
