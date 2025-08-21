@@ -216,3 +216,16 @@ export const COMMON_TAGS = Object.fromEntries(
   }).filter(([_, tagName]) => getTagHex(tagName) !== null)
     .map(([key, tagName]) => [key, getTagHex(tagName)!])
 ) as Record<string, string>
+
+/**
+ * Get hex value for a tag name, with a safe fallback
+ * This is the single source of truth for tag name to hex conversion
+ */
+export function tag(tagName: string): string {
+  const hex = getTagHex(tagName)
+  if (!hex) {
+    console.warn(`Unknown DICOM tag name: ${tagName}, using as-is`)
+    return tagName // Return as-is if not found (might be a hex value already)
+  }
+  return hex
+}
