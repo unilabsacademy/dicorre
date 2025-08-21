@@ -1,5 +1,6 @@
 import { Effect, Context, Layer, ParseResult } from "effect"
-import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
+import type { DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
+import type { AppConfig } from './schema'
 import { ConfigurationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig } from './schema'
@@ -104,7 +105,7 @@ class ConfigServiceImpl {
   /* Get default anonymization configuration */
   static getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType> = Effect.gen(function* () {
     yield* ConfigServiceImpl.validateConfig(ConfigServiceImpl.config)
-    const { tagDescriptions: _tagDescriptions, ...anonymizationConfig } = ConfigServiceImpl.config.anonymization
+    const anonymizationConfig = ConfigServiceImpl.config.anonymization
 
     // Convert tag names to hex values for preserveTags
     let preserveTags = anonymizationConfig.preserveTags
@@ -125,15 +126,21 @@ class ConfigServiceImpl {
     }
 
     return {
-      ...anonymizationConfig,
-      preserveTags
+      removePrivateTags: anonymizationConfig.removePrivateTags,
+      profileOptions: [...anonymizationConfig.profileOptions] as DicomProfileOption[],
+      replacements: anonymizationConfig.replacements,
+      preserveTags: preserveTags ? [...preserveTags] : undefined,
+      tagsToRemove: anonymizationConfig.tagsToRemove ? [...anonymizationConfig.tagsToRemove] : undefined,
+      dateJitterDays: anonymizationConfig.dateJitterDays,
+      useCustomHandlers: anonymizationConfig.useCustomHandlers,
+      organizationRoot: anonymizationConfig.organizationRoot
     }
   })
 
 
   /* Get list of tags to remove during anonymization */
   static getTagsToRemove: Effect.Effect<string[], never> =
-    Effect.succeed(ConfigServiceImpl.config.anonymization.tagsToRemove || [])
+    Effect.succeed([...(ConfigServiceImpl.config.anonymization.tagsToRemove || [])])
 
   /* Load and validate a new configuration */
   static loadConfig = (configData: unknown): Effect.Effect<void, ConfigurationErrorType> =>
@@ -167,10 +174,10 @@ class ConfigServiceImpl {
       )
 
       // Additional business logic validation
-      yield* ConfigServiceImpl.validateConfig(validationResult as AppConfig)
+      yield* ConfigServiceImpl.validateConfig(validationResult)
 
       // If validation passes, update the internal config
-      ConfigServiceImpl.config = validationResult as AppConfig
+      ConfigServiceImpl.config = validationResult
 
       console.log('Configuration loaded successfully:', ConfigServiceImpl.config)
     })

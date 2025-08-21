@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest'
 import { Effect } from 'effect'
 import { ConfigService, ConfigServiceLive } from './index'
-import type { AppConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
+import type { AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
+import type { AppConfig } from './schema'
 
 describe('ConfigService (Effect Service Testing)', () => {
   // Test the service through Effect.provide pattern
@@ -22,7 +23,6 @@ describe('ConfigService (Effect Service Testing)', () => {
           dateJitterDays: 30,
           preserveTags: [],
           tagsToRemove: [],
-          customReplacements: {},
           replacements: {}
         }
       }

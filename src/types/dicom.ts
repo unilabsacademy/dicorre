@@ -108,19 +108,5 @@ export interface DicomSeriesMetadata {
   files: DicomFileMetadata[]
 }
 
-// App configuration types - presets removed
-
-// Import DicomServerConfig for use in AppConfig
-import type { DicomServerConfig } from '@/composables/useDicomSender'
-import type { PluginConfig } from '@/types/plugins'
-
-export interface AppConfig {
-  dicomServer: DicomServerConfig
-  anonymization: AnonymizationConfig & {
-    tagDescriptions?: Record<string, string>
-  }
-  plugins?: PluginConfig
-}
-
 // Re-export DicomServerConfig for convenience
 export type { DicomServerConfig } from '@/composables/useDicomSender'

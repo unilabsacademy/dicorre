@@ -252,7 +252,7 @@ export class WorkerManager<T extends BaseJob> {
     }
   }
 
-  protected async prepareJobData(job: T): Promise<any> {
+  protected async prepareJobData(_job: T): Promise<any> {
     throw new Error('prepareJobData must be implemented by subclass')
   }
 
@@ -306,7 +306,7 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
 
     // Pass only OPFS file references to worker - no ArrayBuffers
     // Serialize and deserialize to ensure all data is cloneable
-    const files = job.files.map((file, index) => {
+    const files = job.files.map((file, _index) => {
       const fileData = {
         id: file.id,
         fileName: file.fileName,

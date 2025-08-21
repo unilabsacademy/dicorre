@@ -11,7 +11,6 @@ import { DicomProcessorLive } from '../dicomProcessor'
 import { AnonymizerLive } from '../anonymizer'
 import { DicomSenderLive } from '../dicomSender'
 import { EventBusLayer } from '../eventBus'
-import type { AppConfig } from "@/types/dicom"
 
 /**
  * Base services with no dependencies

@@ -8,7 +8,7 @@ import { FileHandler } from '../fileHandler'
 import { OPFSStorage } from '../opfsStorage'
 import { PluginRegistry } from '../pluginRegistry'
 import { ConfigurationError, FileHandlerError, ValidationError } from '@/types/effects'
-import type { AppConfig } from "@/types/dicom"
+import type { AppConfig } from '../config/schema'
 
 export const TestConfigLayer = Layer.succeed(
   ConfigService,
@@ -18,21 +18,14 @@ export const TestConfigLayer = Layer.succeed(
       description: 'Test server'
     }),
     getAnonymizationConfig: Effect.succeed({
-      profile: 'basic',
+      profileOptions: ['BasicProfile'],
       removePrivateTags: true,
       useCustomHandlers: true,
       dateJitterDays: 30,
       preserveTags: [],
       tagsToRemove: [],
-      customReplacements: {},
       replacements: {}
     }),
-    getAnonymizationPreset: (presetName: string) => Effect.fail(new ConfigurationError({
-      message: `Preset '${presetName}' not found`,
-      setting: `presets.${presetName}`,
-      value: presetName
-    })),
-    getPresets: Effect.succeed({}),
     getTagsToRemove: Effect.succeed([]),
     validateConfig: (_config: AppConfig) => Effect.succeed(undefined),
     loadConfig: (_configData: unknown) => Effect.succeed(undefined),
@@ -42,13 +35,12 @@ export const TestConfigLayer = Layer.succeed(
         description: 'Test server'
       },
       anonymization: {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: true,
         dateJitterDays: 30,
         preserveTags: [],
         tagsToRemove: [],
-        customReplacements: {},
         replacements: {}
       }
     })

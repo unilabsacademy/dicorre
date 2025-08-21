@@ -89,7 +89,7 @@ export const AppConfigSchema = Schema.Struct({
 })
 
 // Type extraction
-export type ValidatedAppConfig = Schema.Schema.Type<typeof AppConfigSchema>
+export type AppConfig = Schema.Schema.Type<typeof AppConfigSchema>
 export type AppConfigInput = Schema.Schema.Encoded<typeof AppConfigSchema>
 
 // Validation function that returns Effect

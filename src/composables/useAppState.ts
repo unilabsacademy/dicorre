@@ -78,7 +78,6 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
-  // Load server URL from config
   const loadServerUrl = async () => {
     try {
       const url = await runtime.runPromise(
@@ -95,7 +94,6 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
-  // Load plugins from configuration
   const loadPlugins = async () => {
     try {
       await runtime.runPromise(
@@ -124,7 +122,6 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
-  // Handle config reload event
   const handleConfigReload = async () => {
     await loadConfig()
     await loadServerUrl()
@@ -518,7 +515,6 @@ export function useAppState(runtime: RuntimeType) {
     processFiles(isAppReady)
   }
 
-  // Load configuration on mount
   onMounted(async () => {
     await loadConfig()
     await loadServerUrl()
