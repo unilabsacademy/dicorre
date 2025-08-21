@@ -1,8 +1,3 @@
-/**
- * Ultra-simplified DICOM Sending Worker
- * Delegates all business logic to proper services
- */
-
 import { Effect, Layer, ManagedRuntime } from 'effect'
 import { DicomSender, DicomSenderLive } from '@/services/dicomSender'
 import { ConfigServiceLive } from '@/services/config'
@@ -35,7 +30,7 @@ interface WorkerMessage {
   }
 }
 
-type WorkerResponse = 
+type WorkerResponse =
   | { type: 'progress'; studyId: string; data: { total: number; completed: number; percentage: number; currentFile?: string } }
   | { type: 'complete'; studyId: string; data: { sentFiles: DicomFile[] } }
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
@@ -66,7 +61,7 @@ async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName
 
           // Load file from OPFS
           const arrayBuffer = yield* opfs.loadFile(fileRef.opfsFileId)
-          
+
           // Create DicomFile from OPFS data
           const dicomFile: DicomFile = {
             id: fileRef.id,
@@ -79,7 +74,7 @@ async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName
 
           // Send file using service
           yield* sender.sendFile(dicomFile)
-          
+
           // Mark as sent and add to results
           dicomFile.sent = true
           sentFiles.push({
@@ -115,7 +110,7 @@ async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName
 // Message listener
 self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   const { type, data } = event.data
-  
+
   if (type === 'send_study') {
     sendStudy(data.studyId, data.files, data.serverConfig, data.concurrency)
   }

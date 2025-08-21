@@ -1,13 +1,10 @@
-import { Effect, Context, Layer } from "effect"
+import { Effect, Context, Layer, ParseResult } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
 import { ConfigurationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig } from './schema'
 import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'
 
-/**
- * Configuration service as proper Effect service
- */
 export class ConfigService extends Context.Tag("ConfigService")<
   ConfigService,
   {
@@ -143,46 +140,26 @@ class ConfigServiceImpl {
     Effect.gen(function* () {
       // Validate the configuration using Schema
       const validationResult = yield* validateAppConfig(configData).pipe(
-        Effect.mapError((error) => {
-          // Parse the error to extract meaningful user-friendly message
-          const errorMessage = error.message
+        Effect.mapError((parseError) => {
+          // Use ArrayFormatter to get structured error information
+          const errors = ParseResult.ArrayFormatter.formatErrorSync(parseError)
 
-          // Extract specific validation errors from the detailed schema error
-          if (errorMessage.includes('DICOM server URL is required') || errorMessage.includes('is missing')) {
+          // If we got structured errors, use the first one to create a meaningful error
+          if (errors.length > 0) {
+            const firstError = errors[0]
+            const path = firstError.path?.join('.') || 'config'
+
+            // Use the path and message from the error directly
             return new ConfigurationError({
-              message: 'DICOM server URL is required',
-              setting: 'dicomServer.url',
+              message: firstError.message,
+              setting: path,
               value: configData
             })
           }
 
-          if (errorMessage.includes('URL must start with / or http')) {
-            return new ConfigurationError({
-              message: 'URL must start with / or http',
-              setting: 'dicomServer.url',
-              value: configData
-            })
-          }
-
-          if (errorMessage.includes('dateJitterDays must be <= 365') || (errorMessage.includes('dateJitterDays') && errorMessage.includes('365'))) {
-            return new ConfigurationError({
-              message: 'Invalid dateJitterDays: must be between 0 and 365',
-              setting: 'anonymization.dateJitterDays',
-              value: configData
-            })
-          }
-
-          if (errorMessage.includes('Expected "BasicProfile"') || errorMessage.includes('profile option') || errorMessage.includes('At least one profile option is required') || errorMessage.includes('profileOptions')) {
-            return new ConfigurationError({
-              message: 'Invalid anonymization profile options',
-              setting: 'anonymization.profileOptions',
-              value: configData
-            })
-          }
-
-          // Fallback for other validation errors
+          // Fallback if we couldn't parse the errors (shouldn't happen)
           return new ConfigurationError({
-            message: `Configuration validation failed: ${errorMessage}`,
+            message: `Configuration validation failed: ${parseError.message}`,
             setting: 'config',
             value: configData
           })
@@ -203,9 +180,6 @@ class ConfigServiceImpl {
     Effect.succeed(ConfigServiceImpl.config)
 }
 
-/**
- * Live implementation layer
- */
 export const ConfigServiceLive = Layer.succeed(
   ConfigService,
   ConfigService.of({

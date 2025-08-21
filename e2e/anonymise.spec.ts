@@ -28,16 +28,16 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
 
   const originalAccessionNumbers: string[] = [];
   const originalPatientIds: string[] = [];
-  
+
   const accessionCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
   const patientIdCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(3)');
-  
+
   const accessionCountBefore = await accessionCellsBefore.count();
   for (let i = 0; i < Math.min(accessionCountBefore, 3); i++) {
     const accessionText = await accessionCellsBefore.nth(i).textContent();
     if (accessionText) originalAccessionNumbers.push(accessionText);
   }
-  
+
   const patientIdCountBefore = await patientIdCellsBefore.count();
   for (let i = 0; i < Math.min(patientIdCountBefore, 3); i++) {
     const patientIdText = await patientIdCellsBefore.nth(i).textContent();
@@ -46,7 +46,7 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
 
   const studyCheckboxes = page.getByRole('checkbox');
   const checkboxCount = await studyCheckboxes.count();
-  
+
   for (let i = 1; i < checkboxCount; i++) {
     await studyCheckboxes.nth(i).click();
   }
@@ -73,67 +73,67 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
 
   const accessionCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
   const accessionCount = await accessionCells.count();
-  
+
   if (accessionCount > 0) {
     for (let i = 0; i < Math.min(accessionCount, 3); i++) {
       const accessionText = await accessionCells.nth(i).textContent();
       if (accessionText) {
-        expect(accessionText).toMatch(/^ACA\d{7,8}$/);
+        expect(accessionText).toMatch(/^ACA\w{7,8}$/);
       }
     }
   }
 
   const patientIdCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(3)');
   const patientIdCount = await patientIdCells.count();
-  
+
   const anonymizedAccessionNumbers: string[] = [];
   const anonymizedPatientIds: string[] = [];
-  
+
   const accessionCellsAfter = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
   const accessionCountAfter = await accessionCellsAfter.count();
   for (let i = 0; i < Math.min(accessionCountAfter, 3); i++) {
     const accessionText = await accessionCellsAfter.nth(i).textContent();
     if (accessionText) anonymizedAccessionNumbers.push(accessionText);
   }
-  
+
   for (let i = 0; i < Math.min(patientIdCount, 3); i++) {
     const patientIdText = await patientIdCells.nth(i).textContent();
     if (patientIdText) anonymizedPatientIds.push(patientIdText);
   }
-  
+
   let accessionNumbersChanged = false;
   let patientIdsChanged = false;
-  
+
   for (let i = 0; i < Math.min(originalAccessionNumbers.length, anonymizedAccessionNumbers.length); i++) {
     if (originalAccessionNumbers[i] !== anonymizedAccessionNumbers[i]) {
       accessionNumbersChanged = true;
     }
   }
-  
+
   for (let i = 0; i < Math.min(originalPatientIds.length, anonymizedPatientIds.length); i++) {
     if (originalPatientIds[i] !== anonymizedPatientIds[i]) {
       patientIdsChanged = true;
     }
   }
-  
+
   expect(accessionNumbersChanged).toBe(true);
   expect(patientIdsChanged).toBe(true);
-  
+
   const anonymizedCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(9)');
   const cellCount = await anonymizedCells.count();
-  
+
   if (cellCount > 0) {
     for (let i = 0; i < Math.min(cellCount, 3); i++) {
       const cellText = await anonymizedCells.nth(i).textContent();
       expect(cellText).toBe('Anonymized');
     }
   }
-  
+
   if (patientIdCount > 0) {
     for (let i = 0; i < Math.min(patientIdCount, 3); i++) {
       const patientIdText = await patientIdCells.nth(i).textContent();
       if (patientIdText) {
-        expect(patientIdText).toMatch(/^PAT\d{7,8}$/);
+        expect(patientIdText).toMatch(/^PAT\w{7,8}$/);
       }
     }
   }

@@ -54,13 +54,13 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       )
 
       const configWithReplacements: AnonymizationConfig = {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: true,
         replacements: {
-          accessionNumber: 'ACA{timestamp}',
-          patientId: 'PAT{timestamp}',
-          patientName: 'ANONYMOUS TEST'
+          'Accession Number': 'ACA{random}',
+          'Patient ID': 'PAT{random}',
+          "Patient's Name": 'ANONYMOUS TEST'
         }
       }
 
@@ -75,9 +75,9 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       // Verify that the anonymized metadata contains expected patterns
       if (result.metadata) {
         console.log('Anonymized metadata:', result.metadata)
-        // These should be replaced with the processed timestamp patterns
-        expect(result.metadata.accessionNumber).toMatch(/^ACA\d{7}$/)
-        expect(result.metadata.patientId).toMatch(/^PAT\d{7}$/)
+        // These should be replaced with the processed random patterns (7 uppercase alphanumeric chars)
+        expect(result.metadata.accessionNumber).toMatch(/^ACA[A-Z0-9]{7}$/)
+        expect(result.metadata.patientId).toMatch(/^PAT[A-Z0-9]{7}$/)
         // PatientName in DICOM can be a structured object
         if (typeof result.metadata.patientName === 'string') {
           expect(result.metadata.patientName).toBe('ANONYMOUS')
@@ -101,7 +101,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       )
 
       const config: AnonymizationConfig = {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: true
       }
@@ -129,7 +129,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       )
 
       const config: AnonymizationConfig = {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: false
       }
@@ -158,7 +158,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       )
 
       const config: AnonymizationConfig = {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: false
       }
@@ -191,7 +191,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
   describe('Study anonymization', () => {
     it('should handle empty file list', async () => {
       const config: AnonymizationConfig = {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: false
       }
@@ -229,7 +229,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       )
 
       const config: AnonymizationConfig = {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: false
       }
@@ -269,7 +269,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       }
 
       const config: AnonymizationConfig = {
-        profile: 'basic',
+        profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: true
       }

@@ -49,16 +49,12 @@ const AnonymizationProfileOptionsSchema = Schema.Array(DicomProfileOptionSchema)
   })
 )
 
-const ReplacementsSchema = Schema.Struct({
-  default: Schema.optional(Schema.String),
-  patientName: Schema.optional(Schema.String),
-  patientId: Schema.optional(Schema.String),
-  accessionNumber: Schema.optional(Schema.String),
-  patientBirthDate: Schema.optional(Schema.String),
-  institution: Schema.optional(Schema.String)
+const ReplacementsSchema = Schema.Record({
+  key: Schema.String, 
+  value: Schema.String
 }).pipe(
   Schema.annotations({
-    description: "Replacement patterns for DICOM tags. Can use {timestamp} placeholder"
+    description: "Replacement values for DICOM tags. Keys can be tag names (e.g., 'Patient Name') or the special key 'default'. Values can use {random} placeholder for 7-character uppercase ASCII strings."
   })
 )
 
@@ -75,7 +71,6 @@ export const AnonymizationConfigSchema = Schema.Struct({
     })
   ))),
   tagsToRemove: Schema.optional(Schema.Array(Schema.String)),
-  customReplacements: Schema.optional(Schema.Any),
   dateJitterDays: Schema.optional(Schema.Number.pipe(
     Schema.greaterThanOrEqualTo(0, { message: () => "dateJitterDays must be >= 0" }),
     Schema.lessThanOrEqualTo(365, { message: () => "dateJitterDays must be <= 365" })

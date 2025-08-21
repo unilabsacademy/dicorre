@@ -7,35 +7,38 @@
     "description": "Orthanc DICOM-Web server configuration"
   },
   "anonymization": {
-    "profileOptions": ["BasicProfile", "RetainLongModifDatesOption", "RetainUIDsOption"],
+    "profileOptions": [
+      "BasicProfile",
+      "RetainLongModifDatesOption",
+      "RetainUIDsOption"
+    ],
     "removePrivateTags": true,
     "useCustomHandlers": true,
     "dateJitterDays": 31,
     "organizationRoot": "1.2.826.0.1.3680043.8.498",
     "replacements": {
       "default": "REMOVED",
-      "patientName": "ANONYMOUS",
-      "accessionNumber": "ACA{timestamp}",
-      "patientId": "PAT{timestamp}",
-      "patientBirthDate": "19000101",
-      "institution": "ANONYMIZED"
+      "Accession Number": "ACA{random}",
+      "Patient ID": "PAT{random}"
     },
     "preserveTags": [
       "Instance Number",
-      "Modality", 
+      "Modality",
       "Manufacturer",
-      "Referring Physician's Name",
       "Protocol Name"
     ],
     "tagsToRemove": [
       "startswith:IssueDate",
       "contains:Trial",
       "startswith:PatientTelephoneNumber"
-    ],
-    "customReplacements": {}
+    ]
   },
   "plugins": {
-    "enabled": ["image-converter", "pdf-converter", "send-logger"],
+    "enabled": [
+      "image-converter",
+      "pdf-converter",
+      "send-logger"
+    ],
     "settings": {
       "image-converter": {
         "defaultModality": "OT",

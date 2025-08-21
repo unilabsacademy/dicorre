@@ -1,8 +1,3 @@
-/**
- * Ultra-simplified DICOM Anonymization Worker
- * Delegates all business logic to proper services
- */
-
 import { Effect, Layer, ManagedRuntime } from 'effect'
 import { Anonymizer, AnonymizerLive } from '@/services/anonymizer'
 import { ConfigServiceLive } from '@/services/config'
@@ -35,7 +30,7 @@ interface WorkerMessage {
   }
 }
 
-type WorkerResponse = 
+type WorkerResponse =
   | { type: 'progress'; studyId: string; data: { total: number; completed: number; percentage: number; currentFile?: string } }
   | { type: 'complete'; studyId: string; data: { anonymizedFiles: DicomFile[] } }
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
@@ -49,13 +44,13 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
         const anonymizer = yield* Anonymizer
 
         // Load files from OPFS with error recovery
-        const fileLoadingEffects = fileRefs.map(fileRef => 
+        const fileLoadingEffects = fileRefs.map(fileRef =>
           Effect.gen(function* () {
             console.log(`Loading file from OPFS: ${fileRef.opfsFileId}`)
-            
+
             // Load with retry and detailed error logging
             const arrayBuffer = yield* opfs.loadFile(fileRef.opfsFileId).pipe(
-              Effect.catchAll(error => 
+              Effect.catchAll(error =>
                 Effect.gen(function* () {
                   yield* Effect.logError(`Failed to load file ${fileRef.opfsFileId}: ${error.message}`)
                   // Re-throw the error with more context
@@ -63,7 +58,7 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
                 })
               )
             )
-            
+
             return {
               id: fileRef.id,
               fileName: fileRef.fileName,
@@ -77,11 +72,11 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
         )
 
         // Load all files concurrently with proper error isolation
-        const dicomFiles = yield* Effect.all(fileLoadingEffects, { 
+        const dicomFiles = yield* Effect.all(fileLoadingEffects, {
           concurrency: 3,
-          batching: false 
+          batching: false
         }).pipe(
-          Effect.catchAll(error => 
+          Effect.catchAll(error =>
             Effect.gen(function* () {
               yield* Effect.logError(`Study ${studyId} file loading failed: ${error.message}`)
               return yield* Effect.fail(error)
@@ -98,20 +93,20 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
         })
 
         // Save anonymized files back to OPFS with error recovery
-        const saveEffects = result.anonymizedFiles.map(file => 
+        const saveEffects = result.anonymizedFiles.map(file =>
           Effect.gen(function* () {
             const anonymizedId = `${file.opfsFileId}_anonymized`
             console.log(`Saving anonymized file to OPFS: ${anonymizedId}`)
-            
+
             yield* opfs.saveFile(anonymizedId, file.arrayBuffer).pipe(
-              Effect.catchAll(error => 
+              Effect.catchAll(error =>
                 Effect.gen(function* () {
                   yield* Effect.logError(`Failed to save anonymized file ${anonymizedId}: ${error.message}`)
                   return yield* Effect.fail(new Error(`File saving failed for ${file.fileName}: ${error.message}`))
                 })
               )
             )
-            
+
             // Update file properties
             file.opfsFileId = anonymizedId
             file.anonymized = true
@@ -120,11 +115,11 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
         )
 
         // Save all files concurrently
-        yield* Effect.all(saveEffects, { 
+        yield* Effect.all(saveEffects, {
           concurrency: 3,
-          batching: false 
+          batching: false
         }).pipe(
-          Effect.catchAll(error => 
+          Effect.catchAll(error =>
             Effect.gen(function* () {
               yield* Effect.logError(`Study ${studyId} file saving failed: ${error.message}`)
               return yield* Effect.fail(error)
@@ -142,13 +137,13 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
       })
     )
   } catch (error) {
-    self.postMessage({ 
-      type: 'error', 
-      studyId, 
-      data: { 
+    self.postMessage({
+      type: 'error',
+      studyId,
+      data: {
         message: error instanceof Error ? error.message : String(error),
         stack: error instanceof Error ? error.stack : undefined
-      } 
+      }
     } as WorkerResponse)
   }
 }
@@ -156,7 +151,7 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
 // Message listener
 self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   const { type, data } = event.data
-  
+
   if (type === 'anonymize_study') {
     anonymizeStudy(data.studyId, data.files, data.config, data.concurrency)
   }

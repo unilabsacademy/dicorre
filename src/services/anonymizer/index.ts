@@ -4,7 +4,16 @@ import {
   BasicProfile,
   CleanDescOption,
   CleanGraphOption,
-  type DeidentifyOptions
+  RetainLongModifDatesOption,
+  RetainLongFullDatesOption,
+  RetainUIDsOption,
+  RetainPatientCharsOption,
+  RetainSafePrivateOption,
+  RetainDeviceIdentOption,
+  RetainInstIdentOption,
+  CleanStructContOption,
+  type DeidentifyOptions,
+  type ProfileOption
 } from '@umessen/dicom-deidentifier'
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
@@ -30,26 +39,35 @@ export interface StudyAnonymizationResult {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string) => Effect.Effect<DicomFile, AnonymizerError, DicomProcessor>
+    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string) => Effect.Effect<DicomFile, AnonymizerError, DicomProcessor>
     readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor>
   }
 >() { }
 
 class AnonymizerImpl {
-  private static processReplacements = (replacements: Record<string, string | undefined>, sharedTimestamp?: string): Record<string, string> => {
+  private static generateRandomString = (): string => {
+    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+    let result = ''
+    for (let i = 0; i < 7; i++) {
+      result += chars.charAt(Math.floor(Math.random() * chars.length))
+    }
+    return result
+  }
+
+  private static processReplacements = (replacements: Record<string, string>, sharedRandom?: string): Record<string, string> => {
     const processed: Record<string, string> = {}
-    const timestamp = sharedTimestamp || Date.now().toString().slice(-7)
+    const randomString = sharedRandom || AnonymizerImpl.generateRandomString()
 
     for (const [key, value] of Object.entries(replacements)) {
-      if (typeof value === 'string') {
-        processed[key] = value.replace('{timestamp}', timestamp)
-      }
+      // Convert tag names to hex using the tag() helper, leave other keys as-is
+      const processedKey = key === 'default' ? key : tag(key)
+      processed[processedKey] = value.replace('{random}', randomString)
     }
 
     return processed
   }
 
-  static anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedTimestamp?: string): Effect.Effect<DicomFile, AnonymizerError, DicomProcessor> =>
+  static anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string): Effect.Effect<DicomFile, AnonymizerError, DicomProcessor> =>
     Effect.gen(function* () {
       const dicomProcessor = yield* DicomProcessor
 
@@ -63,24 +81,41 @@ class AnonymizerImpl {
 
       console.log(`Starting anonymization of file: ${file.fileName}`)
 
-      // Process replacements with optional shared timestamp
+      // Process replacements with optional shared random string
       console.log('Processing replacements from config:', config.replacements)
       const processedReplacements = AnonymizerImpl.processReplacements(
         config.replacements || {},
-        sharedTimestamp
+        sharedRandom
       )
       console.log('Processed replacements result:', processedReplacements)
 
-      // Select profile based on config
-      const profileOptions = yield* Effect.sync(() => {
-        switch (config.profile) {
-          case 'clean':
-            return [CleanDescOption]
-          case 'very-clean':
-            return [CleanGraphOption]
-          case 'basic':
+      // Map string profile options to actual profile objects
+      const profileOptions: ProfileOption[] = (config.profileOptions || ['BasicProfile']).map(option => {
+        switch (option) {
+          case 'BasicProfile':
+            return BasicProfile
+          case 'RetainLongModifDatesOption':
+            return RetainLongModifDatesOption
+          case 'RetainLongFullDatesOption':
+            return RetainLongFullDatesOption
+          case 'RetainUIDsOption':
+            return RetainUIDsOption
+          case 'CleanGraphOption':
+            return CleanGraphOption
+          case 'RetainPatientCharsOption':
+            return RetainPatientCharsOption
+          case 'RetainSafePrivateOption':
+            return RetainSafePrivateOption
+          case 'CleanDescOption':
+            return CleanDescOption
+          case 'RetainDeviceIdentOption':
+            return RetainDeviceIdentOption
+          case 'RetainInstIdentOption':
+            return RetainInstIdentOption
+          case 'CleanStructContOption':
+            return CleanStructContOption
           default:
-            return [BasicProfile]
+            return BasicProfile
         }
       })
 
@@ -89,16 +124,7 @@ class AnonymizerImpl {
         profileOptions,
         dummies: {
           default: processedReplacements.default || 'REMOVED',
-          lookup: {
-            // Use config replacements with fallbacks
-            [tag("Patient's Name")]: processedReplacements.patientName || 'ANONYMOUS',
-            [tag('Patient ID')]: processedReplacements.patientId || 'ANON001',
-            [tag("Patient's Birth Date")]: processedReplacements.patientBirthDate || '19000101',
-            [tag('Institution Name')]: processedReplacements.institution || 'ANONYMIZED',
-            [tag('Accession Number')]: processedReplacements.accessionNumber || 'ANON0000000',
-            // Add any custom replacements
-            ...config.customReplacements
-          }
+          lookup: processedReplacements
         },
         keep: config.preserveTags,
         getReferenceDate: getDicomReferenceDate,
@@ -187,9 +213,9 @@ class AnonymizerImpl {
 
       console.log(`[Effect Anonymizer] Starting anonymization of study ${studyId} with ${files.length} files`)
 
-      // Generate shared timestamp for consistent replacements across all files in this study
-      const sharedTimestamp = Date.now().toString().slice(-7)
-      console.log(`[Effect Anonymizer] Using shared timestamp for study ${studyId}: ${sharedTimestamp}`)
+      // Generate shared random string for consistent replacements across all files in this study
+      const sharedRandom = AnonymizerImpl.generateRandomString()
+      console.log(`[Effect Anonymizer] Using shared random string for study ${studyId}: ${sharedRandom}`)
 
       let completed = 0
       const total = files.length
@@ -209,8 +235,8 @@ class AnonymizerImpl {
 
           console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
 
-          // Anonymize individual file with shared timestamp
-          const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedTimestamp)
+          // Anonymize individual file with shared random string
+          const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedRandom)
 
           completed++
 

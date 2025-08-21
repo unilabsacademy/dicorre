@@ -1,11 +1,5 @@
-/**
- * Worker Pool Manager for DICOM Anonymization
- * Manages a pool of web workers for parallel processing
- */
-
 import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
 
-// Debug message interface
 export interface DebugMessage {
   id: string
   type: 'create' | 'assign' | 'progress' | 'complete' | 'error' | 'queue' | 'message'

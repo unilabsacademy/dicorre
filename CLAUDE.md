@@ -105,7 +105,7 @@ When testing the web app with Playwright e2e test or using the Playwright MCP:
 
 # Documentation
 -----------------
-Some documentation can be found in /docs folder but be aware that much of it is outdated.
-
+[!] ALWAYS REFER TO DOCUMENTATION:
 Vue: https://vuejs.org/llms.txt
-Nuxt: https://nuxt.com/llms.txt
+Effect: https://effect.website/llms.txt
+Shadcn-vue: https://www.shadcn-vue.com/llms.txt

@@ -64,18 +64,9 @@ export type DicomProfileOption =
 export interface AnonymizationConfig {
   removePrivateTags: boolean
   profileOptions: DicomProfileOption[]
-  replacements?: {
-    default?: string
-    patientName?: string
-    patientId?: string
-    accessionNumber?: string
-    patientBirthDate?: string
-    institution?: string
-    [key: string]: string | undefined
-  }
+  replacements?: Record<string, string>
   preserveTags?: string[]
   tagsToRemove?: string[]
-  customReplacements?: Record<string, string>
   // Advanced options for custom handlers
   dateJitterDays?: number
   useCustomHandlers?: boolean
