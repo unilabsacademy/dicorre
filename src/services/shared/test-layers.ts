@@ -7,7 +7,7 @@ import { ConfigService } from '../config'
 import { FileHandler } from '../fileHandler'
 import { OPFSStorage } from '../opfsStorage'
 import { PluginRegistry } from '../pluginRegistry'
-import { ConfigurationError, FileHandlerError, ValidationError } from '@/types/effects'
+import { FileHandlerError, ValidationError } from '@/types/effects'
 import type { AppConfig } from '../config/schema'
 
 export const TestConfigLayer = Layer.succeed(
