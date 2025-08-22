@@ -1,10 +1,8 @@
-/**
- * Effect-based error types for the DICOM application
- */
-
+import { ManagedRuntime } from 'effect'
 import { Data } from "effect"
 
-// Base error classes using Effect's Data module for proper error handling
+export type RuntimeType = ReturnType<typeof ManagedRuntime.make<any, any>>
+
 export class ParseError extends Data.TaggedError("ParseError")<{
   readonly message: string
   readonly fileName?: string

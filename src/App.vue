@@ -11,6 +11,7 @@ import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
+import { useDownload } from '@/composables/useDownload'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -28,11 +29,13 @@ import {
   Trash2,
   Settings2,
   Wifi,
-  Server
+  Server,
+  Download
 } from 'lucide-vue-next'
 
 const runtime = ManagedRuntime.make(AppLayer)
 const appState = useAppState(runtime)
+const { isDownloading, downloadSelectedStudies } = useDownload(runtime)
 const error = computed(() => {
   if (appState.configError.value) {
     return `Configuration Error: ${appState.configError.value.message}`
@@ -272,6 +275,17 @@ onUnmounted(() => {
           >
             <Send class="w-4 h-4 mr-2" />
             Send ({{ appState.selectedStudiesCount }})
+          </Button>
+
+          <Button
+            @click="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
+            :disabled="isDownloading || appState.selectedStudiesCount.value === 0"
+            variant="outline"
+            size="sm"
+            data-testid="download-button"
+          >
+            <Download class="w-4 h-4 mr-2" />
+            Download ({{ appState.selectedStudiesCount }})
           </Button>
 
           <Button

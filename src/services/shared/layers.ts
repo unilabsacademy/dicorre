@@ -10,6 +10,7 @@ import { PluginRegistry, PluginRegistryLive } from '../pluginRegistry'
 import { DicomProcessorLive } from '../dicomProcessor'
 import { AnonymizerLive } from '../anonymizer'
 import { DicomSenderLive } from '../dicomSender'
+import { DownloadServiceLive } from '../downloadService'
 import { EventBusLayer } from '../eventBus'
 
 /**
@@ -51,7 +52,8 @@ export const AppLayer = Layer.mergeAll(
   OPFSStorageLive,
   DicomProcessorLive,
   AnonymizerLive,
-  DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
+  DicomSenderLive.pipe(Layer.provide(ConfigServiceLive)),
+  DownloadServiceLive
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(
     FileHandlerLive.pipe(Layer.provide(PluginRegistryLive))
@@ -68,4 +70,5 @@ export const OPFSStorageLayer = OPFSStorageLive
 export const DicomProcessorLayer = DicomProcessorLive.pipe(Layer.provide(BaseServicesLayer))
 export const AnonymizerLayer = AnonymizerLive.pipe(Layer.provide(ProcessingServicesLayer))
 export const DicomSenderLayer = DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
+export const DownloadServiceLayer = DownloadServiceLive.pipe(Layer.provide(OPFSStorageLive))
 

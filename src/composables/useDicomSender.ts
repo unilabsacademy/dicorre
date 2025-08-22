@@ -4,7 +4,7 @@ import type { DicomFile } from '@/types/dicom'
 import type { SendingEvent } from '@/types/events'
 import { getSendingWorkerManager } from '@/workers/workerManager'
 import { ConfigService } from '@/services/config'
-import { ManagedRuntime } from 'effect'
+import type { RuntimeType } from '@/types/effects'
 
 export interface SendingProgress {
   total: number
@@ -23,8 +23,6 @@ export interface DicomServerConfig {
   } | null
   description?: string
 }
-
-type RuntimeType = ReturnType<typeof ManagedRuntime.make<any, any>>
 
 export function useDicomSender(runtime?: RuntimeType) {
   const loading = ref(false)

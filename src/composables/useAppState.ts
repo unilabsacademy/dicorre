@@ -1,6 +1,7 @@
 import { ref, computed, onMounted } from 'vue'
-import { ManagedRuntime, Effect, Stream } from 'effect'
+import { Effect, Stream } from 'effect'
 import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import type { RuntimeType } from '@/types/effects'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { ConfigService } from '@/services/config'
 import { PluginRegistry } from '@/services/pluginRegistry'
@@ -13,8 +14,6 @@ import { useDicomSender } from '@/composables/useDicomSender'
 import { useAnonymizer } from '@/composables/useAnonymizer'
 import { clearStudyCache } from '@/services/anonymizer/handlers'
 import { toast } from 'vue-sonner'
-
-type RuntimeType = ReturnType<typeof ManagedRuntime.make<any, any>>
 
 export function useAppState(runtime: RuntimeType) {
   // Core application state
