@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { ManagedRuntime } from 'effect'
-import type { AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import type { DicomStudy } from '@/types/dicom'
 import { useAppState } from '@/composables/useAppState'
 import { AppLayer } from '@/services/shared/layers'
 import { DataTable, columns } from '@/components/StudyDataTable'

@@ -1,6 +1,5 @@
 import { Effect, Context, Layer, ParseResult } from "effect"
-import type { DicomServerConfig, AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
-import type { AppConfig } from './schema'
+import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption } from './schema'
 import { ConfigurationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig } from './schema'

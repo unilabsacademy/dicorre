@@ -1,9 +1,10 @@
 import { ref, computed, onMounted } from 'vue'
 import { Effect, Stream } from 'effect'
-import type { DicomFile, AnonymizationConfig, DicomStudy } from '@/types/dicom'
+import type { DicomFile, DicomStudy } from '@/types/dicom'
 import type { RuntimeType } from '@/types/effects'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { ConfigService } from '@/services/config'
+import type { AppConfig } from '@/services/config/schema'
 import { PluginRegistry } from '@/services/pluginRegistry'
 import { useTableState } from '@/composables/useTableState'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
@@ -25,7 +26,7 @@ export function useAppState(runtime: RuntimeType) {
   const appError = ref<string | null>(null)
 
   // Configuration state
-  const config = ref<AnonymizationConfig | null>(null)
+  const config = ref<AppConfig | null>(null)
   const configLoading = ref(false)
   const configError = ref<Error | null>(null)
   const serverUrl = ref<string>('')
@@ -63,7 +64,7 @@ export function useAppState(runtime: RuntimeType) {
       const loadedConfig = await runtime.runPromise(
         Effect.gen(function* () {
           const configService = yield* ConfigService
-          return yield* configService.getAnonymizationConfig
+          return yield* configService.getCurrentConfig
         })
       )
       config.value = loadedConfig
@@ -177,7 +178,7 @@ export function useAppState(runtime: RuntimeType) {
         return anonymizer.anonymizeStudyStream(
           study.studyInstanceUID,
           studyFiles,
-          config.value!,
+          config.value!.anonymization,
           concurrency.value
         ).pipe(
           Stream.tap((event) =>

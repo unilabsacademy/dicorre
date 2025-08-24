@@ -1,18 +1,8 @@
 import { Effect, Context, Layer } from "effect"
 import type { DicomFile } from '@/types/dicom'
+import type { DicomServerConfig } from '@/services/config/schema'
 import { NetworkError, ValidationError, type DicomSenderError } from '@/types/effects'
 import { ConfigService } from '../config'
-
-export interface DicomServerConfig {
-  url: string
-  headers?: Record<string, string>
-  timeout?: number
-  auth?: {
-    type: 'basic' | 'bearer'
-    credentials: string
-  } | null
-  description?: string
-}
 
 
 export class DicomSender extends Context.Tag("DicomSender")<

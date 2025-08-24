@@ -7,7 +7,8 @@ import { DicomProcessor, DicomProcessorLive } from '../dicomProcessor'
 import { EventBusLayer } from '../eventBus'
 import { Layer } from 'effect'
 import { clearValueCache } from './handlers'
-import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
+import type { DicomFile } from '@/types/dicom'
+import type { AnonymizationConfig } from '@/services/config/schema'
 
 // Helper to load DICOM files from test-data
 function loadTestDicomFile(relativePath: string): DicomFile {

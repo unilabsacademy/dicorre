@@ -1,4 +1,5 @@
-import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
+import type { DicomFile } from '@/types/dicom'
+import type { AnonymizationConfig } from '@/services/config/schema'
 
 export interface DebugMessage {
   id: string

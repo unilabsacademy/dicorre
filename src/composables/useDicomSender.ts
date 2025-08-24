@@ -4,6 +4,7 @@ import type { DicomFile } from '@/types/dicom'
 import type { SendingEvent } from '@/types/events'
 import { getSendingWorkerManager } from '@/workers/workerManager'
 import { ConfigService } from '@/services/config'
+import type { DicomServerConfig } from '@/services/config/schema'
 import type { RuntimeType } from '@/types/effects'
 
 export interface SendingProgress {
@@ -11,17 +12,6 @@ export interface SendingProgress {
   completed: number
   percentage: number
   currentFile?: string
-}
-
-export interface DicomServerConfig {
-  url: string
-  headers?: Record<string, string>
-  timeout?: number
-  auth?: {
-    type: 'basic' | 'bearer'
-    credentials: string
-  } | null
-  description?: string
 }
 
 export function useDicomSender(runtime?: RuntimeType) {

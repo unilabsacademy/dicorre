@@ -1,8 +1,7 @@
 import { describe, it, expect } from 'vitest'
 import { Effect } from 'effect'
 import { ConfigService, ConfigServiceLive } from './index'
-import type { AnonymizationConfig, DicomProfileOption } from '@/types/dicom'
-import type { AppConfig } from './schema'
+import type { AppConfig, DicomProfileOption } from './schema'
 
 describe('ConfigService (Effect Service Testing)', () => {
   // Test the service through Effect.provide pattern

@@ -15,7 +15,8 @@ import {
   type DeidentifyOptions,
   type ProfileOption
 } from '@umessen/dicom-deidentifier'
-import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
+import type { DicomFile } from '@/types/dicom'
+import type { AnonymizationConfig } from '@/services/config/schema'
 import { DicomProcessor } from '../dicomProcessor'
 import { getAllSpecialHandlers } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
@@ -126,14 +127,14 @@ class AnonymizerImpl {
           default: processedReplacements.default || 'REMOVED',
           lookup: processedReplacements
         },
-        keep: config.preserveTags,
+        keep: config.preserveTags ? [...config.preserveTags] : undefined,
         getReferenceDate: getDicomReferenceDate,
         getReferenceTime: getDicomReferenceTime
       }
 
       // Add custom special handlers if enabled
       if (config.useCustomHandlers) {
-        const tagsToRemove = config.tagsToRemove || []
+        const tagsToRemove = config.tagsToRemove ? [...config.tagsToRemove] : []
         // For individual files, use the Study Instance UID as the cache key
         const studyId = file.metadata?.studyInstanceUID || 'unknown'
         const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId)

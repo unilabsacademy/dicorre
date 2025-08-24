@@ -45,8 +45,8 @@ describe('SendLogger Plugin', () => {
           seriesDescription: 'Test Series',
           modality: 'CT',
           files: [
-            { id: 'file1', fileName: 'test1.dcm' },
-            { id: 'file2', fileName: 'test2.dcm' }
+            { id: 'file1', fileName: 'test1.dcm', fileSize: 1024, arrayBuffer: new ArrayBuffer(0) },
+            { id: 'file2', fileName: 'test2.dcm', fileSize: 2048, arrayBuffer: new ArrayBuffer(0) }
           ]
         },
         {
@@ -54,7 +54,7 @@ describe('SendLogger Plugin', () => {
           seriesDescription: 'Test Series 2',
           modality: 'MR',
           files: [
-            { id: 'file3', fileName: 'test3.dcm' }
+            { id: 'file3', fileName: 'test3.dcm', fileSize: 3072, arrayBuffer: new ArrayBuffer(0) }
           ]
         }
       ]

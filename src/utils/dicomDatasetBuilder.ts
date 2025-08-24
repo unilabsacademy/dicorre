@@ -44,7 +44,7 @@ export class DicomDatasetBuilder {
 
     try {
       // Use DicomDict to write the dataset to DICOM buffer
-      const dicomDict = new dcmjs.data.DicomDict(metaHeader)
+      const dicomDict = new (dcmjs.data as any).DicomDict(metaHeader)
       dicomDict.dict = dataset
       const part10Buffer = dicomDict.write()
 

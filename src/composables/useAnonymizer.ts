@@ -1,6 +1,7 @@
 import { ref, computed } from 'vue'
 import { Stream } from 'effect'
-import type { DicomFile, AnonymizationConfig } from '@/types/dicom'
+import type { DicomFile } from '@/types/dicom'
+import type { AnonymizationConfig } from '@/services/config/schema'
 import type { AnonymizationEvent } from '@/types/events'
 import type { AnonymizationProgress } from '@/services/anonymizer'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'

@@ -47,31 +47,6 @@ export interface DicomSeries {
   files: DicomFile[]
 }
 
-// DICOM standard profile options based on @umessen/dicom-deidentifier
-export type DicomProfileOption = 
-  | 'BasicProfile'
-  | 'RetainLongModifDatesOption'
-  | 'RetainLongFullDatesOption'
-  | 'RetainUIDsOption'
-  | 'CleanGraphOption'
-  | 'RetainPatientCharsOption'
-  | 'RetainSafePrivateOption'
-  | 'CleanDescOption'
-  | 'RetainDeviceIdentOption'
-  | 'RetainInstIdentOption'
-  | 'CleanStructContOption'
-
-export interface AnonymizationConfig {
-  removePrivateTags: boolean
-  profileOptions: DicomProfileOption[]
-  replacements?: Record<string, string>
-  preserveTags?: string[]
-  tagsToRemove?: string[]
-  // Advanced options for custom handlers
-  dateJitterDays?: number
-  useCustomHandlers?: boolean
-  organizationRoot?: string
-}
 
 export interface SendProgress {
   studyUID: string
@@ -108,5 +83,3 @@ export interface DicomSeriesMetadata {
   files: DicomFileMetadata[]
 }
 
-// Re-export DicomServerConfig for convenience
-export type { DicomServerConfig } from '@/composables/useDicomSender'

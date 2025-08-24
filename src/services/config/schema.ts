@@ -42,6 +42,8 @@ const DicomProfileOptionSchema = Schema.Literal(
   "CleanStructContOption"
 )
 
+export type DicomProfileOption = Schema.Schema.Type<typeof DicomProfileOptionSchema>
+
 const AnonymizationProfileOptionsSchema = Schema.Array(DicomProfileOptionSchema).pipe(
   Schema.minItems(1, { message: () => "At least one profile option is required" }),
   Schema.annotations({
@@ -91,6 +93,8 @@ export const AppConfigSchema = Schema.Struct({
 // Type extraction
 export type AppConfig = Schema.Schema.Type<typeof AppConfigSchema>
 export type AppConfigInput = Schema.Schema.Encoded<typeof AppConfigSchema>
+export type AnonymizationConfig = Schema.Schema.Type<typeof AnonymizationConfigSchema>
+export type DicomServerConfig = Schema.Schema.Type<typeof DicomServerConfigSchema>
 
 // Validation function that returns Effect
 export const validateAppConfig = (input: unknown) =>
