@@ -15,7 +15,7 @@ const WorkerLayer = Layer.mergeAll(
   FileHandlerLive.pipe(Layer.provide(PluginRegistryLive)),
   OPFSStorageLive,
   DicomProcessorLive,
-  AnonymizerLive
+  AnonymizerLive.pipe(Layer.provide(DicomProcessorLive))
 )
 
 const runtime = ManagedRuntime.make(WorkerLayer)

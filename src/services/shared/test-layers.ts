@@ -7,8 +7,10 @@ import { ConfigService } from '../config'
 import { FileHandler } from '../fileHandler'
 import { OPFSStorage } from '../opfsStorage'
 import { PluginRegistry } from '../pluginRegistry'
-import { FileHandlerError, ValidationError } from '@/types/effects'
+import { Anonymizer } from '../anonymizer'
+import { FileHandlerError, ValidationError, AnonymizationError } from '@/types/effects'
 import type { AppConfig } from '../config/schema'
+import type { DicomFile } from '@/types/dicom'
 
 export const TestConfigLayer = Layer.succeed(
   ConfigService,
@@ -180,12 +182,43 @@ export const TestOPFSStorageLayer = Layer.succeed(
 )
 
 /**
+ * Mock Anonymizer for testing - no DicomProcessor dependency needed!
+ * This demonstrates the benefit of removing requirement leakage:
+ * we can easily create test implementations without internal dependencies.
+ */
+export const TestAnonymizerLayer = Layer.succeed(
+  Anonymizer,
+  {
+    anonymizeFile: (file: DicomFile, _config, _sharedRandom?) => 
+      Effect.succeed({
+        ...file,
+        anonymized: true,
+        metadata: file.metadata ? {
+          ...file.metadata,
+          patientName: 'TEST_ANONYMOUS',
+          patientId: 'TEST_ID',
+          accessionNumber: 'TEST_ACC'
+        } : undefined
+      } as DicomFile),
+    
+    anonymizeStudy: (studyId, files, _config, _options?) =>
+      Effect.succeed({
+        studyId,
+        anonymizedFiles: files.map(f => ({ ...f, anonymized: true })),
+        totalFiles: files.length,
+        completedFiles: files.length
+      })
+  } as const
+)
+
+/**
  * Combined test layers for convenience
  */
 export const TestBaseLayer = Layer.mergeAll(
   TestConfigLayer,
   TestPluginRegistryLayer,
-  TestOPFSStorageLayer
+  TestOPFSStorageLayer,
+  TestAnonymizerLayer
 )
 
 export const TestLayer = Layer.mergeAll(

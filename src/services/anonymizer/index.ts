@@ -40,55 +40,57 @@ export interface StudyAnonymizationResult {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string) => Effect.Effect<DicomFile, AnonymizerError, DicomProcessor>
-    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor>
+    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string) => Effect.Effect<DicomFile, AnonymizerError>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
   }
 >() { }
 
-class AnonymizerImpl {
-  private static generateRandomString = (): string => {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-    let result = ''
-    for (let i = 0; i < 7; i++) {
-      result += chars.charAt(Math.floor(Math.random() * chars.length))
-    }
-    return result
-  }
-
-  private static processReplacements = (replacements: Record<string, string>, sharedRandom?: string): Record<string, string> => {
-    const processed: Record<string, string> = {}
-    const randomString = sharedRandom || AnonymizerImpl.generateRandomString()
-
-    for (const [key, value] of Object.entries(replacements)) {
-      // Convert tag names to hex using the tag() helper, leave other keys as-is
-      const processedKey = key === 'default' ? key : tag(key)
-      processed[processedKey] = value.replace('{random}', randomString)
+export const AnonymizerLive = Layer.effect(
+  Anonymizer,
+  Effect.gen(function* () {
+    const dicomProcessor = yield* DicomProcessor
+    
+    const generateRandomString = (): string => {
+      const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+      let result = ''
+      for (let i = 0; i < 7; i++) {
+        result += chars.charAt(Math.floor(Math.random() * chars.length))
+      }
+      return result
     }
 
-    return processed
-  }
+    const processReplacements = (replacements: Record<string, string>, sharedRandom?: string): Record<string, string> => {
+      const processed: Record<string, string> = {}
+      const randomString = sharedRandom || generateRandomString()
 
-  static anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string): Effect.Effect<DicomFile, AnonymizerError, DicomProcessor> =>
-    Effect.gen(function* () {
-      const dicomProcessor = yield* DicomProcessor
-
-      // Check if file has metadata
-      if (!file.metadata) {
-        return yield* Effect.fail(new AnonymizationError({
-          message: `File ${file.fileName} has no metadata - cannot anonymize`,
-          fileName: file.fileName
-        }))
+      for (const [key, value] of Object.entries(replacements)) {
+        // Convert tag names to hex using the tag() helper, leave other keys as-is
+        const processedKey = key === 'default' ? key : tag(key)
+        processed[processedKey] = value.replace('{random}', randomString)
       }
 
-      console.log(`Starting anonymization of file: ${file.fileName}`)
+      return processed
+    }
 
-      // Process replacements with optional shared random string
-      console.log('Processing replacements from config:', config.replacements)
-      const processedReplacements = AnonymizerImpl.processReplacements(
-        config.replacements || {},
-        sharedRandom
-      )
-      console.log('Processed replacements result:', processedReplacements)
+    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string): Effect.Effect<DicomFile, AnonymizerError> =>
+      Effect.gen(function* () {
+        // Check if file has metadata
+        if (!file.metadata) {
+          return yield* Effect.fail(new AnonymizationError({
+            message: `File ${file.fileName} has no metadata - cannot anonymize`,
+            fileName: file.fileName
+          }))
+        }
+
+        console.log(`Starting anonymization of file: ${file.fileName}`)
+
+        // Process replacements with optional shared random string
+        console.log('Processing replacements from config:', config.replacements)
+        const processedReplacements = processReplacements(
+          config.replacements || {},
+          sharedRandom
+        )
+        console.log('Processed replacements result:', processedReplacements)
 
       // Map string profile options to actual profile objects
       const profileOptions: ProfileOption[] = (config.profileOptions || ['BasicProfile']).map(option => {
@@ -197,26 +199,26 @@ class AnonymizerImpl {
         anonymized: true
       }
 
-      // Re-parse the anonymized file
-      const finalFile = yield* dicomProcessor.parseFile(anonymizedFile)
-      console.log(`Successfully anonymized ${file.fileName}`)
-      return finalFile
-    })
+        // Re-parse the anonymized file
+        const finalFile = yield* dicomProcessor.parseFile(anonymizedFile)
+        console.log(`Successfully anonymized ${file.fileName}`)
+        return finalFile
+      })
 
-  static anonymizeStudy = (
-    studyId: string,
-    files: DicomFile[],
-    config: AnonymizationConfig,
-    options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void } = {}
-  ): Effect.Effect<StudyAnonymizationResult, AnonymizerError, DicomProcessor> =>
-    Effect.gen(function* () {
-      const { concurrency = 3, onProgress } = options
+    const anonymizeStudy = (
+      studyId: string,
+      files: DicomFile[],
+      config: AnonymizationConfig,
+      options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void } = {}
+    ): Effect.Effect<StudyAnonymizationResult, AnonymizerError> =>
+      Effect.gen(function* () {
+        const { concurrency = 3, onProgress } = options
 
-      console.log(`[Effect Anonymizer] Starting anonymization of study ${studyId} with ${files.length} files`)
+        console.log(`[Effect Anonymizer] Starting anonymization of study ${studyId} with ${files.length} files`)
 
-      // Generate shared random string for consistent replacements across all files in this study
-      const sharedRandom = AnonymizerImpl.generateRandomString()
-      console.log(`[Effect Anonymizer] Using shared random string for study ${studyId}: ${sharedRandom}`)
+        // Generate shared random string for consistent replacements across all files in this study
+        const sharedRandom = generateRandomString()
+        console.log(`[Effect Anonymizer] Using shared random string for study ${studyId}: ${sharedRandom}`)
 
       let completed = 0
       const total = files.length
@@ -237,7 +239,7 @@ class AnonymizerImpl {
           console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
 
           // Anonymize individual file with shared random string
-          const result = yield* AnonymizerImpl.anonymizeFile(file, config, sharedRandom)
+          const result = yield* anonymizeFile(file, config, sharedRandom)
 
           completed++
 
@@ -259,21 +261,19 @@ class AnonymizerImpl {
       // Run all effects concurrently with specified concurrency
       const anonymizedFiles = yield* Effect.all(effectsWithProgress, { concurrency, batching: true })
 
-      console.log(`[Effect Anonymizer] Study ${studyId} anonymization completed: ${anonymizedFiles.length} files processed`)
+        console.log(`[Effect Anonymizer] Study ${studyId} anonymization completed: ${anonymizedFiles.length} files processed`)
 
-      return {
-        studyId,
-        anonymizedFiles,
-        totalFiles: total,
-        completedFiles: anonymizedFiles.length
-      }
-    })
-}
+        return {
+          studyId,
+          anonymizedFiles,
+          totalFiles: total,
+          completedFiles: anonymizedFiles.length
+        }
+      })
 
-export const AnonymizerLive = Layer.succeed(
-  Anonymizer,
-  Anonymizer.of({
-    anonymizeFile: AnonymizerImpl.anonymizeFile,
-    anonymizeStudy: AnonymizerImpl.anonymizeStudy
+    return {
+      anonymizeFile,
+      anonymizeStudy
+    } as const
   })
 )

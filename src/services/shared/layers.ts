@@ -36,7 +36,7 @@ export const ProcessingServicesLayer = Layer.mergeAll(
  * Services that depend on processing services
  */
 export const AdvancedServicesLayer = Layer.mergeAll(
-  AnonymizerLive,
+  AnonymizerLive.pipe(Layer.provide(DicomProcessorLive)),
   DicomSenderLive
 ).pipe(
   Layer.provide(ProcessingServicesLayer)
@@ -51,7 +51,7 @@ export const AppLayer = Layer.mergeAll(
   PluginRegistryLive,
   OPFSStorageLive,
   DicomProcessorLive,
-  AnonymizerLive,
+  AnonymizerLive.pipe(Layer.provide(DicomProcessorLive)),
   DicomSenderLive.pipe(Layer.provide(ConfigServiceLive)),
   DownloadServiceLive
 ).pipe(

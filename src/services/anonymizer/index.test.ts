@@ -27,14 +27,14 @@ function loadTestDicomFile(relativePath: string): DicomFile {
 }
 
 describe('Anonymizer Service (Effect Service Testing)', () => {
-  // Test the service through Effect.provide pattern with dependencies
+  // AnonymizerLive requires DicomProcessor, so we compose them properly
   const testLayer = Layer.mergeAll(
     EventBusLayer,
-    AnonymizerLive,
-    DicomProcessorLive
+    DicomProcessorLive,
+    AnonymizerLive.pipe(Layer.provide(DicomProcessorLive))
   )
 
-  const runTest = <A, E>(effect: Effect.Effect<A, E, DicomProcessor | Anonymizer>) =>
+  const runTest = <A, E>(effect: Effect.Effect<A, E, Anonymizer>) =>
     Effect.runPromise(effect.pipe(Effect.provide(testLayer)))
 
   beforeEach(() => {
@@ -46,12 +46,12 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       const dicomFile = loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
       console.log(dicomFile)
 
-      // First parse the file
+      // First parse the file using the test layer
       const parsedFile = await Effect.runPromise(
         Effect.gen(function* () {
           const processor = yield* DicomProcessor
           return yield* processor.parseFile(dicomFile)
-        }).pipe(Effect.provide(DicomProcessorLive))
+        }).pipe(Effect.provide(testLayer))
       )
 
       const configWithReplacements: AnonymizationConfig = {
@@ -93,12 +93,12 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
     it('should anonymize DICOM file', async () => {
       const dicomFile = loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
 
-      // First parse the file
+      // First parse the file using the test layer
       const parsedFile = await Effect.runPromise(
         Effect.gen(function* () {
           const processor = yield* DicomProcessor
           return yield* processor.parseFile(dicomFile)
-        }).pipe(Effect.provide(DicomProcessorLive))
+        }).pipe(Effect.provide(testLayer))
       )
 
       const config: AnonymizationConfig = {
