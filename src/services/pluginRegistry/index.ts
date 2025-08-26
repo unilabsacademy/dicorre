@@ -19,157 +19,157 @@ export class PluginRegistry extends Context.Tag("PluginRegistry")<
   }
 >() { }
 
-class PluginRegistryImpl {
-  private static plugins = new Map<string, Plugin>()
-  private static enabledPlugins = new Set<string>()
-  private static pluginConfig: PluginConfig = { enabled: [] }
+export const PluginRegistryLive = Layer.succeed(
+  PluginRegistry,
+  (() => {
+    const plugins = new Map<string, Plugin>()
+    const enabledPlugins = new Set<string>()
+    let pluginConfig: PluginConfig = { enabled: [] }
 
-  static registerPlugin = (plugin: Plugin): Effect.Effect<void, PluginErrorType> =>
-    Effect.gen(function* () {
-      if (PluginRegistryImpl.plugins.has(plugin.id)) {
-        return yield* Effect.fail(new PluginError({
-          message: `Plugin with ID '${plugin.id}' is already registered`,
-          pluginId: plugin.id
-        }))
-      }
-
-      console.log(`Registering plugin: ${plugin.name} (${plugin.id}) v${plugin.version}`)
-      PluginRegistryImpl.plugins.set(plugin.id, plugin)
-
-      // Check if plugin should be enabled based on config
-      if (PluginRegistryImpl.pluginConfig.enabled.includes(plugin.id)) {
-        PluginRegistryImpl.enabledPlugins.add(plugin.id)
-        plugin.enabled = true
-        console.log(`Plugin ${plugin.id} auto-enabled from config`)
-      }
-    })
-
-  static unregisterPlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
-    Effect.gen(function* () {
-      if (!PluginRegistryImpl.plugins.has(pluginId)) {
-        return yield* Effect.fail(new PluginError({
-          message: `Plugin with ID '${pluginId}' is not registered`,
-          pluginId
-        }))
-      }
-
-      PluginRegistryImpl.plugins.delete(pluginId)
-      PluginRegistryImpl.enabledPlugins.delete(pluginId)
-      console.log(`Unregistered plugin: ${pluginId}`)
-    })
-
-  static getPlugin = (pluginId: string): Effect.Effect<Plugin | undefined, never> =>
-    Effect.sync(() => PluginRegistryImpl.plugins.get(pluginId))
-
-  static getAllPlugins = (): Effect.Effect<Plugin[], never> =>
-    Effect.sync(() => Array.from(PluginRegistryImpl.plugins.values()))
-
-  static getFileFormatPlugins = (): Effect.Effect<FileFormatPlugin[], never> =>
-    Effect.sync(() => {
-      const plugins = Array.from(PluginRegistryImpl.plugins.values())
-      return plugins.filter(isFileFormatPlugin).filter(p => p.enabled !== false)
-    })
-
-  static getHookPlugins = (): Effect.Effect<HookPlugin[], never> =>
-    Effect.sync(() => {
-      const plugins = Array.from(PluginRegistryImpl.plugins.values())
-      return plugins.filter(isHookPlugin).filter(p => p.enabled !== false)
-    })
-
-  static getPluginForFile = (file: File): Effect.Effect<FileFormatPlugin | undefined, PluginErrorType> =>
-    Effect.gen(function* () {
-      const fileFormatPlugins = yield* PluginRegistryImpl.getFileFormatPlugins()
-
-      // Check by file extension
-      const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
-
-      for (const plugin of fileFormatPlugins) {
-        // Check if extension is supported
-        if (plugin.supportedExtensions.some(ext => ext.toLowerCase() === fileExtension)) {
-          // Verify with canProcess method
-          const canProcess = yield* plugin.canProcess(file)
-          if (canProcess) {
-            console.log(`Found plugin ${plugin.id} for file ${file.name}`)
-            return plugin
-          }
+    const registerPlugin = (plugin: Plugin): Effect.Effect<void, PluginErrorType> =>
+      Effect.gen(function* () {
+        if (plugins.has(plugin.id)) {
+          return yield* Effect.fail(new PluginError({
+            message: `Plugin with ID '${plugin.id}' is already registered`,
+            pluginId: plugin.id
+          }))
         }
 
-        // Check by MIME type if available
-        if (plugin.supportedMimeTypes && file.type) {
-          if (plugin.supportedMimeTypes.includes(file.type)) {
+        console.log(`Registering plugin: ${plugin.name} (${plugin.id}) v${plugin.version}`)
+        plugins.set(plugin.id, plugin)
+
+        // Check if plugin should be enabled based on config
+        if (pluginConfig.enabled.includes(plugin.id)) {
+          enabledPlugins.add(plugin.id)
+          plugin.enabled = true
+          console.log(`Plugin ${plugin.id} auto-enabled from config`)
+        }
+      })
+
+    const unregisterPlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
+      Effect.gen(function* () {
+        if (!plugins.has(pluginId)) {
+          return yield* Effect.fail(new PluginError({
+            message: `Plugin with ID '${pluginId}' is not registered`,
+            pluginId
+          }))
+        }
+
+        plugins.delete(pluginId)
+        enabledPlugins.delete(pluginId)
+        console.log(`Unregistered plugin: ${pluginId}`)
+      })
+
+    const getPlugin = (pluginId: string): Effect.Effect<Plugin | undefined, never> =>
+      Effect.sync(() => plugins.get(pluginId))
+
+    const getAllPlugins = (): Effect.Effect<Plugin[], never> =>
+      Effect.sync(() => Array.from(plugins.values()))
+
+    const getFileFormatPlugins = (): Effect.Effect<FileFormatPlugin[], never> =>
+      Effect.sync(() => {
+        const pluginArray = Array.from(plugins.values())
+        return pluginArray.filter(isFileFormatPlugin).filter(p => p.enabled !== false)
+      })
+
+    const getHookPlugins = (): Effect.Effect<HookPlugin[], never> =>
+      Effect.sync(() => {
+        const pluginArray = Array.from(plugins.values())
+        return pluginArray.filter(isHookPlugin).filter(p => p.enabled !== false)
+      })
+
+    const getPluginForFile = (file: File): Effect.Effect<FileFormatPlugin | undefined, PluginErrorType> =>
+      Effect.gen(function* () {
+        const fileFormatPlugins = yield* getFileFormatPlugins()
+
+        // Check by file extension
+        const fileExtension = '.' + file.name.split('.').pop()?.toLowerCase()
+
+        for (const plugin of fileFormatPlugins) {
+          // Check if extension is supported
+          if (plugin.supportedExtensions.some(ext => ext.toLowerCase() === fileExtension)) {
+            // Verify with canProcess method
             const canProcess = yield* plugin.canProcess(file)
             if (canProcess) {
-              console.log(`Found plugin ${plugin.id} for file ${file.name} by MIME type`)
+              console.log(`Found plugin ${plugin.id} for file ${file.name}`)
               return plugin
             }
           }
+
+          // Check by MIME type if available
+          if (plugin.supportedMimeTypes && file.type) {
+            if (plugin.supportedMimeTypes.includes(file.type)) {
+              const canProcess = yield* plugin.canProcess(file)
+              if (canProcess) {
+                console.log(`Found plugin ${plugin.id} for file ${file.name} by MIME type`)
+                return plugin
+              }
+            }
+          }
         }
-      }
 
-      return undefined
-    })
+        return undefined
+      })
 
-  static enablePlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
-    Effect.gen(function* () {
-      const plugin = PluginRegistryImpl.plugins.get(pluginId)
-      if (!plugin) {
-        return yield* Effect.fail(new PluginError({
-          message: `Plugin with ID '${pluginId}' is not registered`,
-          pluginId
-        }))
-      }
-
-      PluginRegistryImpl.enabledPlugins.add(pluginId)
-      plugin.enabled = true
-      console.log(`Enabled plugin: ${pluginId}`)
-    })
-
-  static disablePlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
-    Effect.gen(function* () {
-      const plugin = PluginRegistryImpl.plugins.get(pluginId)
-      if (!plugin) {
-        return yield* Effect.fail(new PluginError({
-          message: `Plugin with ID '${pluginId}' is not registered`,
-          pluginId
-        }))
-      }
-
-      PluginRegistryImpl.enabledPlugins.delete(pluginId)
-      plugin.enabled = false
-      console.log(`Disabled plugin: ${pluginId}`)
-    })
-
-  static loadPluginConfig = (config: PluginConfig): Effect.Effect<void, PluginErrorType> =>
-    Effect.sync(() => {
-      PluginRegistryImpl.pluginConfig = config
-
-      // Update enabled status for all plugins
-      for (const [pluginId, plugin] of PluginRegistryImpl.plugins.entries()) {
-        if (config.enabled.includes(pluginId)) {
-          PluginRegistryImpl.enabledPlugins.add(pluginId)
-          plugin.enabled = true
-        } else {
-          PluginRegistryImpl.enabledPlugins.delete(pluginId)
-          plugin.enabled = false
+    const enablePlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
+      Effect.gen(function* () {
+        const plugin = plugins.get(pluginId)
+        if (!plugin) {
+          return yield* Effect.fail(new PluginError({
+            message: `Plugin with ID '${pluginId}' is not registered`,
+            pluginId
+          }))
         }
-      }
 
-      console.log(`Loaded plugin config: ${config.enabled.length} plugins enabled`)
-    })
-}
+        enabledPlugins.add(pluginId)
+        plugin.enabled = true
+        console.log(`Enabled plugin: ${pluginId}`)
+      })
 
-export const PluginRegistryLive = Layer.succeed(
-  PluginRegistry,
-  PluginRegistry.of({
-    registerPlugin: PluginRegistryImpl.registerPlugin,
-    unregisterPlugin: PluginRegistryImpl.unregisterPlugin,
-    getPlugin: PluginRegistryImpl.getPlugin,
-    getAllPlugins: PluginRegistryImpl.getAllPlugins,
-    getFileFormatPlugins: PluginRegistryImpl.getFileFormatPlugins,
-    getHookPlugins: PluginRegistryImpl.getHookPlugins,
-    getPluginForFile: PluginRegistryImpl.getPluginForFile,
-    enablePlugin: PluginRegistryImpl.enablePlugin,
-    disablePlugin: PluginRegistryImpl.disablePlugin,
-    loadPluginConfig: PluginRegistryImpl.loadPluginConfig
-  })
+    const disablePlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
+      Effect.gen(function* () {
+        const plugin = plugins.get(pluginId)
+        if (!plugin) {
+          return yield* Effect.fail(new PluginError({
+            message: `Plugin with ID '${pluginId}' is not registered`,
+            pluginId
+          }))
+        }
+
+        enabledPlugins.delete(pluginId)
+        plugin.enabled = false
+        console.log(`Disabled plugin: ${pluginId}`)
+      })
+
+    const loadPluginConfig = (config: PluginConfig): Effect.Effect<void, PluginErrorType> =>
+      Effect.sync(() => {
+        pluginConfig = config
+
+        // Update enabled status for all plugins
+        for (const [pluginId, plugin] of plugins.entries()) {
+          if (config.enabled.includes(pluginId)) {
+            enabledPlugins.add(pluginId)
+            plugin.enabled = true
+          } else {
+            enabledPlugins.delete(pluginId)
+            plugin.enabled = false
+          }
+        }
+
+        console.log(`Loaded plugin config: ${config.enabled.length} plugins enabled`)
+      })
+
+    return {
+      registerPlugin,
+      unregisterPlugin,
+      getPlugin,
+      getAllPlugins,
+      getFileFormatPlugins,
+      getHookPlugins,
+      getPluginForFile,
+      enablePlugin,
+      disablePlugin,
+      loadPluginConfig
+    } as const
+  })()
 )

@@ -347,7 +347,7 @@ export class SendingWorkerManager extends WorkerManager<SendingJob> {
 
     // Pass only OPFS file references to worker - no ArrayBuffers
     // Serialize and deserialize to ensure all data is cloneable
-    const files = job.files.map((file, index) => {
+    const files = job.files.map((file, _index) => {
       const fileData = {
         id: file.id,
         fileName: file.fileName,

@@ -22,7 +22,7 @@ export class SendLoggerPlugin implements HookPlugin {
         console.log(`[SEND-LOGGER PLUGIN] Sending study ${study.accessionNumber}`)
       }),
 
-    onSendError: (study: DicomStudy, error: Error): Effect.Effect<void, PluginError> =>
+    onSendError: (study: DicomStudy, _error: Error): Effect.Effect<void, PluginError> =>
       Effect.sync(() => {
         console.error(`[SEND-LOGGER PLUGIN] Send failed ${study.accessionNumber}`)
       })

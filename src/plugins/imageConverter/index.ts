@@ -68,7 +68,7 @@ export class ImageConverterPlugin implements FileFormatPlugin {
   }
 
   /* Convert image to DICOM Secondary Capture */
-  convertToDicom = (file: File, metadata: DicomMetadata, options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
+  convertToDicom = (file: File, metadata: DicomMetadata, _options?: ConversionOptions): Effect.Effect<DicomFile[], PluginError> => {
     const pluginId = this.id
 
     return Effect.gen(function* () {

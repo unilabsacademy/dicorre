@@ -1,17 +1,17 @@
 import { describe, it, expect } from 'vitest'
 import { Effect, Layer } from 'effect'
 import { DicomSender, DicomSenderLive } from './index'
-import { ConfigService, ConfigServiceLive } from '../config'
+import { ConfigServiceLive } from '../config'
 import type { DicomFile } from '@/types/dicom'
 
 describe('DicomSender Service (Effect Service Testing)', () => {
   // Test the service through Effect.provide pattern
   const testLayer = Layer.mergeAll(
-    DicomSenderLive,
-    ConfigServiceLive
+    ConfigServiceLive,
+    DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
   )
 
-  const runTest = <A, E>(effect: Effect.Effect<A, E, DicomSender | ConfigService>) =>
+  const runTest = <A, E>(effect: Effect.Effect<A, E, DicomSender>) =>
     Effect.runPromise(effect.pipe(Effect.provide(testLayer)))
 
   describe('Connection testing', () => {

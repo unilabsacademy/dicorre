@@ -2,8 +2,6 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
 import { 
   getTransmissionTracker, 
   destroyTransmissionTracker,
-  type TransmissionStatus,
-  type TransmissionState,
   type TransmissionProgress
 } from './transmissionTracker'
 

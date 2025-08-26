@@ -8,7 +8,7 @@ import type { DicomFile } from '@/types/dicom'
 const WorkerLayer = Layer.mergeAll(
   ConfigServiceLive,
   OPFSStorageLive,
-  DicomSenderLive
+  DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
 )
 
 const runtime = ManagedRuntime.make(WorkerLayer)

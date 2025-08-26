@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest'
 import { Effect } from 'effect'
-import { validateAppConfig, parseAppConfig, AppConfigSchema } from './schema'
+import { validateAppConfig, parseAppConfig } from './schema'
 
 describe('Config Schema Validation', () => {
   describe('DicomServerConfig', () => {

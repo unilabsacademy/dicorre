@@ -8,7 +8,7 @@ import { FileHandler } from '../fileHandler'
 import { OPFSStorage } from '../opfsStorage'
 import { PluginRegistry } from '../pluginRegistry'
 import { Anonymizer } from '../anonymizer'
-import { FileHandlerError, ValidationError, AnonymizationError } from '@/types/effects'
+import { FileHandlerError, ValidationError } from '@/types/effects'
 import type { AppConfig } from '../config/schema'
 import type { DicomFile } from '@/types/dicom'
 

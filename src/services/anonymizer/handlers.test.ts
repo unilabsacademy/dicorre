@@ -202,11 +202,6 @@ describe('anonymizationHandlers', () => {
     it('should respect the maxDays parameter', () => {
       const handler = createDateJitterHandler(1) // Only 1 day jitter
       const originalDate = '20240315'
-      const element = createMockElement({
-        keyword: 'StudyDate',
-        vr: 'DA',
-        value: originalDate
-      })
 
       // Run multiple times to check range
       const results = new Set<string>()

@@ -2,11 +2,11 @@
  * Application-wide Effect layers for dependency injection
  */
 
-import { Effect, Layer } from "effect"
-import { ConfigService, ConfigServiceLive } from '../config'
-import { FileHandler, FileHandlerLive } from '../fileHandler'
-import { OPFSStorage, OPFSStorageLive } from '../opfsStorage'
-import { PluginRegistry, PluginRegistryLive } from '../pluginRegistry'
+import { Layer } from "effect"
+import { ConfigServiceLive } from '../config'
+import { FileHandlerLive } from '../fileHandler'
+import { OPFSStorageLive } from '../opfsStorage'
+import { PluginRegistryLive } from '../pluginRegistry'
 import { DicomProcessorLive } from '../dicomProcessor'
 import { AnonymizerLive } from '../anonymizer'
 import { DicomSenderLive } from '../dicomSender'
@@ -53,7 +53,7 @@ export const AppLayer = Layer.mergeAll(
   DicomProcessorLive,
   AnonymizerLive.pipe(Layer.provide(DicomProcessorLive)),
   DicomSenderLive.pipe(Layer.provide(ConfigServiceLive)),
-  DownloadServiceLive
+  DownloadServiceLive.pipe(Layer.provide(OPFSStorageLive))
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(
     FileHandlerLive.pipe(Layer.provide(PluginRegistryLive))

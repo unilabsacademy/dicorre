@@ -4,7 +4,6 @@ import { imageConverterPlugin } from './imageConverter'
 import { pdfConverterPlugin } from './pdfConverter'
 import { sendLoggerPlugin } from './sendLogger'
 import type { PluginConfig } from '@/types/plugins'
-import { PluginError } from '@/types/effects'
 
 /**
  * Plugin loader - registers all available plugins with the registry

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vitest'
 import { Effect, Layer } from 'effect'
 import { DownloadService, DownloadServiceLive } from './index'
-import { OPFSStorage, OPFSStorageLive } from '../opfsStorage'
+import { OPFSStorage } from '../opfsStorage'
 import { StorageError } from '@/types/effects'
 import type { DicomStudy, DicomFile } from '@/types/dicom'
 
@@ -79,10 +79,10 @@ describe('DownloadService', () => {
   
   const testLayer = Layer.mergeAll(
     Layer.succeed(OPFSStorage, OPFSStorage.of(mockStorage)),
-    DownloadServiceLive
+    DownloadServiceLive.pipe(Layer.provide(Layer.succeed(OPFSStorage, OPFSStorage.of(mockStorage))))
   )
   
-  const runTest = <A, E>(effect: Effect.Effect<A, E, DownloadService | OPFSStorage>) =>
+  const runTest = <A, E>(effect: Effect.Effect<A, E, DownloadService>) =>
     Effect.runPromise(effect.pipe(Effect.provide(testLayer)))
 
   beforeEach(() => {
