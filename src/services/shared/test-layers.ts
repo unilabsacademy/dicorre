@@ -23,10 +23,24 @@ export const TestConfigLayer = Layer.succeed(
       profileOptions: ['BasicProfile'],
       removePrivateTags: true,
       useCustomHandlers: true,
-      dateJitterDays: 30,
-      preserveTags: [],
-      tagsToRemove: [],
-      replacements: {}
+      dateJitterDays: 31,
+      organizationRoot: '1.2.826.0.1.3680043.8.498',
+      preserveTags: [
+        'Instance Number',
+        'Modality', 
+        'Manufacturer',
+        'Protocol Name'
+      ],
+      tagsToRemove: [
+        'startswith:IssueDate',
+        'contains:Trial',
+        'startswith:PatientTelephoneNumber'
+      ],
+      replacements: {
+        'default': 'REMOVED',
+        'Accession Number': 'ACA{random}',
+        'Patient ID': 'PAT{random}'
+      }
     }),
     getTagsToRemove: Effect.succeed([]),
     validateConfig: (_config: AppConfig) => Effect.succeed(undefined),
@@ -40,10 +54,24 @@ export const TestConfigLayer = Layer.succeed(
         profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: true,
-        dateJitterDays: 30,
-        preserveTags: [],
-        tagsToRemove: [],
-        replacements: {}
+        dateJitterDays: 31,
+        organizationRoot: '1.2.826.0.1.3680043.8.498',
+        preserveTags: [
+          'Instance Number',
+          'Modality',
+          'Manufacturer', 
+          'Protocol Name'
+        ],
+        tagsToRemove: [
+          'startswith:IssueDate',
+          'contains:Trial',
+          'startswith:PatientTelephoneNumber'
+        ],
+        replacements: {
+          'default': 'REMOVED',
+          'Accession Number': 'ACA{random}',
+          'Patient ID': 'PAT{random}'
+        }
       }
     })
   })
@@ -189,7 +217,7 @@ export const TestOPFSStorageLayer = Layer.succeed(
 export const TestAnonymizerLayer = Layer.succeed(
   Anonymizer,
   {
-    anonymizeFile: (file: DicomFile, _config, _sharedRandom?) => 
+    anonymizeFile: (file: DicomFile, _sharedRandom?) => 
       Effect.succeed({
         ...file,
         anonymized: true,
@@ -201,7 +229,7 @@ export const TestAnonymizerLayer = Layer.succeed(
         } : undefined
       } as DicomFile),
     
-    anonymizeStudy: (studyId, files, _config, _options?) =>
+    anonymizeStudy: (studyId, files, _options?) =>
       Effect.succeed({
         studyId,
         anonymizedFiles: files.map(f => ({ ...f, anonymized: true })),

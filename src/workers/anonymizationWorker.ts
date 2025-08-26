@@ -6,7 +6,6 @@ import { OPFSStorage, OPFSStorageLive } from '@/services/opfsStorage'
 import { FileHandlerLive } from '@/services/fileHandler'
 import { PluginRegistryLive } from '@/services/pluginRegistry'
 import type { DicomFile } from '@/types/dicom'
-import type { AnonymizationConfig } from '@/services/config/schema'
 
 // Worker services layer - same as main thread
 const WorkerLayer = Layer.mergeAll(
@@ -15,7 +14,7 @@ const WorkerLayer = Layer.mergeAll(
   FileHandlerLive.pipe(Layer.provide(PluginRegistryLive)),
   OPFSStorageLive,
   DicomProcessorLive,
-  AnonymizerLive.pipe(Layer.provide(DicomProcessorLive))
+  AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, ConfigServiceLive)))
 )
 
 const runtime = ManagedRuntime.make(WorkerLayer)
@@ -26,7 +25,6 @@ interface WorkerMessage {
   data: {
     studyId: string
     files: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>
-    config: AnonymizationConfig
     concurrency?: number
   }
 }
@@ -37,7 +35,7 @@ type WorkerResponse =
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
 
 // Main worker function
-async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, config: AnonymizationConfig, concurrency = 3) {
+async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, concurrency = 3) {
   try {
     await runtime.runPromise(
       Effect.gen(function* () {
@@ -85,8 +83,8 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
           )
         )
 
-        // Anonymize using service
-        const result = yield* anonymizer.anonymizeStudy(studyId, dicomFiles, config, {
+        // Anonymize using service (config is now handled internally)
+        const result = yield* anonymizer.anonymizeStudy(studyId, dicomFiles, {
           concurrency,
           onProgress: (progress) => {
             self.postMessage({ type: 'progress', studyId, data: progress } as WorkerResponse)
@@ -154,7 +152,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   const { type, data } = event.data
 
   if (type === 'anonymize_study') {
-    anonymizeStudy(data.studyId, data.files, data.config, data.concurrency)
+    anonymizeStudy(data.studyId, data.files, data.concurrency)
   }
 })
 

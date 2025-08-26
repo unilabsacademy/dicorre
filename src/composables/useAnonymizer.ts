@@ -1,7 +1,6 @@
 import { ref, computed } from 'vue'
 import { Stream } from 'effect'
 import type { DicomFile } from '@/types/dicom'
-import type { AnonymizationConfig } from '@/services/config/schema'
 import type { AnonymizationEvent } from '@/types/events'
 import type { AnonymizationProgress } from '@/services/anonymizer'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'
@@ -14,15 +13,14 @@ export function useAnonymizer() {
   const anonymizeStudyStream = (
     studyId: string,
     files: DicomFile[],
-    config: AnonymizationConfig,
     concurrency: number
   ): Stream.Stream<AnonymizationEvent, Error> =>
     Stream.async<AnonymizationEvent, Error>((emit) => {
+      // Workers get config from their own runtime, no need to pass it
       const workerManager = getAnonymizationWorkerManager()
       workerManager.anonymizeStudy({
         studyId,
         files,
-        config,
         concurrency,
         onProgress: (progressData) => {
           emit.single({

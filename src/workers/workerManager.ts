@@ -1,5 +1,4 @@
 import type { DicomFile } from '@/types/dicom'
-import type { AnonymizationConfig } from '@/services/config/schema'
 
 export interface DebugMessage {
   id: string
@@ -35,7 +34,6 @@ export interface BaseJob {
 
 // Anonymization-specific job
 export interface AnonymizationJob extends BaseJob {
-  config: AnonymizationConfig
   onComplete?: (anonymizedFiles: DicomFile[]) => void
 }
 
@@ -318,15 +316,11 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
       return fileData
     })
 
-    // Ensure config is also cloneable
-    const cloneableConfig = JSON.parse(JSON.stringify(job.config))
-
     return {
       type: 'anonymize_study',
       data: {
         studyId: job.studyId,
         files,
-        config: cloneableConfig,
         concurrency: job.concurrency
       }
     }

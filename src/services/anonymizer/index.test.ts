@@ -8,6 +8,8 @@ import { EventBusLayer } from '../eventBus'
 import { Layer } from 'effect'
 import { clearValueCache } from './handlers'
 import type { DicomFile } from '@/types/dicom'
+import { TestConfigLayer } from '../shared/test-layers'
+import { ConfigService } from '../config'
 import type { AnonymizationConfig } from '@/services/config/schema'
 
 // Helper to load DICOM files from test-data
@@ -27,14 +29,15 @@ function loadTestDicomFile(relativePath: string): DicomFile {
 }
 
 describe('Anonymizer Service (Effect Service Testing)', () => {
-  // AnonymizerLive requires DicomProcessor, so we compose them properly
+  // AnonymizerLive requires DicomProcessor and ConfigService, so we compose them properly
   const testLayer = Layer.mergeAll(
     EventBusLayer,
     DicomProcessorLive,
-    AnonymizerLive.pipe(Layer.provide(DicomProcessorLive))
+    TestConfigLayer,
+    AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, TestConfigLayer)))
   )
 
-  const runTest = <A, E>(effect: Effect.Effect<A, E, Anonymizer>) =>
+  const runTest = <A, E>(effect: Effect.Effect<A, E, Anonymizer | DicomProcessor | ConfigService>) =>
     Effect.runPromise(effect.pipe(Effect.provide(testLayer)))
 
   beforeEach(() => {
@@ -54,36 +57,26 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         }).pipe(Effect.provide(testLayer))
       )
 
-      const configWithReplacements: AnonymizationConfig = {
-        profileOptions: ['BasicProfile'],
-        removePrivateTags: true,
-        useCustomHandlers: true,
-        replacements: {
-          'Accession Number': 'ACA{random}',
-          'Patient ID': 'PAT{random}',
-          "Patient's Name": 'ANONYMOUS TEST'
-        }
-      }
-
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
-        return yield* anonymizer.anonymizeFile(parsedFile, configWithReplacements)
+        return yield* anonymizer.anonymizeFile(parsedFile)
       }))
 
       expect(result.anonymized).toBe(true)
       expect(result.metadata).toBeDefined()
 
-      // Verify that the anonymized metadata contains expected patterns
+      // Verify that the anonymized metadata contains expected patterns from test config
       if (result.metadata) {
         console.log('Anonymized metadata:', result.metadata)
         // These should be replaced with the processed random patterns (7 uppercase alphanumeric chars)
         expect(result.metadata.accessionNumber).toMatch(/^ACA[A-Z0-9]{7}$/)
         expect(result.metadata.patientId).toMatch(/^PAT[A-Z0-9]{7}$/)
+        // PatientName should use default "REMOVED" since it's not in replacements
         // PatientName in DICOM can be a structured object
         if (typeof result.metadata.patientName === 'string') {
-          expect(result.metadata.patientName).toBe('ANONYMOUS')
+          expect(result.metadata.patientName).toBe('REMOVED')
         } else if (result.metadata.patientName && typeof result.metadata.patientName === 'object') {
-          expect((result.metadata.patientName as any).Alphabetic).toBe('ANONYMOUS TEST')
+          expect((result.metadata.patientName as any).Alphabetic).toBe('REMOVED')
         }
       }
     })
@@ -101,15 +94,9 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         }).pipe(Effect.provide(testLayer))
       )
 
-      const config: AnonymizationConfig = {
-        profileOptions: ['BasicProfile'],
-        removePrivateTags: true,
-        useCustomHandlers: true
-      }
-
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
-        return yield* anonymizer.anonymizeFile(parsedFile, config)
+        return yield* anonymizer.anonymizeFile(parsedFile)
       }))
 
       expect(result.anonymized).toBe(true)
@@ -129,15 +116,9 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         }).pipe(Effect.provide(DicomProcessorLive))
       )
 
-      const config: AnonymizationConfig = {
-        profileOptions: ['BasicProfile'],
-        removePrivateTags: true,
-        useCustomHandlers: false
-      }
-
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
-        const studyResult = yield* anonymizer.anonymizeStudy('test-study', parsedFiles, config)
+        const studyResult = yield* anonymizer.anonymizeStudy('test-study', parsedFiles)
         return studyResult.anonymizedFiles
       }))
 
@@ -172,7 +153,6 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         const studyResult = yield* anonymizer.anonymizeStudy(
           'test-study-123',
           parsedFiles,
-          config,
           {
             concurrency: 1,
             onProgress: () => { progressCalled = true }
@@ -191,19 +171,12 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
 
   describe('Study anonymization', () => {
     it('should handle empty file list', async () => {
-      const config: AnonymizationConfig = {
-        profileOptions: ['BasicProfile'],
-        removePrivateTags: true,
-        useCustomHandlers: false
-      }
-
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
 
         return yield* anonymizer.anonymizeStudy(
           'test-study-empty',
           [],
-          config,
           { concurrency: 1 }
         )
       }))
@@ -229,19 +202,12 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         }).pipe(Effect.provide(DicomProcessorLive))
       )
 
-      const config: AnonymizationConfig = {
-        profileOptions: ['BasicProfile'],
-        removePrivateTags: true,
-        useCustomHandlers: false
-      }
-
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
 
         return yield* anonymizer.anonymizeStudy(
           'test-study-concurrent',
           parsedFiles,
-          config,
           { concurrency: 3 } // Process all files concurrently
         )
       }))
@@ -278,7 +244,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       await expect(
         runTest(Effect.gen(function* () {
           const anonymizer = yield* Anonymizer
-          return yield* anonymizer.anonymizeFile(fileWithoutMetadata, config)
+          return yield* anonymizer.anonymizeFile(fileWithoutMetadata)
         }))
       ).rejects.toThrow()
     })

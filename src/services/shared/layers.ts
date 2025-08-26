@@ -36,7 +36,7 @@ export const ProcessingServicesLayer = Layer.mergeAll(
  * Services that depend on processing services
  */
 export const AdvancedServicesLayer = Layer.mergeAll(
-  AnonymizerLive.pipe(Layer.provide(DicomProcessorLive)),
+  AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, ConfigServiceLive))),
   DicomSenderLive
 ).pipe(
   Layer.provide(ProcessingServicesLayer)
@@ -51,7 +51,7 @@ export const AppLayer = Layer.mergeAll(
   PluginRegistryLive,
   OPFSStorageLive,
   DicomProcessorLive,
-  AnonymizerLive.pipe(Layer.provide(DicomProcessorLive)),
+  AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, ConfigServiceLive))),
   DicomSenderLive.pipe(Layer.provide(ConfigServiceLive)),
   DownloadServiceLive.pipe(Layer.provide(OPFSStorageLive))
 ).pipe(
@@ -68,7 +68,7 @@ export const PluginRegistryLayer = PluginRegistryLive
 export const FileHandlerLayer = FileHandlerLive.pipe(Layer.provide(PluginRegistryLive))
 export const OPFSStorageLayer = OPFSStorageLive
 export const DicomProcessorLayer = DicomProcessorLive.pipe(Layer.provide(BaseServicesLayer))
-export const AnonymizerLayer = AnonymizerLive.pipe(Layer.provide(ProcessingServicesLayer))
+export const AnonymizerLayer = AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(ProcessingServicesLayer, ConfigServiceLive)))
 export const DicomSenderLayer = DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
 export const DownloadServiceLayer = DownloadServiceLive.pipe(Layer.provide(OPFSStorageLive))
 

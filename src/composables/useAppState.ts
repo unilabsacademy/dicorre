@@ -178,7 +178,6 @@ export function useAppState(runtime: RuntimeType) {
         return anonymizer.anonymizeStudyStream(
           study.studyInstanceUID,
           studyFiles,
-          config.value!.anonymization,
           concurrency.value
         ).pipe(
           Stream.tap((event) =>

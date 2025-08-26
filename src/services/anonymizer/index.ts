@@ -16,11 +16,11 @@ import {
   type ProfileOption
 } from '@umessen/dicom-deidentifier'
 import type { DicomFile } from '@/types/dicom'
-import type { AnonymizationConfig } from '@/services/config/schema'
 import { DicomProcessor } from '../dicomProcessor'
+import { ConfigService } from '../config'
 import { getAllSpecialHandlers } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
-import { AnonymizationError, type AnonymizerError } from '@/types/effects'
+import { AnonymizationError, type AnonymizerError, ConfigurationError } from '@/types/effects'
 import { tag } from '@/utils/dicom-tag-dictionary'
 
 export interface AnonymizationProgress {
@@ -40,8 +40,8 @@ export interface StudyAnonymizationResult {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string) => Effect.Effect<DicomFile, AnonymizerError>
-    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
+    readonly anonymizeFile: (file: DicomFile, sharedRandom?: string) => Effect.Effect<DicomFile, AnonymizerError | ConfigurationError>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError | ConfigurationError>
   }
 >() { }
 
@@ -49,6 +49,7 @@ export const AnonymizerLive = Layer.effect(
   Anonymizer,
   Effect.gen(function* () {
     const dicomProcessor = yield* DicomProcessor
+    const configService = yield* ConfigService
     
     const generateRandomString = (): string => {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
@@ -72,8 +73,10 @@ export const AnonymizerLive = Layer.effect(
       return processed
     }
 
-    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string): Effect.Effect<DicomFile, AnonymizerError> =>
+    const anonymizeFile = (file: DicomFile, sharedRandom?: string): Effect.Effect<DicomFile, AnonymizerError | ConfigurationError> =>
       Effect.gen(function* () {
+        // Get config from the service
+        const config = yield* configService.getAnonymizationConfig
         // Check if file has metadata
         if (!file.metadata) {
           return yield* Effect.fail(new AnonymizationError({
@@ -208,9 +211,8 @@ export const AnonymizerLive = Layer.effect(
     const anonymizeStudy = (
       studyId: string,
       files: DicomFile[],
-      config: AnonymizationConfig,
       options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void } = {}
-    ): Effect.Effect<StudyAnonymizationResult, AnonymizerError> =>
+    ): Effect.Effect<StudyAnonymizationResult, AnonymizerError | ConfigurationError> =>
       Effect.gen(function* () {
         const { concurrency = 3, onProgress } = options
 
@@ -239,7 +241,7 @@ export const AnonymizerLive = Layer.effect(
           console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
 
           // Anonymize individual file with shared random string
-          const result = yield* anonymizeFile(file, config, sharedRandom)
+          const result = yield* anonymizeFile(file, sharedRandom)
 
           completed++
 
