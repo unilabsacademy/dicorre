@@ -63,12 +63,22 @@
           <div class="space-y-1">
             <div
               v-for="worker in workerDetails"
-              :key="worker.id"
+              :key="`${worker.type}-${worker.id}`"
               class="text-xs p-2 rounded border"
               :class="worker.isAvailable ? 'bg-gray-50 border-gray-200' : 'bg-green-50 border-green-200'"
             >
               <div class="flex items-center justify-between">
-                <span class="font-mono">Worker #{{ worker.id }}</span>
+                <span class="font-mono">
+                  <span 
+                    class="inline-block px-1 py-0.5 rounded text-[10px] font-medium mr-1"
+                    :class="worker.type === 'anonymization' 
+                      ? 'bg-purple-100 text-purple-700' 
+                      : 'bg-blue-100 text-blue-700'"
+                  >
+                    {{ worker.type === 'anonymization' ? 'ANON' : 'SEND' }}
+                  </span>
+                  Worker #{{ worker.id }}
+                </span>
                 <span
                   class="px-2 py-1 rounded text-xs font-medium"
                   :class="worker.isAvailable 

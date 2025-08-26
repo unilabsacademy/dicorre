@@ -1,6 +1,11 @@
 import { ref, computed } from 'vue'
-import { getAnonymizationWorkerManager } from '@/workers/workerManager'
-import type { WorkerDetail, DebugMessage } from '@/workers/workerManager'
+import { getAnonymizationWorkerManager, getSendingWorkerManager } from '@/workers/workerManager'
+import type { WorkerDetail as BaseWorkerDetail, DebugMessage } from '@/workers/workerManager'
+
+// Extended worker detail with type information
+interface WorkerDetail extends BaseWorkerDetail {
+  type: 'anonymization' | 'sending'
+}
 
 // Global reactive state for worker debugging
 const workerStatus = ref({
@@ -15,16 +20,39 @@ const recentMessages = ref<DebugMessage[]>([])
 export function useWorkerDebug() {
   const refreshStatus = () => {
     try {
-      const manager = getAnonymizationWorkerManager()
+      const anonymizationManager = getAnonymizationWorkerManager()
+      const sendingManager = getSendingWorkerManager()
       
-      // Update worker status
-      workerStatus.value = manager.getStatus()
+      // Combine status from both managers
+      const anonStatus = anonymizationManager.getStatus()
+      const sendStatus = sendingManager.getStatus()
       
-      // Update worker details
-      workerDetails.value = manager.getWorkerDetails()
+      workerStatus.value = {
+        totalWorkers: anonStatus.totalWorkers + sendStatus.totalWorkers,
+        activeJobs: anonStatus.activeJobs + sendStatus.activeJobs,
+        queuedJobs: anonStatus.queuedJobs + sendStatus.queuedJobs
+      }
       
-      // Update recent messages
-      recentMessages.value = manager.getDebugMessages()
+      // Combine worker details from both managers
+      const anonWorkers = anonymizationManager.getWorkerDetails().map(w => ({
+        ...w,
+        type: 'anonymization' as const
+      }))
+      const sendWorkers = sendingManager.getWorkerDetails().map(w => ({
+        ...w,
+        type: 'sending' as const
+      }))
+      workerDetails.value = [...anonWorkers, ...sendWorkers]
+      
+      // Combine recent messages from both managers
+      const anonMessages = anonymizationManager.getDebugMessages()
+      const sendMessages = sendingManager.getDebugMessages()
+      
+      // Merge and sort by timestamp
+      const allMessages = [...anonMessages, ...sendMessages]
+      allMessages.sort((a, b) => a.timestamp.localeCompare(b.timestamp))
+      
+      recentMessages.value = allMessages
     } catch (error) {
       console.error('Failed to refresh worker status:', error)
     }
@@ -32,8 +60,11 @@ export function useWorkerDebug() {
 
   const clearMessages = () => {
     try {
-      const manager = getAnonymizationWorkerManager()
-      manager.clearDebugMessages()
+      const anonymizationManager = getAnonymizationWorkerManager()
+      const sendingManager = getSendingWorkerManager()
+      
+      anonymizationManager.clearDebugMessages()
+      sendingManager.clearDebugMessages()
       recentMessages.value = []
     } catch (error) {
       console.error('Failed to clear debug messages:', error)

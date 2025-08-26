@@ -297,7 +297,9 @@ export class WorkerManager<T extends BaseJob> {
 
 export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> {
   constructor(maxWorkers?: number) {
-    super('./anonymizationWorker.ts', 'Anonymization', maxWorkers)
+    // Default to half of available concurrency for anonymization workers
+    const defaultWorkers = Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2))
+    super('./anonymizationWorker.ts', 'Anonymization', maxWorkers || Math.min(defaultWorkers, 4))
   }
 
   protected async prepareJobData(job: AnonymizationJob): Promise<any> {
@@ -333,7 +335,9 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
 
 export class SendingWorkerManager extends WorkerManager<SendingJob> {
   constructor(maxWorkers?: number) {
-    super('./sendingWorker.ts', 'Sending', maxWorkers)
+    // Default to half of available concurrency for sending workers
+    const defaultWorkers = Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2))
+    super('./sendingWorker.ts', 'Sending', maxWorkers || Math.min(defaultWorkers, 4))
   }
 
   protected async prepareJobData(job: SendingJob): Promise<any> {
