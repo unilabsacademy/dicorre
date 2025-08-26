@@ -159,7 +159,9 @@ export const FileHandlerLive = Layer.effect(
         const total = zipFiles.length
 
         // Process each file in the ZIP
-        for (const zipFile of zipFiles) {
+        for (let i = 0; i < zipFiles.length; i++) {
+          const zipFile = zipFiles[i]
+
           const fileBuffer = yield* Effect.tryPromise({
             try: () => zipFile.async('arraybuffer'),
             catch: (error) => new FileHandlerError({
@@ -185,6 +187,7 @@ export const FileHandlerLive = Layer.effect(
           }
 
           completed++
+          // Report actual extraction progress
           options?.onProgress?.(completed, total, zipFile.name)
         }
 

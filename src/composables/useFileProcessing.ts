@@ -43,28 +43,50 @@ export function useFileProcessing() {
 
       for (let i = 0; i < newUploadedFiles.length; i++) {
         const file = newUploadedFiles[i]
+        const isZipFile = file.name.toLowerCase().endsWith('.zip')
 
         // Update progress UI
         fileProcessingState.value = {
           isProcessing: true,
           fileName: file.name,
-          currentStep: file.name.toLowerCase().endsWith('.zip') ? 'Extracting ZIP archive...' : 'Reading DICOM file...',
+          currentStep: isZipFile ? 'Extracting ZIP archive...' : 'Reading DICOM file...',
           progress: 0,
           totalFiles: newUploadedFiles.length,
           currentFileIndex: i
         }
 
+        // For ZIP files, simulate gradual progress increase
+        let progressInterval: NodeJS.Timeout | null = null
+        if (isZipFile) {
+          let currentProgress = 0
+          progressInterval = setInterval(() => {
+            currentProgress = Math.min(currentProgress + 1, 30) // 0 - 30% progress
+            if (fileProcessingState.value && fileProcessingState.value.fileName === file.name) {
+              fileProcessingState.value = {
+                ...fileProcessingState.value,
+                progress: currentProgress
+              }
+            }
+          }, 100)
+        }
+
         // Use the new processFile method that handles plugins
         const processedFiles = yield* fileHandler.processFile(file)
-        
+
+        // Clear the progress interval if it was set
+        if (progressInterval) {
+          clearInterval(progressInterval)
+        }
+
         if (processedFiles.length > 0) {
           localDicomFiles.push(...processedFiles)
-          
+
+          // Brief completion state before moving to next file
           fileProcessingState.value = {
             isProcessing: true,
             fileName: file.name,
             currentStep: `Processed ${processedFiles.length} file(s)`,
-            progress: Math.round(((i + 1) / newUploadedFiles.length) * 100),
+            progress: 100,
             currentFileIndex: i + 1,
             totalFiles: newUploadedFiles.length
           }
