@@ -1,4 +1,4 @@
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { Effect, Stream } from 'effect'
 import type { DicomFile, DicomStudy } from '@/types/dicom'
 import type { RuntimeType } from '@/types/effects'
@@ -7,7 +7,6 @@ import { ConfigService } from '@/services/config'
 import type { AppConfig, ProjectConfig } from '@/services/config/schema'
 import { PluginRegistry } from '@/services/pluginRegistry'
 import { useTableState } from '@/composables/useTableState'
-import { useConfigStream } from '@/composables/useConfigStream'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
 import { useSendingProgress } from '@/composables/useSendingProgress'
 import { useFileProcessing } from '@/composables/useFileProcessing'
@@ -28,12 +27,12 @@ export function useAppState(runtime: RuntimeType) {
 
   // Configuration state
   const config = ref<AppConfig | null>(null)
-  const configLoading = ref(false)
   const configError = ref<Error | null>(null)
-  const serverUrl = ref<string>('')
+  const serverUrl = computed<string>(() => config.value?.dicomServer?.url ?? '')
+  const configLoading = computed(() => config.value === null)
 
   // Project state
-  const currentProject = ref<ProjectConfig | undefined>()
+  const currentProject = computed<ProjectConfig | undefined>(() => config.value?.project)
   const isProjectMode = computed(() => !!currentProject.value)
 
   // Initialize composables
@@ -62,27 +61,7 @@ export function useAppState(runtime: RuntimeType) {
     appError.value = null
   }
 
-  const { config: configStream } = useConfigStream(runtime)
-
-  // Bridge stream refs to local refs for backward compatibility
-  configLoading.value = true
-  const loadConfig = async () => {
-    try {
-      const loaded = await runtime.runPromise(
-        Effect.gen(function* () {
-          const svc = yield* ConfigService
-          return yield* svc.getCurrentConfig
-        })
-      )
-      config.value = loaded
-      currentProject.value = loaded.project
-      serverUrl.value = (loaded as unknown as { dicomServer?: { url?: string } }).dicomServer?.url ?? ''
-    } catch (e) {
-      configError.value = e as Error
-    } finally {
-      configLoading.value = false
-    }
-  }
+  const loadConfig = async () => { /* stream-backed; kept for API compatibility */ }
 
   const loadServerUrl = async () => { /* replaced by stream; keep for API compatibility */ }
 
@@ -564,9 +543,26 @@ export function useAppState(runtime: RuntimeType) {
   }
 
   onMounted(async () => {
-    // Sync local refs with stream
-    watch(configStream, (v) => { if (v) config.value = v }, { immediate: true })
-    await loadConfig()
+    try {
+      config.value = await runtime.runPromise(
+        Effect.gen(function* () {
+          const svc = yield* ConfigService
+          return yield* svc.getCurrentConfig
+        })
+      )
+    } catch (e) {
+      configError.value = e as Error
+    }
+
+    runtime.runFork(
+      Effect.gen(function* () {
+        const svc = yield* ConfigService
+        return yield* Stream.runForEach(svc.configChanges, (cfg) =>
+          Effect.sync(() => { config.value = cfg })
+        )
+      })
+    )
+
     await loadPlugins()
   })
 
