@@ -1,14 +1,14 @@
-import { ref, watch, type Ref, inject } from 'vue'
-import { Effect, ManagedRuntime } from 'effect'
+import { ref, watch, type Ref } from 'vue'
+import { Effect } from 'effect'
+import type { RuntimeType } from '@/types/effects'
 import { SessionPersistence } from '@/services/sessionPersistence'
 import type { DicomFile, DicomStudy } from '@/types/dicom'
 
 export function useSessionPersistence(
+  runtime: RuntimeType,
   extractedDicomFiles: Ref<DicomFile[]>,
   studies: Ref<DicomStudy[]>
 ) {
-  const injectedRuntime = inject<ManagedRuntime.ManagedRuntime<any, never>>('appRuntime')
-  const runtime = injectedRuntime as ManagedRuntime.ManagedRuntime<any, never>
   const isRestoring = ref(false)
   const restoreProgress = ref(0)
 

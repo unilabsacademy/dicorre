@@ -37,6 +37,7 @@ import {
 const runtime = ManagedRuntime.make(AppLayer)
 provide('appRuntime', runtime)
 const appState = useAppState(runtime)
+
 const { isDownloading, downloadSelectedStudies } = useDownload(runtime)
 const { loadProjectFromUrl } = useProjectSharing()
 const error = computed(() => {
@@ -115,7 +116,7 @@ const {
   clear: clearSession,
   isRestoring: persistenceRestoring,
   restoreProgress: persistenceProgress
-} = useSessionPersistence(appState.dicomFiles, appState.studies)
+} = useSessionPersistence(runtime, appState.dicomFiles, appState.studies)
 
 watch(persistenceRestoring, (v) => (isRestoring.value = v))
 watch(persistenceProgress, (v) => (restoreProgress.value = v))
@@ -130,7 +131,7 @@ onMounted(async () => {
   } catch (error) {
     console.error('Failed to load project from URL:', error)
   }
-  
+
   // Restore session after potential project loading
   restoreSession()
 })

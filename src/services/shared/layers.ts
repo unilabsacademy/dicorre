@@ -53,8 +53,8 @@ export const AppLayer = Layer.mergeAll(
   ConfigServiceLive.pipe(Layer.provide(ConfigPersistenceLocalStorage)),
   PluginRegistryLive,
   OPFSStorageLive,
-  SessionPersistenceLive,
   DicomProcessorLive,
+  SessionPersistenceLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, OPFSStorageLive))),
   AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, ConfigServiceLive.pipe(Layer.provide(ConfigPersistenceLocalStorage))))),
   DicomSenderLive.pipe(Layer.provide(ConfigServiceLive.pipe(Layer.provide(ConfigPersistenceLocalStorage)))),
   DownloadServiceLive.pipe(Layer.provide(OPFSStorageLive))
