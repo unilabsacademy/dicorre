@@ -3,12 +3,24 @@ import { Effect, Layer } from 'effect'
 import { DicomSender, DicomSenderLive } from './index'
 import { ConfigServiceLive } from '../config'
 import type { DicomFile } from '@/types/dicom'
+import { ConfigPersistence } from '@/services/configPersistence'
+import type { AppConfig } from '@/services/config/schema'
 
 describe('DicomSender Service (Effect Service Testing)', () => {
+  // Create a test persistence layer
+  const ConfigPersistenceTest = Layer.succeed(
+    ConfigPersistence,
+    {
+      load: Effect.succeed(null),
+      save: (_cfg: AppConfig) => Effect.succeed(undefined),
+      clear: Effect.succeed(undefined)
+    }
+  )
+
   // Test the service through Effect.provide pattern
   const testLayer = Layer.mergeAll(
-    ConfigServiceLive,
-    DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
+    ConfigServiceLive.pipe(Layer.provide(ConfigPersistenceTest)),
+    DicomSenderLive.pipe(Layer.provide(ConfigServiceLive.pipe(Layer.provide(ConfigPersistenceTest))))
   )
 
   const runTest = <A, E>(effect: Effect.Effect<A, E, DicomSender>) =>

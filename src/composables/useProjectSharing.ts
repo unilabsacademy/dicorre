@@ -7,9 +7,9 @@ import { toast } from 'vue-sonner'
 
 export function useProjectSharing() {
   const runtime = inject<ManagedRuntime.ManagedRuntime<any, never>>('appRuntime')
-  if (!runtime) {
-    throw new Error('App runtime not found. Make sure useProjectSharing is called within a component that has access to the app runtime.')
-  }
+  // if (!runtime) {
+  //   throw new Error('App runtime not found. Make sure useProjectSharing is called within a component that has access to the app runtime.')
+  // }
 
   /**
    * Encode config to shareable URL

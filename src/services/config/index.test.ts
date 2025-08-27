@@ -1,12 +1,27 @@
 import { describe, it, expect } from 'vitest'
-import { Effect } from 'effect'
+import { Effect, Layer } from 'effect'
 import { ConfigService, ConfigServiceLive } from './index'
 import type { AppConfig, DicomProfileOption } from './schema'
+import { ConfigPersistence } from '@/services/configPersistence'
+import defaultConfig from '@/../app.config.json'
 
 describe('ConfigService (Effect Service Testing)', () => {
+  // Create a test persistence layer that doesn't use localStorage
+  const ConfigPersistenceTest = Layer.succeed(
+    ConfigPersistence,
+    {
+      load: Effect.succeed(null),
+      save: (_cfg: AppConfig) => Effect.succeed(undefined),
+      clear: Effect.succeed(undefined)
+    }
+  )
+
+  // Combine the layers for testing
+  const TestLayers = Layer.provide(ConfigServiceLive, ConfigPersistenceTest)
+
   // Test the service through Effect.provide pattern
   const runTest = <A, E>(effect: Effect.Effect<A, E, ConfigService>) =>
-    Effect.runPromise(effect.pipe(Effect.provide(ConfigServiceLive)))
+    Effect.runPromise(effect.pipe(Effect.provide(TestLayers)))
 
   describe('Configuration validation', () => {
     it('should validate valid configuration successfully', async () => {
