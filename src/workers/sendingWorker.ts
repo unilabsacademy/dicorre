@@ -1,17 +1,10 @@
-import { Effect, Layer, ManagedRuntime } from 'effect'
-import { DicomSender, DicomSenderLive } from '@/services/dicomSender'
-import { ConfigServiceLive } from '@/services/config'
-import { OPFSStorage, OPFSStorageLive } from '@/services/opfsStorage'
+import { Effect, ManagedRuntime } from 'effect'
+import { DicomSender } from '@/services/dicomSender'
+import { OPFSStorage } from '@/services/opfsStorage'
 import type { DicomFile } from '@/types/dicom'
+import { AppLayer } from '@/services/shared/layers'
 
-// Worker services layer
-const WorkerLayer = Layer.mergeAll(
-  ConfigServiceLive,
-  OPFSStorageLive,
-  DicomSenderLive.pipe(Layer.provide(ConfigServiceLive))
-)
-
-const runtime = ManagedRuntime.make(WorkerLayer)
+const runtime = ManagedRuntime.make(AppLayer)
 
 // Message types
 interface ServerConfig {

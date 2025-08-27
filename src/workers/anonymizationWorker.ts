@@ -1,23 +1,10 @@
-import { Effect, Layer, ManagedRuntime } from 'effect'
-import { Anonymizer, AnonymizerLive } from '@/services/anonymizer'
-import { ConfigServiceLive } from '@/services/config'
-import { DicomProcessorLive } from '@/services/dicomProcessor'
-import { OPFSStorage, OPFSStorageLive } from '@/services/opfsStorage'
-import { FileHandlerLive } from '@/services/fileHandler'
-import { PluginRegistryLive } from '@/services/pluginRegistry'
+import { Effect, ManagedRuntime } from 'effect'
+import { Anonymizer } from '@/services/anonymizer'
+import { AppLayer } from '@/services/shared/layers'
+import { OPFSStorage } from '@/services/opfsStorage'
 import type { DicomFile } from '@/types/dicom'
 
-// Worker services layer - same as main thread
-const WorkerLayer = Layer.mergeAll(
-  ConfigServiceLive,
-  PluginRegistryLive,
-  FileHandlerLive.pipe(Layer.provide(PluginRegistryLive)),
-  OPFSStorageLive,
-  DicomProcessorLive,
-  AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, ConfigServiceLive)))
-)
-
-const runtime = ManagedRuntime.make(WorkerLayer)
+const runtime = ManagedRuntime.make(AppLayer)
 
 // Message types
 interface WorkerMessage {
