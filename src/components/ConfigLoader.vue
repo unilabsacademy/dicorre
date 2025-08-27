@@ -1,8 +1,8 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { Effect } from 'effect'
+import { ref, inject } from 'vue'
+import { Effect, ManagedRuntime } from 'effect'
 import { Button } from '@/components/ui/button'
-import { ConfigService, ConfigServiceLive } from '@/services/config'
+import { ConfigService } from '@/services/config'
 import { Settings, Upload } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
 
@@ -13,8 +13,11 @@ const emit = defineEmits<{
 const fileInputRef = ref<HTMLInputElement>()
 const loading = ref(false)
 
-const run = <A, E>(effect: Effect.Effect<A, E, ConfigService>) =>
-  Effect.runPromise(effect.pipe(Effect.provide(ConfigServiceLive)))
+// Get the shared runtime from the app
+const runtime = inject<ManagedRuntime.ManagedRuntime<any, never>>('appRuntime')
+if (!runtime) {
+  throw new Error('App runtime not found. Make sure ConfigLoader is called within a component that has access to the app runtime.')
+}
 
 const handleFileSelect = async (event: Event) => {
   const input = event.target as HTMLInputElement
@@ -37,7 +40,7 @@ const handleFileSelect = async (event: Event) => {
     }
     
     // Load and validate config using ConfigService
-    await run(
+    await runtime.runPromise(
       Effect.gen(function* () {
         const configService = yield* ConfigService
         yield* configService.loadConfig(configData)

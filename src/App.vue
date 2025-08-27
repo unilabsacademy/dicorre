@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch, provide } from 'vue'
 import { ManagedRuntime } from 'effect'
 import type { DicomStudy } from '@/types/dicom'
 import { useAppState } from '@/composables/useAppState'
@@ -21,6 +21,7 @@ import {
 import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import ConfigLoader from '@/components/ConfigLoader.vue'
+import ProjectToolbar from '@/components/ProjectToolbar.vue'
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 import {
@@ -29,11 +30,11 @@ import {
   Trash2,
   Settings2,
   Wifi,
-  Server,
   Download
 } from 'lucide-vue-next'
 
 const runtime = ManagedRuntime.make(AppLayer)
+provide('appRuntime', runtime)
 const appState = useAppState(runtime)
 const { isDownloading, downloadSelectedStudies } = useDownload(runtime)
 const error = computed(() => {
@@ -215,6 +216,9 @@ onUnmounted(() => {
         </CardContent>
       </Card>
 
+      <!-- Project Toolbar -->
+      <ProjectToolbar />
+
       <!-- Toolbar -->
       <div
         v-if="isAppReady"
@@ -240,18 +244,6 @@ onUnmounted(() => {
             data-testid="selected-count-badge"
           >{{ appState.selectedStudiesCount }} Selected</Badge>
 
-          <!-- Display current config info -->
-          <div class="flex items-center gap-2 ml-4 text-sm text-muted-foreground">
-            <span
-              class="flex items-center gap-1"
-              data-testid="server-url-display"
-            >
-              <Server class="w-3 h-3" />
-              <span data-testid="server-url">
-                {{ appState.serverUrl.value || 'No server configured' }}
-              </span>
-            </span>
-          </div>
         </div>
 
         <div class="flex items-center gap-2">

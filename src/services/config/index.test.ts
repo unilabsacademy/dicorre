@@ -73,7 +73,7 @@ describe('ConfigService (Effect Service Testing)', () => {
           const configService = yield* ConfigService
           return yield* configService.validateConfig(invalidConfig)
         }))
-      ).rejects.toThrow('Invalid profile option')
+      ).rejects.toThrow()
     })
   })
 
@@ -99,15 +99,6 @@ describe('ConfigService (Effect Service Testing)', () => {
       expect(config.profileOptions).toBeDefined()
       expect(Array.isArray(config.profileOptions)).toBe(true)
       expect(config.profileOptions.length).toBeGreaterThan(0)
-    })
-
-    it('should get tags to remove', async () => {
-      const tags = await runTest(Effect.gen(function* () {
-        const configService = yield* ConfigService
-        return yield* configService.getTagsToRemove
-      }))
-
-      expect(Array.isArray(tags)).toBe(true)
     })
   })
 

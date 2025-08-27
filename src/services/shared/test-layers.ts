@@ -27,7 +27,7 @@ export const TestConfigLayer = Layer.succeed(
       organizationRoot: '1.2.826.0.1.3680043.8.498',
       preserveTags: [
         'Instance Number',
-        'Modality', 
+        'Modality',
         'Manufacturer',
         'Protocol Name'
       ],
@@ -42,8 +42,7 @@ export const TestConfigLayer = Layer.succeed(
         'Patient ID': 'PAT{random}'
       }
     }),
-    getTagsToRemove: Effect.succeed([]),
-    validateConfig: (_config: AppConfig) => Effect.succeed(undefined),
+    validateConfig: (config: unknown) => Effect.succeed(config as AppConfig),
     loadConfig: (_configData: unknown) => Effect.succeed(undefined),
     getCurrentConfig: Effect.succeed({
       dicomServer: {
@@ -59,7 +58,7 @@ export const TestConfigLayer = Layer.succeed(
         preserveTags: [
           'Instance Number',
           'Modality',
-          'Manufacturer', 
+          'Manufacturer',
           'Protocol Name'
         ],
         tagsToRemove: [
@@ -73,7 +72,8 @@ export const TestConfigLayer = Layer.succeed(
           'Patient ID': 'PAT{random}'
         }
       }
-    })
+    }),
+    getCurrentProject: Effect.succeed(undefined)
   })
 )
 
@@ -217,7 +217,7 @@ export const TestOPFSStorageLayer = Layer.succeed(
 export const TestAnonymizerLayer = Layer.succeed(
   Anonymizer,
   {
-    anonymizeFile: (file: DicomFile, _sharedRandom?) => 
+    anonymizeFile: (file: DicomFile, _sharedRandom?) =>
       Effect.succeed({
         ...file,
         anonymized: true,
@@ -228,7 +228,7 @@ export const TestAnonymizerLayer = Layer.succeed(
           accessionNumber: 'TEST_ACC'
         } : undefined
       } as DicomFile),
-    
+
     anonymizeStudy: (studyId, files, _options?) =>
       Effect.succeed({
         studyId,

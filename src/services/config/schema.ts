@@ -52,7 +52,7 @@ const AnonymizationProfileOptionsSchema = Schema.Array(DicomProfileOptionSchema)
 )
 
 const ReplacementsSchema = Schema.Record({
-  key: Schema.String, 
+  key: Schema.String,
   value: Schema.String
 }).pipe(
   Schema.annotations({
@@ -85,9 +85,33 @@ export const AnonymizationConfigSchema = Schema.Struct({
   ))
 })
 
+// Project configuration schema
+export const ProjectConfigSchema = Schema.Struct({
+  name: Schema.String.pipe(
+    Schema.minLength(1, { message: () => "Project name is required" }),
+    Schema.maxLength(100, { message: () => "Project name must be 100 characters or less" })
+  ),
+  id: Schema.String.pipe(
+    Schema.filter((id) => /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id), {
+      message: () => "Project ID must be a valid UUID v4"
+    })
+  ),
+  createdAt: Schema.String.pipe(
+    Schema.filter((date) => !isNaN(Date.parse(date)), {
+      message: () => "createdAt must be a valid ISO date string"
+    })
+  )
+}).pipe(
+  Schema.annotations({
+    identifier: "ProjectConfig",
+    description: "Project configuration for sharing settings"
+  })
+)
+
 export const AppConfigSchema = Schema.Struct({
   dicomServer: DicomServerConfigSchema,
-  anonymization: AnonymizationConfigSchema
+  anonymization: AnonymizationConfigSchema,
+  project: Schema.optional(ProjectConfigSchema)
 })
 
 // Type extraction
@@ -95,10 +119,14 @@ export type AppConfig = Schema.Schema.Type<typeof AppConfigSchema>
 export type AppConfigInput = Schema.Schema.Encoded<typeof AppConfigSchema>
 export type AnonymizationConfig = Schema.Schema.Type<typeof AnonymizationConfigSchema>
 export type DicomServerConfig = Schema.Schema.Type<typeof DicomServerConfigSchema>
+export type ProjectConfig = Schema.Schema.Type<typeof ProjectConfigSchema>
 
-// Validation function that returns Effect
+// Validation functions
 export const validateAppConfig = (input: unknown) =>
   Schema.decodeUnknown(AppConfigSchema)(input)
+
+export const validateProjectConfig = (input: unknown) =>
+  Schema.decodeUnknown(ProjectConfigSchema)(input)
 
 // Parse function that throws on error (for simpler integration)
 export const parseAppConfig = Schema.decodeUnknownSync(AppConfigSchema)
