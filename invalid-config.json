@@ -1,0 +1,9 @@
+{
+  "dicomServer": {
+    "timeout": 30000
+  },
+  "anonymization": {
+    "profile": "basic",
+    "removePrivateTags": true
+  }
+}

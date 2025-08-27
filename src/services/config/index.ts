@@ -1,9 +1,10 @@
-import { Effect, Context, Layer } from "effect"
+import { Effect, Context, Layer, Ref } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption, ProjectConfig } from './schema'
 import { ConfigurationError, type ConfigurationError as ConfigurationErrorType, type ParseError } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig, validateProjectConfig } from './schema'
 import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'
+import { ConfigPersistence } from '@/services/configPersistence'
 
 export class ConfigService extends Context.Tag("ConfigService")<
   ConfigService,
@@ -16,14 +17,21 @@ export class ConfigService extends Context.Tag("ConfigService")<
     readonly getCurrentProject: Effect.Effect<ProjectConfig | undefined, never>
     readonly createProject: (name: string) => Effect.Effect<ProjectConfig, never>
     readonly loadProject: (projectConfig: unknown) => Effect.Effect<void, ParseError | ConfigurationError>
+    readonly clearProject: Effect.Effect<void, ConfigurationErrorType>
   }
 >() { }
 
-export const ConfigServiceLive = Layer.succeed(
+export const ConfigServiceLive = Layer.scoped(
   ConfigService,
-  (() => {
-    // Private state encapsulated in closure
-    let config: AppConfig = defaultConfig as AppConfig
+  Effect.gen(function* () {
+    const ref = yield* Ref.make(defaultConfig as AppConfig)
+    const persistence = yield* ConfigPersistence
+
+    // On init, attempt to load persisted config; fall back to default
+    const persisted = yield* persistence.load
+    if (persisted) {
+      yield* Ref.set(ref, persisted)
+    }
 
     const validateConfig = (configToValidate: unknown): Effect.Effect<AppConfig, ConfigurationErrorType> =>
       validateAppConfig(configToValidate).pipe(
@@ -37,28 +45,24 @@ export const ConfigServiceLive = Layer.succeed(
       )
 
     const getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType> = Effect.gen(function* () {
-      yield* validateConfig(config)
-      return { ...config.dicomServer }
+      const cfg = yield* Ref.get(ref)
+      yield* validateConfig(cfg)
+      return { ...cfg.dicomServer }
     })
 
     const getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType> = Effect.gen(function* () {
-      yield* validateConfig(config)
-      const anonymizationConfig = config.anonymization
+      const cfg = yield* Ref.get(ref)
+      yield* validateConfig(cfg)
+      const anonymizationConfig = cfg.anonymization
 
-      // Convert tag names to hex values for preserveTags
       let preserveTags = anonymizationConfig.preserveTags
       if (preserveTags) {
         preserveTags = preserveTags.map(tag => {
-          // If it's already a hex value, keep it as is
-          if (/^[0-9A-Fa-f]{8}$/.test(tag)) {
-            return tag
-          }
-          // If it's a tag name, convert to hex
+          if (/^[0-9A-Fa-f]{8}$/.test(tag)) return tag
           if (isValidTagName(tag)) {
             const hex = tagNameToHex(tag)
             if (hex) return hex
           }
-          // Return as is if conversion fails (validation will catch invalid tags)
           return tag
         })
       }
@@ -77,15 +81,16 @@ export const ConfigServiceLive = Layer.succeed(
 
     const loadConfig = (configData: unknown): Effect.Effect<void, ConfigurationErrorType> => Effect.gen(function* () {
       const validatedConfig = yield* validateConfig(configData)
-      config = validatedConfig
-      console.log('Configuration loaded successfully:', config)
+      yield* Ref.set(ref, validatedConfig)
+      yield* persistence.save(validatedConfig)
+      console.log('Configuration loaded successfully:', validatedConfig)
     })
 
     const getCurrentConfig: Effect.Effect<AppConfig, never> =
-      Effect.succeed(config)
+      Ref.get(ref)
 
     const getCurrentProject: Effect.Effect<ProjectConfig | undefined, never> =
-      Effect.succeed(config.project)
+      Effect.map(Ref.get(ref), (c) => c.project)
 
     const createProject = (name: string): Effect.Effect<ProjectConfig, never> =>
       Effect.succeed({
@@ -96,7 +101,19 @@ export const ConfigServiceLive = Layer.succeed(
 
     const loadProject = (projectConfig: unknown) => Effect.gen(function* () {
       const project = yield* validateProjectConfig(projectConfig)
-      yield* loadConfig({ ...config, project })
+      yield* Ref.update(ref, (c) => ({ ...c, project }))
+      const updated = yield* Ref.get(ref)
+      yield* persistence.save(updated)
+    })
+
+    const clearProject: Effect.Effect<void, ConfigurationErrorType> = Effect.gen(function* () {
+      yield* Ref.update(ref, (c) => {
+        const { project: _omit, ...rest } = c
+        return rest as AppConfig
+      })
+      const updated = yield* Ref.get(ref)
+      yield* persistence.save(updated)
+      console.log('Project cleared, returned to default configuration')
     })
 
     return {
@@ -107,8 +124,9 @@ export const ConfigServiceLive = Layer.succeed(
       getCurrentConfig,
       getCurrentProject,
       createProject,
-      loadProject
+      loadProject,
+      clearProject
     } as const
-  })()
+  })
 )
 

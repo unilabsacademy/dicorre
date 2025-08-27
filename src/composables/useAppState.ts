@@ -4,7 +4,7 @@ import type { DicomFile, DicomStudy } from '@/types/dicom'
 import type { RuntimeType } from '@/types/effects'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { ConfigService } from '@/services/config'
-import type { AppConfig } from '@/services/config/schema'
+import type { AppConfig, ProjectConfig } from '@/services/config/schema'
 import { PluginRegistry } from '@/services/pluginRegistry'
 import { useTableState } from '@/composables/useTableState'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
@@ -30,6 +30,10 @@ export function useAppState(runtime: RuntimeType) {
   const configLoading = ref(false)
   const configError = ref<Error | null>(null)
   const serverUrl = ref<string>('')
+
+  // Project state
+  const currentProject = ref<ProjectConfig | undefined>()
+  const isProjectMode = computed(() => !!currentProject.value)
 
   // Initialize composables
   const fileProcessing = useFileProcessing()
@@ -122,9 +126,90 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
+  const loadProjectState = async () => {
+    try {
+      const project = await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          return yield* configService.getCurrentProject
+        })
+      )
+      currentProject.value = project
+      console.log('Project state loaded:', project ? `Project: ${project.name}` : 'No project')
+    } catch (err) {
+      console.error('Failed to load project state:', err)
+      currentProject.value = undefined
+    }
+  }
+
+  const handleCreateProject = async (name: string): Promise<void> => {
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          const project = yield* configService.createProject(name)
+          yield* configService.loadProject(project)
+        })
+      )
+
+      // Refresh both config and project state
+      await loadConfig()
+      await loadProjectState()
+      toast.success(`Project "${name}" created`)
+    } catch (error) {
+      console.error('Failed to create project:', error)
+      toast.error('Failed to create project')
+      throw error
+    }
+  }
+
+  const handleClearProject = async (): Promise<void> => {
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          yield* configService.clearProject
+        })
+      )
+
+      // Refresh both config and project state
+      await loadConfig()
+      await loadProjectState()
+      toast.success('Project cleared')
+    } catch (error) {
+      console.error('Failed to clear project:', error)
+      toast.error('Failed to clear project')
+      throw error
+    }
+  }
+
+  const handleLoadProject = async (projectConfig: unknown): Promise<void> => {
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          yield* configService.loadProject(projectConfig)
+        })
+      )
+
+      // Refresh both config and project state
+      await loadConfig()
+      await loadProjectState()
+      
+      if (currentProject.value) {
+        toast.success(`Loaded project: ${currentProject.value.name}`)
+      }
+    } catch (error) {
+      console.error('Failed to load project:', error)
+      toast.error('Failed to load project')
+      throw error
+    }
+  }
+
   const handleConfigReload = async () => {
     await loadConfig()
     await loadServerUrl()
+    await loadProjectState()
   }
 
   const processNewFiles = async (newFiles: File[], isAppReady: boolean) => {
@@ -517,6 +602,7 @@ export function useAppState(runtime: RuntimeType) {
   onMounted(async () => {
     await loadConfig()
     await loadServerUrl()
+    await loadProjectState()
     await loadPlugins()
   })
 
@@ -532,6 +618,8 @@ export function useAppState(runtime: RuntimeType) {
     configLoading,
     configError,
     serverUrl,
+    currentProject,
+    isProjectMode,
 
     // Computed
     selectedStudies,
@@ -548,7 +636,11 @@ export function useAppState(runtime: RuntimeType) {
     clearAppError,
     loadConfig,
     loadServerUrl,
+    loadProjectState,
     handleConfigReload,
+    handleCreateProject,
+    handleClearProject,
+    handleLoadProject,
     processNewFiles,
     addFilesToUploaded,
     processFiles,

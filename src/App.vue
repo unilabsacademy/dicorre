@@ -12,6 +12,7 @@ import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
 import { useDownload } from '@/composables/useDownload'
+import { useProjectSharing } from '@/composables/useProjectSharing'
 import {
   DropdownMenu,
   DropdownMenuContent,
@@ -37,6 +38,7 @@ const runtime = ManagedRuntime.make(AppLayer)
 provide('appRuntime', runtime)
 const appState = useAppState(runtime)
 const { isDownloading, downloadSelectedStudies } = useDownload(runtime)
+const { loadProjectFromUrl } = useProjectSharing()
 const error = computed(() => {
   if (appState.configError.value) {
     return `Configuration Error: ${appState.configError.value.message}`
@@ -118,7 +120,18 @@ const {
 watch(persistenceRestoring, (v) => (isRestoring.value = v))
 watch(persistenceProgress, (v) => (restoreProgress.value = v))
 
-onMounted(() => {
+onMounted(async () => {
+  // Check for project in URL and load it
+  try {
+    const projectConfig = await loadProjectFromUrl()
+    if (projectConfig) {
+      await appState.handleLoadProject(projectConfig)
+    }
+  } catch (error) {
+    console.error('Failed to load project from URL:', error)
+  }
+  
+  // Restore session after potential project loading
   restoreSession()
 })
 
@@ -217,7 +230,12 @@ onUnmounted(() => {
       </Card>
 
       <!-- Project Toolbar -->
-      <ProjectToolbar />
+      <ProjectToolbar
+        :current-project="appState.currentProject.value"
+        :is-project-mode="appState.isProjectMode.value"
+        :on-create-project="appState.handleCreateProject"
+        :on-clear-project="appState.handleClearProject"
+      />
 
       <!-- Toolbar -->
       <div

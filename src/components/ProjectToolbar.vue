@@ -1,25 +1,39 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed, inject } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Folder, Link, X, Plus } from 'lucide-vue-next'
-import { toast } from 'vue-sonner'
+import { useProjectSharing } from '@/composables/useProjectSharing'
+import type { ProjectConfig } from '@/services/config/schema'
+
+const props = defineProps<{
+  currentProject?: ProjectConfig
+  isProjectMode: boolean
+  onCreateProject: (name: string) => Promise<void>
+  onClearProject: () => Promise<void>
+}>()
 
 const showCreateDialog = ref(false)
 const projectName = ref('')
 const isCreating = ref(false)
 
+const { copyShareableUrl } = useProjectSharing()
+
+const formattedCreatedAt = computed(() => {
+  if (!props.currentProject?.createdAt) return ''
+  return new Date(props.currentProject.createdAt).toLocaleDateString()
+})
+
 async function handleCreateProject() {
   if (!projectName.value.trim()) {
-    toast.error('Please enter a project name')
     return
   }
 
   isCreating.value = true
   try {
-    await createProject(projectName.value.trim())
+    await props.onCreateProject(projectName.value.trim())
     showCreateDialog.value = false
     projectName.value = ''
   } catch (error) {
@@ -30,12 +44,12 @@ async function handleCreateProject() {
 }
 
 async function handleShareProject() {
-  // await copyShareableUrl()
+  await copyShareableUrl()
 }
 
 async function handleClearProject() {
   if (confirm('Are you sure you want to clear the current project and return to default settings?')) {
-    // await clearProject()
+    await props.onClearProject()
   }
 }
 </script>
@@ -44,7 +58,7 @@ async function handleClearProject() {
   <div class="space-y-4">
     <!-- Active Project Display -->
     <Card
-      v-if="isProjectMode"
+      v-if="props.isProjectMode"
       class="border-primary/20 bg-primary/5"
       data-testid="project-toolbar"
     >
@@ -59,7 +73,7 @@ async function handleClearProject() {
                   class="text-lg font-semibold text-primary"
                   data-testid="project-title"
                 >
-                  {{ currentProject?.name }}
+                  {{ props.currentProject?.name }}
                 </h2>
                 <p
                   class="text-sm text-muted-foreground"
@@ -105,7 +119,7 @@ async function handleClearProject() {
 
     <!-- Create Project Section -->
     <div
-      v-if="!isProjectMode"
+      v-if="!props.isProjectMode"
       class="flex items-center justify-between bg-muted/30 p-3 rounded-lg border-dashed border-2 border-muted-foreground/30"
     >
       <div class="flex items-center gap-2">
