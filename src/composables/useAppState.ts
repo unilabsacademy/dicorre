@@ -62,7 +62,8 @@ export function useAppState(runtime: RuntimeType) {
     appError.value = null
   }
 
-  const { config: cfgStream, currentProject: projStream, serverUrl: serverUrlStream } = useConfigStream(runtime)
+  const { config: configStream } = useConfigStream(runtime)
+
   // Bridge stream refs to local refs for backward compatibility
   configLoading.value = true
   const loadConfig = async () => {
@@ -564,9 +565,7 @@ export function useAppState(runtime: RuntimeType) {
 
   onMounted(async () => {
     // Sync local refs with stream
-    watch(cfgStream, (v) => { if (v) config.value = v }, { immediate: true })
-    watch(projStream, (v) => { currentProject.value = v }, { immediate: true })
-    watch(serverUrlStream, (v) => { if (v !== undefined) serverUrl.value = v }, { immediate: true })
+    watch(configStream, (v) => { if (v) config.value = v }, { immediate: true })
     await loadConfig()
     await loadPlugins()
   })
