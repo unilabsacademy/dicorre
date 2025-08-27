@@ -1,4 +1,4 @@
-import { Effect, Context, Layer, Ref } from "effect"
+import { Effect, Context, Layer, SubscriptionRef, Stream } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption, ProjectConfig } from './schema'
 import { ConfigurationError, type ConfigurationError as ConfigurationErrorType, type ParseError } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
@@ -18,19 +18,20 @@ export class ConfigService extends Context.Tag("ConfigService")<
     readonly createProject: (name: string) => Effect.Effect<ProjectConfig, never>
     readonly loadProject: (projectConfig: unknown) => Effect.Effect<void, ParseError | ConfigurationError>
     readonly clearProject: Effect.Effect<void, ConfigurationErrorType>
+    readonly configChanges: Stream.Stream<AppConfig>
   }
 >() { }
 
 export const ConfigServiceLive = Layer.scoped(
   ConfigService,
   Effect.gen(function* () {
-    const ref = yield* Ref.make(defaultConfig as AppConfig)
+    const ref = yield* SubscriptionRef.make(defaultConfig as AppConfig)
     const persistence = yield* ConfigPersistence
 
     // On init, attempt to load persisted config; fall back to default
     const persisted = yield* persistence.load
     if (persisted) {
-      yield* Ref.set(ref, persisted)
+      yield* SubscriptionRef.set(ref, persisted)
     }
 
     const validateConfig = (configToValidate: unknown): Effect.Effect<AppConfig, ConfigurationErrorType> =>
@@ -45,13 +46,13 @@ export const ConfigServiceLive = Layer.scoped(
       )
 
     const getServerConfig: Effect.Effect<DicomServerConfig, ConfigurationErrorType> = Effect.gen(function* () {
-      const cfg = yield* Ref.get(ref)
+      const cfg = yield* SubscriptionRef.get(ref)
       yield* validateConfig(cfg)
       return { ...cfg.dicomServer }
     })
 
     const getAnonymizationConfig: Effect.Effect<AnonymizationConfig, ConfigurationErrorType> = Effect.gen(function* () {
-      const cfg = yield* Ref.get(ref)
+      const cfg = yield* SubscriptionRef.get(ref)
       yield* validateConfig(cfg)
       const anonymizationConfig = cfg.anonymization
 
@@ -81,16 +82,16 @@ export const ConfigServiceLive = Layer.scoped(
 
     const loadConfig = (configData: unknown): Effect.Effect<void, ConfigurationErrorType> => Effect.gen(function* () {
       const validatedConfig = yield* validateConfig(configData)
-      yield* Ref.set(ref, validatedConfig)
+      yield* SubscriptionRef.set(ref, validatedConfig)
       yield* persistence.save(validatedConfig)
       console.log('Configuration loaded successfully:', validatedConfig)
     })
 
     const getCurrentConfig: Effect.Effect<AppConfig, never> =
-      Ref.get(ref)
+      SubscriptionRef.get(ref)
 
     const getCurrentProject: Effect.Effect<ProjectConfig | undefined, never> =
-      Effect.map(Ref.get(ref), (c) => c.project)
+      Effect.map(SubscriptionRef.get(ref), (c) => c.project)
 
     const createProject = (name: string): Effect.Effect<ProjectConfig, never> =>
       Effect.succeed({
@@ -101,17 +102,17 @@ export const ConfigServiceLive = Layer.scoped(
 
     const loadProject = (projectConfig: unknown) => Effect.gen(function* () {
       const project = yield* validateProjectConfig(projectConfig)
-      yield* Ref.update(ref, (c) => ({ ...c, project }))
-      const updated = yield* Ref.get(ref)
+      yield* SubscriptionRef.update(ref, (c) => ({ ...c, project }))
+      const updated = yield* SubscriptionRef.get(ref)
       yield* persistence.save(updated)
     })
 
     const clearProject: Effect.Effect<void, ConfigurationErrorType> = Effect.gen(function* () {
-      yield* Ref.update(ref, (c) => {
+      yield* SubscriptionRef.update(ref, (c) => {
         const { project: _omit, ...rest } = c
         return rest as AppConfig
       })
-      const updated = yield* Ref.get(ref)
+      const updated = yield* SubscriptionRef.get(ref)
       yield* persistence.save(updated)
       console.log('Project cleared, returned to default configuration')
     })
@@ -125,7 +126,8 @@ export const ConfigServiceLive = Layer.scoped(
       getCurrentProject,
       createProject,
       loadProject,
-      clearProject
+      clearProject,
+      configChanges: ref.changes
     } as const
   })
 )

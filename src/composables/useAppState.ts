@@ -1,4 +1,4 @@
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { Effect, Stream } from 'effect'
 import type { DicomFile, DicomStudy } from '@/types/dicom'
 import type { RuntimeType } from '@/types/effects'
@@ -7,6 +7,7 @@ import { ConfigService } from '@/services/config'
 import type { AppConfig, ProjectConfig } from '@/services/config/schema'
 import { PluginRegistry } from '@/services/pluginRegistry'
 import { useTableState } from '@/composables/useTableState'
+import { useConfigStream } from '@/composables/useConfigStream'
 import { useAnonymizationProgress } from '@/composables/useAnonymizationProgress'
 import { useSendingProgress } from '@/composables/useSendingProgress'
 import { useFileProcessing } from '@/composables/useFileProcessing'
@@ -61,42 +62,28 @@ export function useAppState(runtime: RuntimeType) {
     appError.value = null
   }
 
+  const { config: cfgStream, currentProject: projStream, serverUrl: serverUrlStream } = useConfigStream(runtime)
+  // Bridge stream refs to local refs for backward compatibility
+  configLoading.value = true
   const loadConfig = async () => {
-    configLoading.value = true
-    configError.value = null
     try {
-      const loadedConfig = await runtime.runPromise(
+      const loaded = await runtime.runPromise(
         Effect.gen(function* () {
-          const configService = yield* ConfigService
-          return yield* configService.getCurrentConfig
+          const svc = yield* ConfigService
+          return yield* svc.getCurrentConfig
         })
       )
-      config.value = loadedConfig
-      console.log('Loaded configuration from app.config.json:', loadedConfig)
+      config.value = loaded
+      currentProject.value = loaded.project
+      serverUrl.value = (loaded as unknown as { dicomServer?: { url?: string } }).dicomServer?.url ?? ''
     } catch (e) {
       configError.value = e as Error
-      console.error('Failed to load configuration:', e)
-      throw new Error(`Critical configuration loading failed: ${e}`)
     } finally {
       configLoading.value = false
     }
   }
 
-  const loadServerUrl = async () => {
-    try {
-      const url = await runtime.runPromise(
-        Effect.gen(function* () {
-          const configService = yield* ConfigService
-          const config = yield* configService.getServerConfig
-          return config.url
-        })
-      )
-      serverUrl.value = url
-    } catch (err) {
-      console.error('Failed to load server URL:', err)
-      serverUrl.value = ''
-    }
-  }
+  const loadServerUrl = async () => { /* replaced by stream; keep for API compatibility */ }
 
   const loadPlugins = async () => {
     try {
@@ -126,21 +113,7 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
-  const loadProjectState = async () => {
-    try {
-      const project = await runtime.runPromise(
-        Effect.gen(function* () {
-          const configService = yield* ConfigService
-          return yield* configService.getCurrentProject
-        })
-      )
-      currentProject.value = project
-      console.log('Project state loaded:', project ? `Project: ${project.name}` : 'No project')
-    } catch (err) {
-      console.error('Failed to load project state:', err)
-      currentProject.value = undefined
-    }
-  }
+  const loadProjectState = async () => { /* replaced by stream; keep for API compatibility */ }
 
   const handleCreateProject = async (name: string): Promise<void> => {
     try {
@@ -152,9 +125,7 @@ export function useAppState(runtime: RuntimeType) {
         })
       )
 
-      // Refresh both config and project state
-      await loadConfig()
-      await loadProjectState()
+      // Stream will update config/currentProject
       toast.success(`Project "${name}" created`)
     } catch (error) {
       console.error('Failed to create project:', error)
@@ -172,9 +143,7 @@ export function useAppState(runtime: RuntimeType) {
         })
       )
 
-      // Refresh both config and project state
-      await loadConfig()
-      await loadProjectState()
+      // Stream will update config/currentProject
       toast.success('Project cleared')
     } catch (error) {
       console.error('Failed to clear project:', error)
@@ -192,10 +161,8 @@ export function useAppState(runtime: RuntimeType) {
         })
       )
 
-      // Refresh both config and project state
-      await loadConfig()
-      await loadProjectState()
-      
+      // Stream will update config/currentProject
+
       if (currentProject.value) {
         toast.success(`Loaded project: ${currentProject.value.name}`)
       }
@@ -206,11 +173,7 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
-  const handleConfigReload = async () => {
-    await loadConfig()
-    await loadServerUrl()
-    await loadProjectState()
-  }
+  const handleConfigReload = async () => { await loadConfig() }
 
   const processNewFiles = async (newFiles: File[], isAppReady: boolean) => {
     try {
@@ -600,9 +563,11 @@ export function useAppState(runtime: RuntimeType) {
   }
 
   onMounted(async () => {
+    // Sync local refs with stream
+    watch(cfgStream, (v) => { if (v) config.value = v }, { immediate: true })
+    watch(projStream, (v) => { currentProject.value = v }, { immediate: true })
+    watch(serverUrlStream, (v) => { if (v !== undefined) serverUrl.value = v }, { immediate: true })
     await loadConfig()
-    await loadServerUrl()
-    await loadProjectState()
     await loadPlugins()
   })
 
