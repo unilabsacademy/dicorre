@@ -34,6 +34,7 @@ export interface BaseJob {
 
 // Anonymization-specific job
 export interface AnonymizationJob extends BaseJob {
+  anonymizationConfig: any // AnonymizationConfig from schema
   onComplete?: (anonymizedFiles: DicomFile[]) => void
 }
 
@@ -323,6 +324,7 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
       data: {
         studyId: job.studyId,
         files,
+        anonymizationConfig: job.anonymizationConfig,
         concurrency: job.concurrency
       }
     }

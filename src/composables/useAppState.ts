@@ -39,7 +39,7 @@ export function useAppState(runtime: RuntimeType) {
   const fileProcessing = useFileProcessing()
   const dragAndDrop = useDragAndDrop()
   const dicomSender = useDicomSender(runtime)
-  const anonymizer = useAnonymizer()
+  const anonymizer = useAnonymizer(runtime)
 
   // Progress and UI state management
   const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()

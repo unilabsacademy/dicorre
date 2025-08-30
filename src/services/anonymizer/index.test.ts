@@ -59,7 +59,9 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
 
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
-        return yield* anonymizer.anonymizeFile(parsedFile)
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
+        return yield* anonymizer.anonymizeFile(parsedFile, config)
       }))
 
       expect(result.anonymized).toBe(true)
@@ -96,7 +98,9 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
 
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
-        return yield* anonymizer.anonymizeFile(parsedFile)
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
+        return yield* anonymizer.anonymizeFile(parsedFile, config)
       }))
 
       expect(result.anonymized).toBe(true)
@@ -118,7 +122,9 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
 
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
-        const studyResult = yield* anonymizer.anonymizeStudy('test-study', parsedFiles)
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
+        const studyResult = yield* anonymizer.anonymizeStudy('test-study', parsedFiles, config)
         return studyResult.anonymizedFiles
       }))
 
@@ -153,6 +159,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         const studyResult = yield* anonymizer.anonymizeStudy(
           'test-study-123',
           parsedFiles,
+          config,
           {
             concurrency: 1,
             onProgress: () => { progressCalled = true }
@@ -174,9 +181,12 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
 
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
         return yield* anonymizer.anonymizeStudy(
           'test-study-empty',
           [],
+          config,
           { concurrency: 1 }
         )
       }))
@@ -204,10 +214,13 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
 
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
 
         return yield* anonymizer.anonymizeStudy(
           'test-study-concurrent',
           parsedFiles,
+          config,
           { concurrency: 3 } // Process all files concurrently
         )
       }))
@@ -244,7 +257,7 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       await expect(
         runTest(Effect.gen(function* () {
           const anonymizer = yield* Anonymizer
-          return yield* anonymizer.anonymizeFile(fileWithoutMetadata)
+          return yield* anonymizer.anonymizeFile(fileWithoutMetadata, config)
         }))
       ).rejects.toThrow()
     })

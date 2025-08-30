@@ -3,6 +3,7 @@ import { Anonymizer } from '@/services/anonymizer'
 import { AppLayer } from '@/services/shared/layers'
 import { OPFSStorage } from '@/services/opfsStorage'
 import type { DicomFile } from '@/types/dicom'
+import type { AnonymizationConfig } from '@/services/config/schema'
 
 const runtime = ManagedRuntime.make(AppLayer)
 
@@ -12,6 +13,7 @@ interface WorkerMessage {
   data: {
     studyId: string
     files: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>
+    anonymizationConfig: AnonymizationConfig
     concurrency?: number
   }
 }
@@ -22,7 +24,7 @@ type WorkerResponse =
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
 
 // Main worker function
-async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, concurrency = 3) {
+async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, anonymizationConfig: AnonymizationConfig, concurrency = 3) {
   try {
     await runtime.runPromise(
       Effect.gen(function* () {
@@ -70,8 +72,8 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
           )
         )
 
-        // Anonymize using service (config is now handled internally)
-        const result = yield* anonymizer.anonymizeStudy(studyId, dicomFiles, {
+        // Anonymize using service with passed config
+        const result = yield* anonymizer.anonymizeStudy(studyId, dicomFiles, anonymizationConfig, {
           concurrency,
           onProgress: (progress) => {
             self.postMessage({ type: 'progress', studyId, data: progress } as WorkerResponse)
@@ -139,7 +141,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   const { type, data } = event.data
 
   if (type === 'anonymize_study') {
-    anonymizeStudy(data.studyId, data.files, data.concurrency)
+    anonymizeStudy(data.studyId, data.files, data.anonymizationConfig, data.concurrency)
   }
 })
 

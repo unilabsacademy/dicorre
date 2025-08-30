@@ -36,9 +36,6 @@ async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName
         const opfs = yield* OPFSStorage
         const sender = yield* DicomSender
 
-        // Update server config
-        yield* sender.updateConfig(serverConfig)
-
         // Load files from OPFS and send them
         const total = fileRefs.length
         let completed = 0
@@ -65,8 +62,8 @@ async function sendStudy(studyId: string, fileRefs: Array<{ id: string; fileName
             opfsFileId: fileRef.opfsFileId
           }
 
-          // Send file using service
-          yield* sender.sendFile(dicomFile)
+          // Send file using service with passed config
+          yield* sender.sendFile(dicomFile, serverConfig)
 
           // Mark as sent and add to results
           dicomFile.sent = true

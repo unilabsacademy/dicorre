@@ -3,7 +3,6 @@ import { ref, computed, inject } from 'vue'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Badge } from '@/components/ui/badge'
 import { Folder, Link, X, Plus } from 'lucide-vue-next'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import type { ProjectConfig } from '@/services/config/schema'
@@ -13,6 +12,11 @@ const props = defineProps<{
   isProjectMode: boolean
   onCreateProject: (name: string) => Promise<void>
   onClearProject: () => Promise<void>
+}>()
+
+const emit = defineEmits<{
+  createProject: [name: string],
+  clearProject: []
 }>()
 
 const showCreateDialog = ref(false)
@@ -43,14 +47,15 @@ async function handleCreateProject() {
   }
 }
 
-async function handleShareProject() {
-  await copyShareableUrl()
-}
 
 async function handleClearProject() {
   if (confirm('Are you sure you want to clear the current project and return to default settings?')) {
     await props.onClearProject()
   }
+}
+
+async function handleShareProject() {
+  await copyShareableUrl()
 }
 </script>
 
@@ -59,36 +64,22 @@ async function handleClearProject() {
     <!-- Active Project Display -->
     <Card
       v-if="props.isProjectMode"
-      class="border-primary/20 bg-primary/5"
+      class="border-primary/20 bg-primary/5 py-4"
       data-testid="project-toolbar"
     >
-      <CardContent class="py-4">
+      <CardContent>
         <div class="flex items-center justify-between">
           <!-- Project Info -->
           <div class="flex items-center gap-3">
             <div class="flex items-center gap-2">
               <Folder class="h-5 w-5 text-primary" />
               <div>
-                <h2
-                  class="text-lg font-semibold text-primary"
-                  data-testid="project-title"
-                >
-                  {{ props.currentProject?.name }}
-                </h2>
-                <p
-                  class="text-sm text-muted-foreground"
-                  data-testid="project-created-at"
-                >
-                  Created {{ formattedCreatedAt }}
-                </p>
+                <div data-testid="project-title">
+                  Active project:
+                  <strong>{{ props.currentProject?.name }}</strong>
+                </div>
               </div>
             </div>
-            <Badge
-              variant="secondary"
-              class="ml-2"
-            >
-              Project Active
-            </Badge>
           </div>
 
           <!-- Project Actions -->

@@ -71,26 +71,42 @@ describe('DicomSender Service (Effect Service Testing)', () => {
   })
 
   describe('Configuration', () => {
-    it('should get current config', async () => {
-      const config = await runTest(Effect.gen(function* () {
-        const sender = yield* DicomSender
-        return yield* sender.getConfig
-      }))
-
-      expect(config).toBeDefined()
-      expect(config.url).toBeDefined()
-    })
-
-    it('should validate server config', async () => {
-      const invalidConfig = {
-        url: '',
-        description: 'Invalid server'
+    it('should test connection with valid config', async () => {
+      const validConfig = {
+        url: 'http://localhost:8080',
+        description: 'Test server'
       }
 
+      // This test expects the network call to fail since there's no actual server
       await expect(
         runTest(Effect.gen(function* () {
           const sender = yield* DicomSender
-          return yield* sender.updateConfig(invalidConfig)
+          return yield* sender.testConnection(validConfig)
+        }))
+      ).rejects.toThrow()
+    })
+
+    it('should send file with valid config', async () => {
+      const validConfig = {
+        url: 'http://localhost:8080',
+        description: 'Test server'
+      }
+
+      const dicomFile: DicomFile = {
+        id: 'test-file',
+        fileName: 'test.dcm',
+        fileSize: 100,
+        arrayBuffer: new ArrayBuffer(100),
+        metadata: {
+          sopInstanceUID: '1.2.3.4.5.6'
+        }
+      }
+
+      // This test expects the network call to fail since there's no actual server
+      await expect(
+        runTest(Effect.gen(function* () {
+          const sender = yield* DicomSender
+          return yield* sender.sendFile(dicomFile, validConfig)
         }))
       ).rejects.toThrow()
     })
