@@ -1,8 +1,18 @@
 <script setup lang="ts">
-import { ref, computed, inject } from 'vue'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { ref, computed } from 'vue'
+import { Card, CardContent } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import {
+  Sheet,
+  SheetContent,
+  SheetDescription,
+  SheetFooter,
+  SheetHeader,
+  SheetTitle,
+  SheetTrigger,
+} from '@/components/ui/sheet'
 import { Folder, Link, X, Plus } from 'lucide-vue-next'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import type { ProjectConfig } from '@/services/config/schema'
@@ -10,16 +20,14 @@ import type { ProjectConfig } from '@/services/config/schema'
 const props = defineProps<{
   currentProject?: ProjectConfig
   isProjectMode: boolean
-  onCreateProject: (name: string) => Promise<void>
-  onClearProject: () => Promise<void>
 }>()
 
 const emit = defineEmits<{
-  createProject: [name: string],
+  createProject: [name: string]
   clearProject: []
 }>()
 
-const showCreateDialog = ref(false)
+const showCreateSheet = ref(false)
 const projectName = ref('')
 const isCreating = ref(false)
 
@@ -37,8 +45,8 @@ async function handleCreateProject() {
 
   isCreating.value = true
   try {
-    await props.onCreateProject(projectName.value.trim())
-    showCreateDialog.value = false
+    emit('createProject', projectName.value.trim())
+    showCreateSheet.value = false
     projectName.value = ''
   } catch (error) {
     console.error('Failed to create project:', error)
@@ -50,7 +58,7 @@ async function handleCreateProject() {
 
 async function handleClearProject() {
   if (confirm('Are you sure you want to clear the current project and return to default settings?')) {
-    await props.onClearProject()
+    emit('clearProject')
   }
 }
 
@@ -118,51 +126,45 @@ async function handleShareProject() {
         <span class="text-sm text-muted-foreground">No active project</span>
       </div>
 
-      <Button
-        @click="showCreateDialog = true"
-        variant="outline"
-        size="sm"
-        data-testid="create-project-button"
-      >
-        <Plus class="mr-2 h-4 w-4" />
-        Create Project
-      </Button>
-    </div>
-
-    <!-- Create Project Form -->
-    <Card
-      v-if="showCreateDialog"
-      class="border-primary/20"
-      data-testid="create-project-form"
-    >
-      <CardHeader class="pb-3">
-        <CardTitle class="text-lg">Create New Project</CardTitle>
-        <CardDescription>
-          Save your current configuration as a named project that can be shared with others.
-        </CardDescription>
-      </CardHeader>
-      <CardContent>
-        <div class="space-y-4">
-          <div class="space-y-2">
-            <label
-              for="project-name"
-              class="text-sm font-medium"
-            >Project Name</label>
-            <Input
-              id="project-name"
-              v-model="projectName"
-              placeholder="Enter project name..."
-              @keyup.enter="handleCreateProject"
-              :disabled="isCreating"
-              data-testid="project-name-input"
-            />
+      <Sheet v-model:open="showCreateSheet">
+        <SheetTrigger asChild>
+          <Button
+            variant="outline"
+            size="sm"
+            data-testid="create-project-button"
+          >
+            <Plus class="mr-2 h-4 w-4" />
+            Create Project
+          </Button>
+        </SheetTrigger>
+        <SheetContent>
+          <SheetHeader>
+            <SheetTitle>Create New Project</SheetTitle>
+            <SheetDescription>
+              Save your current configuration as a named project that can be shared with others.
+            </SheetDescription>
+          </SheetHeader>
+          <div class="space-y-4 py-4">
+            <div class="space-y-2">
+              <Label
+                for="project-name"
+                class="text-sm font-medium"
+              >Project Name</label>
+              <Input
+                id="project-name"
+                v-model="projectName"
+                placeholder="Enter project name..."
+                @keyup.enter="handleCreateProject"
+                :disabled="isCreating"
+                data-testid="project-name-input"
+              />
+            </div>
           </div>
-          <div class="flex gap-2">
+          <SheetFooter>
             <Button
               variant="outline"
-              @click="showCreateDialog = false"
+              @click="showCreateSheet = false"
               :disabled="isCreating"
-              class="flex-1"
               data-testid="cancel-create-button"
             >
               Cancel
@@ -170,14 +172,14 @@ async function handleShareProject() {
             <Button
               @click="handleCreateProject"
               :disabled="isCreating || !projectName.trim()"
-              class="flex-1"
               data-testid="confirm-create-button"
             >
               {{ isCreating ? 'Creating...' : 'Create Project' }}
             </Button>
-          </div>
-        </div>
-      </CardContent>
-    </Card>
+          </SheetFooter>
+        </SheetContent>
+      </Sheet>
+    </div>
+
   </div>
 </template>

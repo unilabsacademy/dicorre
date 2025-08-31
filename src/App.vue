@@ -234,8 +234,8 @@ onUnmounted(() => {
       <ProjectToolbar
         :current-project="appState.currentProject.value"
         :is-project-mode="appState.isProjectMode.value"
-        :on-create-project="appState.handleCreateProject"
-        :on-clear-project="appState.handleClearProject"
+        @create-project="appState.handleCreateProject"
+        @clear-project="appState.handleClearProject"
       />
 
       <!-- Toolbar -->
