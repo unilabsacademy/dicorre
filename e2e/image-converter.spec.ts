@@ -14,6 +14,8 @@ test.describe('Image Converter Plugin', () => {
     const clearButton = page.getByTestId('clear-all-button');
     if (await clearButton.isVisible()) {
       await clearButton.click();
+      // Handle the confirmation dialog
+      await page.getByTestId('confirm-clear').click();
       // Wait for drop zone to reappear after clearing
       await waitForAppReady(page);
     }

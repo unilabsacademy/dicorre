@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import { Button } from '@/components/ui/button'
 import {
   DropdownMenu,
@@ -54,6 +54,7 @@ const emit = defineEmits<{
   sendSelected: []
   downloadSelected: []
   clearAll: []
+  clearSelected: []
   testConnection: []
   configLoaded: []
   addFiles: [files: File[]]
@@ -61,6 +62,7 @@ const emit = defineEmits<{
 
 const showProjectEditSheet = ref(false)
 const showClearProjectDialog = ref(false)
+const showClearDialog = ref(false)
 
 const { copyShareableUrl } = useProjectSharing()
 
@@ -85,6 +87,33 @@ function handleFileInput(event: Event) {
     target.value = ''
   }
 }
+
+function handleClearConfirm() {
+  if (props.selectedStudiesCount > 0) {
+    emit('clearSelected')
+  } else {
+    emit('clearAll')
+  }
+  showClearDialog.value = false
+}
+
+const clearButtonText = computed(() => {
+  return props.selectedStudiesCount > 0 
+    ? `Clear Selected (${props.selectedStudiesCount})`
+    : 'Clear All'
+})
+
+const clearDialogTitle = computed(() => {
+  return props.selectedStudiesCount > 0 
+    ? 'Clear Selected Studies'
+    : 'Clear All Studies'
+})
+
+const clearDialogDescription = computed(() => {
+  return props.selectedStudiesCount > 0 
+    ? `Are you sure you want to clear the ${props.selectedStudiesCount} selected ${props.selectedStudiesCount === 1 ? 'study' : 'studies'}? This action cannot be undone.`
+    : 'Are you sure you want to clear all studies? This action cannot be undone.'
+})
 </script>
 
 <template>
@@ -207,15 +236,36 @@ function handleFileInput(event: Event) {
         Download ({{ props.selectedStudiesCount }})
       </Button>
 
-      <Button
-        @click="emit('clearAll')"
-        variant="destructive"
-        size="sm"
-        data-testid="clear-all-button"
-      >
-        <Trash2 class="w-4 h-4 mr-2" />
-        Clear All
-      </Button>
+      <AlertDialog :open="showClearDialog" @update:open="showClearDialog = $event">
+        <AlertDialogTrigger asChild>
+          <Button
+            variant="destructive"
+            size="sm"
+            data-testid="clear-all-button"
+          >
+            <Trash2 class="w-4 h-4 mr-2" />
+            {{ clearButtonText }}
+          </Button>
+        </AlertDialogTrigger>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{{ clearDialogTitle }}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {{ clearDialogDescription }}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction 
+              @click="handleClearConfirm"
+              variant="destructive"
+              data-testid="confirm-clear"
+            >
+              Clear
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
 
       <!-- Settings Dropdown -->
       <DropdownMenu>

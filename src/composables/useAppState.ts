@@ -564,6 +564,37 @@ export function useAppState(runtime: RuntimeType) {
     clearSelection()
   }
 
+  const clearSelected = () => {
+    const selectedStudiesToClear = selectedStudies.value
+    
+    // Get study IDs to clear
+    const studyIdsToClear = new Set(selectedStudiesToClear.map(s => s.studyInstanceUID))
+    
+    // Remove files associated with selected studies
+    dicomFiles.value = dicomFiles.value.filter(file => {
+      if (file.metadata?.studyInstanceUID && studyIdsToClear.has(file.metadata.studyInstanceUID)) {
+        // Clear metadata for files being removed
+        if (file.metadata) file.metadata = undefined
+        return false
+      }
+      return true
+    })
+    
+    // Remove selected studies from studies array
+    studies.value = studies.value.filter(study => !studyIdsToClear.has(study.studyInstanceUID))
+    
+    // Clear progress for removed studies
+    selectedStudiesToClear.forEach(study => {
+      removeStudyProgress(study.studyInstanceUID)
+      removeStudySendingProgress(study.studyInstanceUID)
+    })
+    
+    // Clear selection
+    clearSelection()
+    
+    successMessage.value = `Cleared ${selectedStudiesToClear.length} selected ${selectedStudiesToClear.length === 1 ? 'study' : 'studies'}`
+  }
+
   const processZipFile = (file: File, isAppReady: boolean) => {
     uploadedFiles.value = [file]
     processFiles(isAppReady)
@@ -635,6 +666,7 @@ export function useAppState(runtime: RuntimeType) {
     testConnection,
     handleSendSelected,
     clearFiles,
+    clearSelected,
     processZipFile
   }
 }

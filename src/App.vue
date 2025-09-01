@@ -86,6 +86,10 @@ function clearFiles() {
   clearSession()
 }
 
+function clearSelectedFiles() {
+  appState.clearSelected()
+}
+
 function handleConfigLoaded() {
   appState.handleConfigReload()
 }
@@ -214,6 +218,7 @@ onUnmounted(() => {
         @send-selected="handleSendSelected(appState.selectedStudies.value)"
         @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
         @clear-all="clearFiles"
+        @clear-selected="clearSelectedFiles"
         @test-connection="testConnection"
         @config-loaded="handleConfigLoaded"
         @add-files="(files) => { addFilesToUploaded(files); processNewFiles(files) }"
