@@ -134,17 +134,24 @@ export function useAppState(runtime: RuntimeType) {
 
   const handleLoadProject = async (projectConfig: unknown): Promise<void> => {
     try {
-      await runtime.runPromise(
+      // Extract project config if this is a full AppConfig
+      let actualProjectConfig = projectConfig
+      if (projectConfig && typeof projectConfig === 'object' && 'project' in projectConfig) {
+        actualProjectConfig = (projectConfig as any).project
+      }
+
+      const loadedProject = await runtime.runPromise(
         Effect.gen(function* () {
           const configService = yield* ConfigService
-          yield* configService.loadProject(projectConfig)
+          yield* configService.loadProject(actualProjectConfig)
+          // Return the current project after loading
+          return yield* configService.getCurrentProject
         })
       )
 
-      // Stream will update config/currentProject
-
-      if (currentProject.value) {
-        toast.success(`Loaded project: ${currentProject.value.name}`)
+      // Show success toast using the loaded project instead of reactive state
+      if (loadedProject) {
+        toast.success(`Loaded project: ${loadedProject.name}`)
       }
     } catch (error) {
       console.error('Failed to load project:', error)

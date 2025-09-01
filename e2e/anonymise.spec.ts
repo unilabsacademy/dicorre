@@ -18,7 +18,7 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   const fileCount = parseInt(filesCountText?.match(/(\d+)/)?.[1] || '0');
   expect(fileCount).toBeGreaterThan(0);
 
-  await expect(page.getByTestId('toolbar')).toBeVisible();
+  await expect(page.getByTestId('app-toolbar')).toBeVisible();
 
   const anonymizedCountTextBefore = await page.getByTestId('anonymized-count-badge').textContent();
   const anonymizedCountBefore = parseInt(anonymizedCountTextBefore?.match(/(\d+)/)?.[1] || '0');
@@ -63,11 +63,12 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   const anonymizedCount = parseInt(anonymizedCountText?.match(/(\d+)/)?.[1] || '0');
   expect(anonymizedCount).toBeGreaterThan(0);
 
-  await expect(page.getByTestId('studies-table-card')).toBeVisible({ timeout: 5000 });
-  await expect(page.getByTestId('studies-data-table')).toBeVisible();
+  // Verify studies table is visible
+  await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 5000 });
 
-  const studiesCountText = await page.getByTestId('studies-count-badge').textContent();
-  const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0');
+  // Count actual study rows in the table
+  const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
+  const studiesCount = await studyRows.count();
   expect(studiesCount).toBeGreaterThan(0);
   expect(studiesCount).toBeLessThan(fileCount);
 
@@ -141,5 +142,6 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
 
 test('visits the app root url', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByTestId('app-title')).toHaveText('DICOM Anonymizer & Sender');
+  // App title has been removed from the UI, checking for main drop zone instead
+  await expect(page.getByTestId('drop-zone-text')).toBeVisible();
 })

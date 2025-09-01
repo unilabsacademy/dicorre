@@ -109,3 +109,6 @@ When testing the web app with Playwright e2e test or using the Playwright MCP:
 Vue: https://vuejs.org/llms.txt
 Effect: https://effect.website/llms.txt
 Shadcn-vue: https://www.shadcn-vue.com/llms.txt
+- always use pnpm instead of npm
+- never try to run devserver yourself unless specifically asked
+- dev server already running on port 5173

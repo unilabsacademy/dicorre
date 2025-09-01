@@ -2,9 +2,14 @@
 import { ref, inject } from 'vue'
 import { Effect, ManagedRuntime } from 'effect'
 import { Button } from '@/components/ui/button'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { ConfigService } from '@/services/config'
 import { Settings, Upload } from 'lucide-vue-next'
 import { toast } from 'vue-sonner'
+
+const props = defineProps<{
+  asMenuItem?: boolean
+}>()
 
 const emit = defineEmits<{
   'config-loaded': []
@@ -79,7 +84,19 @@ const openFileDialog = () => {
       data-testid="config-file-input"
     />
     
+    <DropdownMenuItem
+      v-if="props.asMenuItem"
+      @click.prevent="openFileDialog"
+      :disabled="loading"
+      data-testid="load-config-menu-item"
+    >
+      <Upload v-if="!loading" class="w-4 h-4 mr-2" />
+      <Settings v-if="loading" class="w-4 h-4 mr-2 animate-spin" />
+      {{ loading ? 'Loading...' : 'Load Config' }}
+    </DropdownMenuItem>
+    
     <Button
+      v-else
       @click="openFileDialog"
       :disabled="loading"
       variant="outline"

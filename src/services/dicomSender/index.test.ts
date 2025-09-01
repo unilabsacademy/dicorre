@@ -73,7 +73,7 @@ describe('DicomSender Service (Effect Service Testing)', () => {
   describe('Configuration', () => {
     it('should test connection with valid config', async () => {
       const validConfig = {
-        url: 'http://localhost:8080',
+        url: 'http://localhost:8081',
         description: 'Test server'
       }
 

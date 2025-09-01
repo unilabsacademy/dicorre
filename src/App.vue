@@ -8,31 +8,15 @@ import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
-import { Badge } from '@/components/ui/badge'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
 import { useDownload } from '@/composables/useDownload'
 import { useProjectSharing } from '@/composables/useProjectSharing'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '@/components/ui/dropdown-menu'
 import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
-import ConfigLoader from '@/components/ConfigLoader.vue'
-import ProjectToolbar from '@/components/ProjectToolbar.vue'
+import AppToolbar from '@/components/AppToolbar.vue'
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
-import {
-  Shield,
-  Send,
-  Trash2,
-  Settings2,
-  Wifi,
-  Download
-} from 'lucide-vue-next'
 
 const runtime = ManagedRuntime.make(AppLayer)
 provide('appRuntime', runtime)
@@ -163,16 +147,7 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="mx-auto max-w-7xl space-y-6">
-      <!-- Header -->
-      <div class="text-center">
-        <h1
-          data-testid="app-title"
-          class="text-4xl font-bold tracking-tight"
-        >DICOM Anonymizer & Sender</h1>
-        <p class="text-muted-foreground mt-2">Drop DICOM files or ZIP archives to get started</p>
-      </div>
-
+    <div class="mx-auto max-w-7xl space-y-2">
       <!-- Error Display -->
       <Alert
         v-if="error"
@@ -230,109 +205,23 @@ onUnmounted(() => {
         </CardContent>
       </Card>
 
-      <!-- Project Toolbar -->
-      <ProjectToolbar
+      <!-- Consolidated Toolbar -->
+      <AppToolbar
+        v-if="isAppReady"
         :current-project="appState.currentProject.value"
         :is-project-mode="appState.isProjectMode.value"
+        :selected-studies-count="appState.selectedStudiesCount.value"
+        :is-processing="fileProcessingState?.isProcessing || false"
+        :is-downloading="isDownloading"
         @create-project="appState.handleCreateProject"
         @clear-project="appState.handleClearProject"
+        @anonymize-selected="anonymizeSelected"
+        @send-selected="handleSendSelected(appState.selectedStudies.value)"
+        @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
+        @clear-all="clearFiles"
+        @test-connection="testConnection"
+        @config-loaded="handleConfigLoaded"
       />
-
-      <!-- Toolbar -->
-      <div
-        v-if="isAppReady"
-        class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border"
-        data-testid="toolbar"
-      >
-        <div class="flex items-center gap-3">
-          <Badge
-            variant="outline"
-            data-testid="files-count-badge"
-          >{{ appState.totalFiles }} Files</Badge>
-          <Badge
-            variant="default"
-            data-testid="anonymized-count-badge"
-          >{{ appState.anonymizedFilesCount }} Anonymized</Badge>
-          <Badge
-            variant="secondary"
-            data-testid="studies-count-badge"
-          >{{ appState.studies.value.length }} Studies</Badge>
-          <Badge
-            v-if="appState.selectedStudiesCount.value > 0"
-            variant="default"
-            data-testid="selected-count-badge"
-          >{{ appState.selectedStudiesCount }} Selected</Badge>
-
-        </div>
-
-        <div class="flex items-center gap-2">
-          <Button
-            @click="anonymizeSelected"
-            :disabled="appState.selectedStudiesCount.value === 0"
-            variant="default"
-            size="sm"
-            data-testid="anonymize-button"
-          >
-            <Shield class="w-4 h-4 mr-2" />
-            Anonymize ({{ appState.selectedStudiesCount }})
-          </Button>
-
-          <Button
-            @click="handleSendSelected(appState.selectedStudies.value)"
-            :disabled="fileProcessingState?.isProcessing || appState.selectedStudiesCount.value === 0"
-            variant="secondary"
-            size="sm"
-            data-testid="send-button"
-          >
-            <Send class="w-4 h-4 mr-2" />
-            Send ({{ appState.selectedStudiesCount }})
-          </Button>
-
-          <Button
-            @click="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
-            :disabled="isDownloading || appState.selectedStudiesCount.value === 0"
-            variant="outline"
-            size="sm"
-            data-testid="download-button"
-          >
-            <Download class="w-4 h-4 mr-2" />
-            Download ({{ appState.selectedStudiesCount }})
-          </Button>
-
-          <Button
-            @click="clearFiles"
-            variant="destructive"
-            size="sm"
-            data-testid="clear-all-button"
-          >
-            <Trash2 class="w-4 h-4 mr-2" />
-            Clear All
-          </Button>
-
-          <ConfigLoader @config-loaded="handleConfigLoaded" />
-
-          <DropdownMenu>
-            <DropdownMenuTrigger asChild>
-              <Button
-                variant="outline"
-                size="sm"
-                data-testid="settings-menu-button"
-              >
-                <Settings2 class="w-4 h-4" />
-              </Button>
-            </DropdownMenuTrigger>
-            <DropdownMenuContent align="end">
-              <DropdownMenuItem
-                @click="testConnection"
-                data-testid="test-connection-menu-item"
-              >
-                <Wifi class="w-4 h-4 mr-2" />
-                Test Connection
-              </DropdownMenuItem>
-            </DropdownMenuContent>
-          </DropdownMenu>
-        </div>
-      </div>
 
       <!-- File Processing Progress -->
       <FileProcessingProgress
@@ -386,24 +275,17 @@ onUnmounted(() => {
       </Card>
 
       <!-- Studies Data Table -->
-      <Card
-        v-if="showStudiesTable"
-        data-testid="studies-table-card"
-      >
-        <CardHeader>
-          <CardTitle data-testid="studies-table-title">DICOM Studies</CardTitle>
-          <CardDescription>
-            Select studies to anonymize and send to PACS
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <DataTable
-            :columns="columns"
-            :data="studiesData"
-            data-testid="studies-data-table"
-          />
-        </CardContent>
-      </Card>
+      <DataTable
+        :columns="columns"
+        :data="studiesData"
+        data-testid="studies-data-table"
+      />
+      
+      <!-- File counts for testing (small text at bottom) -->
+      <div v-if="appState.dicomFiles.value.length > 0 || appState.anonymizedFilesCount.value > 0" class="text-xs text-muted-foreground mt-4 flex gap-4">
+        <span data-testid="files-count-badge">Files: {{ appState.dicomFiles.value.length }}</span>
+        <span data-testid="anonymized-count-badge">Anonymized: {{ appState.anonymizedFilesCount.value }}</span>
+      </div>
     </div>
 
     <!-- Worker Debug Panel -->

@@ -42,9 +42,7 @@ test('uploads single case zip file and checks correct grouping', async ({ page }
   
   expect(anonymizedCount).toBe(currentFileCount);
 
-  const studiesCountText = await page.getByTestId('studies-count-badge').textContent();
-  const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0');
-  expect(studiesCount).toBe(1);
-
-  await expect(page.getByTestId('studies-table-card')).toBeVisible({ timeout: 5000 })
+  // Check that there's exactly 1 study in the table
+  const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
+  await expect(studyRows).toHaveCount(1);
 });

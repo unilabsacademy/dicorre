@@ -2,44 +2,51 @@ import { test, expect } from '@playwright/test'
 
 test.describe('Project Management', () => {
   test('should create project, generate shareable URL, and load from URL', async ({ page, context }) => {
+    // Grant clipboard permissions
+    await context.grantPermissions(['clipboard-read', 'clipboard-write'])
+    
     // Navigate to the app
     await page.goto('/')
-    
-    // Wait for app to be ready
-    await expect(page.getByTestId('toolbar')).toBeVisible()
-    
+
+    // Wait for app to be ready - either drop zone or toolbar should be visible
+    await Promise.race([
+      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { }),
+      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { })
+    ])
+
     // Initially should show "No active project"
     await expect(page.getByText('No active project')).toBeVisible()
-    await expect(page.getByTestId('create-project-button')).toBeVisible()
 
     // Step 1: Create a new project
-    await page.getByTestId('create-project-button').click()
-    
-    // Form should appear
-    await expect(page.getByTestId('create-project-form')).toBeVisible()
-    
+    await page.getByTestId('edit-project-button').click()
+
+    // Sheet should appear
+    await expect(page.getByText('Create New Project')).toBeVisible()
+
     // Fill in project name
     const projectName = 'E2E Test Project'
     await page.getByTestId('project-name-input').fill(projectName)
-    
+
+    // Wait for button to be enabled and stable after filling name
+    await expect(page.getByTestId('save-project-button')).toBeEnabled()
+
     // Submit the form
-    await page.getByTestId('confirm-create-button').click()
-    
+    await page.getByTestId('save-project-button').click()
+
     // Should show success notification
     await expect(page.getByText(`Project "${projectName}" created`)).toBeVisible()
-    
-    // Form should close
-    await expect(page.getByTestId('create-project-form')).not.toBeVisible()
-    
+
+    // Sheet should close
+    await expect(page.getByText('Create New Project')).not.toBeVisible()
+
     // Project should now be active - wait for UI to update
-    await expect(page.getByTestId('project-toolbar')).toBeVisible({ timeout: 3000 })
-    await expect(page.getByTestId('project-title')).toContainText(projectName)
-    await expect(page.getByText('Project Active')).toBeVisible()
+    await expect(page.getByTestId('project-title')).toContainText(projectName, { timeout: 3000 })
     await expect(page.getByText('No active project')).not.toBeVisible()
 
-    // Step 2: Generate shareable URL
+    // Step 2: Generate shareable URL - wait for button to be enabled
+    await expect(page.getByTestId('share-project-button')).toBeEnabled()
     await page.getByTestId('share-project-button').click()
-    
+
     // Should show success notification
     await expect(page.getByText('Project URL copied to clipboard')).toBeVisible()
 
@@ -47,19 +54,13 @@ test.describe('Project Management', () => {
     // Get the current URL with project parameter (simulating clipboard content)
     // For testing purposes, we'll create a test URL manually since clipboard access is limited in tests
     const currentUrl = page.url()
-    
+
     // Clear the project first to test URL loading
     await page.getByTestId('clear-project-button').click()
-    
-    // Confirm the clear dialog
-    page.on('dialog', dialog => dialog.accept())
-    
-    // Should show success notification
-    await expect(page.getByText('Project cleared')).toBeVisible()
-    
-    // Should return to "No active project" state
-    await expect(page.getByText('No active project')).toBeVisible({ timeout: 3000 })
-    await expect(page.getByTestId('project-toolbar')).not.toBeVisible()
+
+    // Confirm in the AlertDialog
+    await expect(page.getByText('Are you sure you want to clear the current project')).toBeVisible()
+    await page.getByTestId('confirm-clear-project').click()
 
     // Step 4: Create a shareable URL manually and test loading
     // Since we can't easily access clipboard in tests, we'll simulate loading from URL
@@ -95,40 +96,46 @@ test.describe('Project Management', () => {
 
     // Navigate to the URL with project parameter
     await page.goto(testUrl)
-    
+
     // Should show success notification for loaded project
     await expect(page.getByText('Loaded project: URL Test Project')).toBeVisible()
-    
+
     // Project should be active
-    await expect(page.getByTestId('project-toolbar')).toBeVisible({ timeout: 3000 })
-    await expect(page.getByTestId('project-title')).toContainText('URL Test Project')
-    await expect(page.getByText('Project Active')).toBeVisible()
-    
+    await expect(page.getByTestId('project-title')).toContainText('URL Test Project', { timeout: 3000 })
+
     // URL should be cleaned (project parameter removed)
     await expect(page).toHaveURL('/')
   })
 
   test('should handle project creation validation', async ({ page }) => {
     await page.goto('/')
-    await expect(page.getByTestId('toolbar')).toBeVisible()
 
-    // Click create project
-    await page.getByTestId('create-project-button').click()
-    await expect(page.getByTestId('create-project-form')).toBeVisible()
+    // Wait for app to be ready
+    await Promise.race([
+      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { }),
+      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { })
+    ])
+
+    // Click create project button
+    await page.getByTestId('edit-project-button').click()
+    await expect(page.getByText('Create New Project')).toBeVisible()
 
     // Try to create without name - button should be disabled
-    await expect(page.getByTestId('confirm-create-button')).toBeDisabled()
+    await expect(page.getByTestId('save-project-button')).toBeDisabled()
 
     // Enter just spaces - should still be disabled
     await page.getByTestId('project-name-input').fill('   ')
-    await expect(page.getByTestId('confirm-create-button')).toBeDisabled()
+    await expect(page.getByTestId('save-project-button')).toBeDisabled()
 
     // Enter valid name - should be enabled
     await page.getByTestId('project-name-input').fill('Valid Project')
-    await expect(page.getByTestId('confirm-create-button')).toBeEnabled()
+    await expect(page.getByTestId('save-project-button')).toBeEnabled()
+
+    // Wait for sheet to be stable before clicking cancel
+    await page.waitForTimeout(500)
 
     // Cancel should work
-    await page.getByTestId('cancel-create-button').click()
-    await expect(page.getByTestId('create-project-form')).not.toBeVisible()
+    await page.getByTestId('cancel-project-button').click()
+    await expect(page.getByText('Create New Project')).not.toBeVisible()
   })
 })

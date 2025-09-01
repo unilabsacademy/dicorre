@@ -2,9 +2,26 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 
 test.describe('Image Converter Plugin', () => {
-  test('converts JPG images to DICOM files', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to app and wait for it to be ready
     await page.goto('/');
-    await page.getByTestId('clear-all-button').click();
+
+    // Wait for app to be ready - either drop zone or toolbar should be visible
+    await Promise.race([
+      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { }),
+      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { })
+    ]);
+
+    // If there's already data, clear it
+    const clearButton = page.getByTestId('clear-all-button');
+    if (await clearButton.isVisible()) {
+      await clearButton.click();
+      // Wait for drop zone to reappear after clearing
+      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+    }
+  });
+
+  test('converts JPG images to DICOM files', async ({ page }) => {
 
     // Upload JPG test images
     const testImagePaths = [
@@ -27,15 +44,12 @@ test.describe('Image Converter Plugin', () => {
     // Verify studies table appears
     await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 10000 });
 
-    // Check that the converted files appear in the studies table
-    const studiesCountText = await page.getByTestId('studies-count-badge').textContent();
-    const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0');
-    expect(studiesCount).toBe(3);
+    // Check that 3 studies appear in the table (one per image)
+    const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
+    await expect(studyRows).toHaveCount(3);
   });
 
   test('converts PNG images to DICOM files', async ({ page }) => {
-    await page.goto('/');
-    await page.getByTestId('clear-all-button').click();
 
     // Upload PNG test images
     const testImagePaths = [
@@ -60,15 +74,12 @@ test.describe('Image Converter Plugin', () => {
     // Should convert 3 PNG files to DICOM// Verify studies table appears
     await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 10000 });
 
-    // Check that the converted files appear in the studies table
-    const studiesCountText = await page.getByTestId('studies-count-badge').textContent();
-    const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0');
-    expect(studiesCount).toBe(3);
+    // Check that 3 studies appear in the table (one per image)
+    const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
+    await expect(studyRows).toHaveCount(3);
   });
 
   test('converts mixed image formats and anonymizes them', async ({ page }) => {
-    await page.goto('/');
-    await page.getByTestId('clear-all-button').click();
 
     // Upload mixed image formats (2 JPG + 2 PNG)
     const testImagePaths = [
@@ -101,8 +112,8 @@ test.describe('Image Converter Plugin', () => {
 
     // Verify anonymize button shows correct count
     const anonymizeButton = page.getByTestId('anonymize-button');
-    const studiesCountText = await page.getByTestId('studies-count-badge').textContent();
-    const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0');
+    const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
+    const studiesCount = await studyRows.count();
 
     await expect(anonymizeButton).toContainText(`Anonymize (${studiesCount})`, { timeout: 5000 });
     await expect(anonymizeButton).toBeEnabled();
@@ -121,17 +132,18 @@ test.describe('Image Converter Plugin', () => {
   });
 
   test('rejects unsupported file formats', async ({ page }) => {
-    await page.goto('/');
-    await page.getByTestId('clear-all-button').click();
 
     // Try to upload a text file (should be rejected)
     const testFilePath = path.join(process.cwd(), 'package.json'); // Use an existing non-image file
     await page.getByTestId('file-input').setInputFiles([testFilePath]);
 
-    // Check that no files were processed
-    const filesCountBadge = page.getByTestId('files-count-badge');
-    const filesCountText = await filesCountBadge.textContent();
-    const fileCount = parseInt(filesCountText?.match(/(\d+)/)?.[1] || '0');
-    expect(fileCount).toBe(0);
+    // Wait a moment for potential processing
+    await page.waitForTimeout(1000);
+
+    // Check that no files were processed - drop zone should still be visible
+    await expect(page.getByTestId('drop-zone-text')).toBeVisible();
+
+    // Expect data table to be empty
+    expect(page.getByTestId("studies-data-table-empty")).toBeVisible()
   });
 });

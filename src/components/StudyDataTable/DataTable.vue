@@ -136,6 +136,7 @@ const table = useVueTable({
             <TableCell
               :col-span="columns.length"
               class="h-24 text-center"
+              data-testid="studies-data-table-empty"
             >
               No studies found.
             </TableCell>

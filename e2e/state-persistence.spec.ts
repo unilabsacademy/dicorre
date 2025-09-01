@@ -10,7 +10,7 @@ test('persists uploaded files and UI state across page reload', async ({ page })
   const processingCard = page.getByTestId('file-processing-progress-card')
   await expect(processingCard).toBeHidden({ timeout: 10000 })
   
-  await expect(page.getByTestId('toolbar')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('app-toolbar')).toBeVisible({ timeout: 15000 })
 
   const filesCountText = await page.getByTestId('files-count-badge').textContent()
   const initialFileCount = parseInt(filesCountText?.match(/(\d+)/)?.[1] || '0')
@@ -18,7 +18,7 @@ test('persists uploaded files and UI state across page reload', async ({ page })
 
   await page.reload()
 
-  await expect(page.getByTestId('toolbar')).toBeVisible({ timeout: 15000 })
+  await expect(page.getByTestId('app-toolbar')).toBeVisible({ timeout: 15000 })
   
   await page.waitForFunction(
     (expectedCount) => {
@@ -35,7 +35,8 @@ test('persists uploaded files and UI state across page reload', async ({ page })
   const fileCountAfter = parseInt(filesCountTextAfter?.match(/(\d+)/)?.[1] || '0')
   expect(fileCountAfter).toBe(initialFileCount)
 
-  const studiesCountText = await page.getByTestId('studies-count-badge').textContent()
-  const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0')
-  expect(studiesCount).toBe(1)
+  // Studies count badge removed from UI, verify table has studies instead
+  await expect(page.getByTestId('studies-data-table')).toBeVisible()
+  const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr')
+  await expect(studyRows).toHaveCount(1)
 })

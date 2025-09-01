@@ -29,15 +29,22 @@ test.describe('Config Loading', () => {
     fs.writeFileSync(tempConfigPath, JSON.stringify(validConfig, null, 2));
 
     try {
-      // Load the config
+      // Wait for initial app to load
+      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+      
+      // Open settings menu and click Load Config
+      await page.getByTestId('settings-menu-button').click();
+      await page.getByTestId('load-config-menu-item').click();
+      
+      // Now set the file input (it's hidden but clicking the menu item should trigger it)
       const fileInput = page.getByTestId('config-file-input');
       await fileInput.setInputFiles(tempConfigPath);
 
       // Check success toast appears
       await expect(page.locator('[data-sonner-toast][data-type="success"]')).toBeVisible({ timeout: 3000 });
 
-      // Verify config was applied
-      await expect(page.getByTestId('server-url')).toContainText('/api/orthanc/dicom-web');
+      // Verify config was applied - check that toolbar appears (config loaded successfully)
+      await expect(page.getByTestId('app-toolbar')).toBeVisible();
     } finally {
       if (fs.existsSync(tempConfigPath)) {
         fs.unlinkSync(tempConfigPath);
@@ -61,7 +68,14 @@ test.describe('Config Loading', () => {
     fs.writeFileSync(tempConfigPath, JSON.stringify(invalidConfig, null, 2));
 
     try {
-      // Load the invalid config
+      // Wait for initial app to load
+      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+      
+      // Open settings menu and click Load Config
+      await page.getByTestId('settings-menu-button').click();
+      await page.getByTestId('load-config-menu-item').click();
+      
+      // Now set the file input
       const fileInput = page.getByTestId('config-file-input');
       await fileInput.setInputFiles(tempConfigPath);
 

@@ -2,9 +2,26 @@ import { test, expect } from '@playwright/test';
 import path from 'path';
 
 test.describe('PDF Converter Plugin', () => {
-  test('converts PDF to DICOM file', async ({ page }) => {
+  test.beforeEach(async ({ page }) => {
+    // Navigate to app and wait for it to be ready
     await page.goto('/');
-    await page.getByTestId('clear-all-button').click();
+    
+    // Wait for app to be ready - either drop zone or toolbar should be visible
+    await Promise.race([
+      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {}),
+      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
+    ]);
+    
+    // If there's already data, clear it
+    const clearButton = page.getByTestId('clear-all-button');
+    if (await clearButton.isVisible()) {
+      await clearButton.click();
+      // Wait for drop zone to reappear after clearing
+      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+    }
+  });
+
+  test('converts PDF to DICOM file', async ({ page }) => {
 
     // Upload the test PDF
     const testPdfPath = path.join(process.cwd(), 'src/plugins/pdfConverter/test-data/test-document.pdf');
@@ -14,9 +31,9 @@ test.describe('PDF Converter Plugin', () => {
     const processingCard = page.getByTestId('file-processing-progress-card');
     await expect(processingCard).toBeHidden({ timeout: 10000 });
 
-    // Check if files were processed
+    // Check if files were processed - wait for files count badge to appear
+    await expect(page.getByTestId('files-count-badge')).toBeVisible({ timeout: 5000 });
     const filesCountBadge = page.getByTestId('files-count-badge');
-
     const filesCountText = await filesCountBadge.textContent();
     const fileCount = parseInt(filesCountText?.match(/(\d+)/)?.[1] || '0');
     expect(fileCount).toBe(3);
@@ -24,15 +41,12 @@ test.describe('PDF Converter Plugin', () => {
     // Verify studies table appears
     await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 10000 });
 
-    // Check that the converted files appear in the studies table as a series
-    const studiesCountText = await page.getByTestId('studies-count-badge').textContent();
-    const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0');
-    expect(studiesCount).toBe(1);
+    // Check that 1 study appears in the table (PDF converted to single study)
+    const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
+    await expect(studyRows).toHaveCount(1);
   });
 
   test('converts PDF and anonymizes the series', async ({ page }) => {
-    await page.goto('/');
-    await page.getByTestId('clear-all-button').click();
 
     // Upload the test PDF
     const testPdfPath = path.join(process.cwd(), 'src/plugins/pdfConverter/test-data/test-document.pdf');
@@ -51,8 +65,8 @@ test.describe('PDF Converter Plugin', () => {
 
     // Verify anonymize button shows correct count
     const anonymizeButton = page.getByTestId('anonymize-button');
-    const studiesCountText = await page.getByTestId('studies-count-badge').textContent();
-    const studiesCount = parseInt(studiesCountText?.match(/(\d+)/)?.[1] || '0');
+    const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
+    const studiesCount = await studyRows.count();
 
     await expect(anonymizeButton).toContainText(`Anonymize (${studiesCount})`, { timeout: 5000 });
     await expect(anonymizeButton).toBeEnabled();
