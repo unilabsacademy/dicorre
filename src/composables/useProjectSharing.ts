@@ -48,10 +48,10 @@ export function useProjectSharing() {
   }
 
   /**
-   * Load project from URL parameter
-   * Returns the parsed config if successful, null if no project in URL
+   * Load config from URL parameter
+   * Returns the parsed config if successful, null if no config in URL
    */
-  async function loadProjectFromUrl(): Promise<AppConfig | null> {
+  async function loadConfigFromUrl(): Promise<AppConfig | null> {
     try {
       const url = new URL(window.location.href)
       const encodedProject = url.searchParams.get('project')
@@ -97,8 +97,8 @@ export function useProjectSharing() {
 
       return config
     } catch (error) {
-      console.error('Failed to load project from URL:', error)
-      toast.error('Failed to load project from URL')
+      console.error('Failed to load config from URL:', error)
+      toast.error('Failed to load config from URL')
       return null
     }
   }
@@ -119,7 +119,7 @@ export function useProjectSharing() {
 
   return {
     generateShareableUrl,
-    loadProjectFromUrl,
+    loadConfigFromUrl,
     copyShareableUrl
   }
 }

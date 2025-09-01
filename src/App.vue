@@ -23,7 +23,7 @@ provide('appRuntime', runtime)
 const appState = useAppState(runtime)
 
 const { isDownloading, downloadSelectedStudies } = useDownload(runtime)
-const { loadProjectFromUrl } = useProjectSharing()
+const { loadConfigFromUrl } = useProjectSharing()
 const error = computed(() => {
   if (appState.configError.value) {
     return `Configuration Error: ${appState.configError.value.message}`
@@ -108,12 +108,12 @@ watch(persistenceProgress, (v) => (restoreProgress.value = v))
 onMounted(async () => {
   // Check for project in URL and load it
   try {
-    const projectConfig = await loadProjectFromUrl()
-    if (projectConfig) {
-      await appState.handleLoadProject(projectConfig)
+    const configData = await loadConfigFromUrl()
+    if (configData) {
+      await appState.handleLoadConfig(configData)
     }
   } catch (error) {
-    console.error('Failed to load project from URL:', error)
+    console.error('Failed to load config from URL:', error)
   }
 
   // Restore session after potential project loading

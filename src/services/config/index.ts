@@ -2,7 +2,7 @@ import { Effect, Context, Layer, SubscriptionRef, Stream } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption, ProjectConfig } from './schema'
 import { ConfigurationError, type ConfigurationError as ConfigurationErrorType, type ParseError } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
-import { validateAppConfig, validateProjectConfig } from './schema'
+import { validateAppConfig } from './schema'
 import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'
 import { ConfigPersistence } from '@/services/configPersistence'
 
@@ -16,7 +16,6 @@ export class ConfigService extends Context.Tag("ConfigService")<
     readonly getCurrentConfig: Effect.Effect<AppConfig, never>
     readonly getCurrentProject: Effect.Effect<ProjectConfig | undefined, never>
     readonly createProject: (name: string) => Effect.Effect<ProjectConfig, never>
-    readonly loadProject: (projectConfig: unknown) => Effect.Effect<void, ParseError | ConfigurationError>
     readonly clearProject: Effect.Effect<void, ConfigurationErrorType>
     readonly configChanges: Stream.Stream<AppConfig>
   }
@@ -100,12 +99,6 @@ export const ConfigServiceLive = Layer.scoped(
         createdAt: new Date().toISOString()
       })
 
-    const loadProject = (projectConfig: unknown) => Effect.gen(function* () {
-      const project = yield* validateProjectConfig(projectConfig)
-      yield* SubscriptionRef.update(ref, (c) => ({ ...c, project }))
-      const updated = yield* SubscriptionRef.get(ref)
-      yield* persistence.save(updated)
-    })
 
     const clearProject: Effect.Effect<void, ConfigurationErrorType> = Effect.gen(function* () {
       yield* SubscriptionRef.update(ref, (c) => {
@@ -125,7 +118,6 @@ export const ConfigServiceLive = Layer.scoped(
       getCurrentConfig,
       getCurrentProject,
       createProject,
-      loadProject,
       clearProject,
       configChanges: ref.changes
     } as const

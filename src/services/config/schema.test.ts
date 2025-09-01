@@ -311,7 +311,7 @@ describe('Config Schema Validation', () => {
     it('should fail validation for ProjectConfig missing name', async () => {
       const invalidProject = { ...mockProjectConfig }
       delete (invalidProject as any).name
-      await expect(Effect.runPromise(validateProjectConfig(invalidProject))).rejects.toThrow(/name.*missing/)
+      await expect(Effect.runPromise(validateProjectConfig(invalidProject))).rejects.toThrow(/is missing/)
     })
 
     it('should fail validation for invalid UUID', async () => {
@@ -376,7 +376,7 @@ describe('Config Schema Validation', () => {
       const fullConfig = JSON.parse(JSON.stringify(mockAppConfig))
       
       // This should fail - we're validating full config as ProjectConfig
-      await expect(Effect.runPromise(validateProjectConfig(fullConfig))).rejects.toThrow(/name.*missing/)
+      await expect(Effect.runPromise(validateProjectConfig(fullConfig))).rejects.toThrow(/is missing/)
       
       // This should succeed - validating just the project part
       const projectResult = await Effect.runPromise(validateProjectConfig(fullConfig.project))
@@ -384,9 +384,9 @@ describe('Config Schema Validation', () => {
     })
   })
 
-  describe('URL sharing scenario simulation', () => {
-    it('should handle the e2e test scenario correctly', async () => {
-      // This simulates exactly what the e2e test does
+  describe('URL config sharing scenario', () => {
+    it('should handle loading full config from URL correctly', async () => {
+      // This simulates the complete config sharing via URL
       const testConfig = {
         dicomServer: {
           url: "/api/orthanc/dicom-web",
@@ -410,24 +410,45 @@ describe('Config Schema Validation', () => {
         }
       }
 
-      // Base64 encoding like the test does
+      // Base64 encoding like the sharing feature does
       const jsonString = JSON.stringify(testConfig)
       const base64 = Buffer.from(jsonString).toString('base64')
       const urlSafeBase64 = base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '')
       
-      // Decode like loadProjectFromUrl does
+      // Decode like loadConfigFromUrl does
       const paddedBase64 = urlSafeBase64.replace(/-/g, '+').replace(/_/g, '/') + '='.repeat((4 - (urlSafeBase64.length % 4)) % 4)
       const decodedJsonString = atob(paddedBase64)
       const decodedConfig = JSON.parse(decodedJsonString)
 
-      // This should be valid AppConfig
+      // This should be valid as a complete AppConfig (not just a project)
       const appConfigResult = await Effect.runPromise(validateAppConfig(decodedConfig))
       expect(appConfigResult).toBeDefined()
+      expect(appConfigResult.project?.name).toBe("URL Test Project")
+      expect(appConfigResult.dicomServer.url).toBe("/api/orthanc/dicom-web")
+      expect(appConfigResult.anonymization.profileOptions).toEqual(["BasicProfile"])
+    })
 
-      // This should be valid ProjectConfig (only the project part)
-      const projectConfigResult = await Effect.runPromise(validateProjectConfig(decodedConfig.project))
-      expect(projectConfigResult).toBeDefined()
-      expect(projectConfigResult.name).toBe("URL Test Project")
+    it('should handle config without project correctly', async () => {
+      // Test sharing config without a project
+      const configWithoutProject = {
+        dicomServer: {
+          url: "/api/custom/dicom-web",
+          headers: {},
+          timeout: 45000,
+          auth: null,
+          description: "Custom server"
+        },
+        anonymization: {
+          profileOptions: ["BasicProfile", "RetainUIDsOption"],
+          removePrivateTags: false,
+          organizationRoot: "1.2.3.4.5"
+        }
+      }
+
+      const result = await Effect.runPromise(validateAppConfig(configWithoutProject))
+      expect(result).toBeDefined()
+      expect(result.project).toBeUndefined()
+      expect(result.dicomServer.url).toBe("/api/custom/dicom-web")
     })
   })
 })

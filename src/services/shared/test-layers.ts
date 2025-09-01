@@ -79,7 +79,6 @@ export const TestConfigLayer = Layer.succeed(
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString()
     }),
-    loadProject: (_projectConfig: unknown) => Effect.succeed(undefined),
     clearProject: Effect.succeed(undefined)
   })
 )

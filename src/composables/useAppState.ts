@@ -101,7 +101,10 @@ export function useAppState(runtime: RuntimeType) {
         Effect.gen(function* () {
           const configService = yield* ConfigService
           const project = yield* configService.createProject(name)
-          yield* configService.loadProject(project)
+          // Get current config and add the project to it
+          const currentConfig = yield* configService.getCurrentConfig
+          const updatedConfig = { ...currentConfig, project }
+          yield* configService.loadConfig(updatedConfig)
         })
       )
 
@@ -132,30 +135,26 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
-  const handleLoadProject = async (projectConfig: unknown): Promise<void> => {
+  const handleLoadConfig = async (configData: unknown): Promise<void> => {
     try {
-      // Extract project config if this is a full AppConfig
-      let actualProjectConfig = projectConfig
-      if (projectConfig && typeof projectConfig === 'object' && 'project' in projectConfig) {
-        actualProjectConfig = (projectConfig as any).project
-      }
-
-      const loadedProject = await runtime.runPromise(
+      const loadedConfig = await runtime.runPromise(
         Effect.gen(function* () {
           const configService = yield* ConfigService
-          yield* configService.loadProject(actualProjectConfig)
-          // Return the current project after loading
-          return yield* configService.getCurrentProject
+          yield* configService.loadConfig(configData)
+          // Return the loaded config
+          return yield* configService.getCurrentConfig
         })
       )
 
-      // Show success toast using the loaded project instead of reactive state
-      if (loadedProject) {
-        toast.success(`Loaded project: ${loadedProject.name}`)
+      // Show success toast if there's a project in the loaded config
+      if (loadedConfig.project) {
+        toast.success(`Loaded project: ${loadedConfig.project.name}`)
+      } else {
+        toast.success('Configuration loaded successfully')
       }
     } catch (error) {
-      console.error('Failed to load project:', error)
-      toast.error('Failed to load project')
+      console.error('Failed to load configuration:', error)
+      toast.error('Failed to load configuration')
       throw error
     }
   }
@@ -607,7 +606,7 @@ export function useAppState(runtime: RuntimeType) {
     handleConfigReload,
     handleCreateProject,
     handleClearProject,
-    handleLoadProject,
+    handleLoadConfig,
     processNewFiles,
     addFilesToUploaded,
     processFiles,
