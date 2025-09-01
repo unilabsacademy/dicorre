@@ -181,7 +181,28 @@ export function useAppState(runtime: RuntimeType) {
       console.error('Error processing files:', error)
       fileProcessing.clearProcessingState()
       if (error instanceof Error) {
-        setAppError(error)
+        // Check if it's an unsupported file format error
+        if (error.message.includes('unsupported format')) {
+          // Extract filename from error message if present
+          const fileNameMatch = error.message.match(/File ([^\s]+) has unsupported format/)
+          const fileName = fileNameMatch ? fileNameMatch[1] : 'Unknown file'
+          
+          toast.error('Unsupported file format', {
+            description: `${fileName} could not be processed. Only DICOM files (.dcm), ZIP archives, and supported image formats are accepted.`,
+            duration: 5000
+          })
+        } else if (error.message.includes('No valid DICOM files found')) {
+          toast.error('No DICOM files found', {
+            description: 'The uploaded file(s) did not contain any valid DICOM files.',
+            duration: 5000
+          })
+        } else {
+          // For other errors, show generic error message
+          toast.error('Failed to process files', {
+            description: error.message,
+            duration: 5000
+          })
+        }
       }
     }
   }

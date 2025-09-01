@@ -1,11 +1,13 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { uploadFiles, waitForAppReady } from './helpers';
 
 test('uploads single case zip file and checks correct grouping', async ({ page }) => {
   await page.goto('/');
+  await waitForAppReady(page);
 
   const testZipPath = path.join(process.cwd(), 'test-data/CASES/1_case_3_series_6_images.zip');
-  await page.getByTestId('file-input').setInputFiles(testZipPath);
+  await uploadFiles(page, testZipPath);
 
   const processingCard = page.getByTestId('file-processing-progress-card');
   await expect(processingCard).toBeHidden({ timeout: 10000 });

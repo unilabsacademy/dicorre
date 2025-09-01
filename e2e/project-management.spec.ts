@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test'
+import { waitForAppReady } from './helpers'
 
 test.describe('Project Management', () => {
   test('should create project, generate shareable URL, and load from URL', async ({ page, context }) => {
@@ -8,11 +9,8 @@ test.describe('Project Management', () => {
     // Navigate to the app
     await page.goto('/')
 
-    // Wait for app to be ready - either drop zone or toolbar should be visible
-    await Promise.race([
-      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { }),
-      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { })
-    ])
+    // Wait for app to be ready
+    await waitForAppReady(page)
 
     // Initially should show "No active project"
     await expect(page.getByText('No active project')).toBeVisible()
@@ -111,10 +109,7 @@ test.describe('Project Management', () => {
     await page.goto('/')
 
     // Wait for app to be ready
-    await Promise.race([
-      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { }),
-      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { })
-    ])
+    await waitForAppReady(page)
 
     // Click create project button
     await page.getByTestId('edit-project-button').click()

@@ -1,23 +1,21 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { uploadFiles, waitForAppReady } from './helpers';
 
 test.describe('Image Converter Plugin', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to app and wait for it to be ready
     await page.goto('/');
 
-    // Wait for app to be ready - either drop zone or toolbar should be visible
-    await Promise.race([
-      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { }),
-      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => { })
-    ]);
+    // Wait for app to be ready
+    await waitForAppReady(page);
 
     // If there's already data, clear it
     const clearButton = page.getByTestId('clear-all-button');
     if (await clearButton.isVisible()) {
       await clearButton.click();
       // Wait for drop zone to reappear after clearing
-      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+      await waitForAppReady(page);
     }
   });
 
@@ -29,7 +27,7 @@ test.describe('Image Converter Plugin', () => {
       path.join(process.cwd(), 'src/plugins/imageConverter/test-data/blue-rectangle.jpg'),
       path.join(process.cwd(), 'src/plugins/imageConverter/test-data/gradient.jpg')
     ];
-    await page.getByTestId('file-input').setInputFiles(testImagePaths);
+    await uploadFiles(page, testImagePaths);
 
     // Wait for file processing progress card to disappear
     const processingCard = page.getByTestId('file-processing-progress-card');
@@ -37,6 +35,7 @@ test.describe('Image Converter Plugin', () => {
 
     // Check if files were processed
     const filesCountBadge = page.getByTestId('files-count-badge');
+    await expect(filesCountBadge).toBeVisible({ timeout: 5000 });
     const filesCountText = await filesCountBadge.textContent();
     const fileCount = parseInt(filesCountText?.match(/(\d+)/)?.[1] || '0');
     expect(fileCount).toBe(3);
@@ -57,7 +56,7 @@ test.describe('Image Converter Plugin', () => {
       path.join(process.cwd(), 'src/plugins/imageConverter/test-data/orange-banner.png'),
       path.join(process.cwd(), 'src/plugins/imageConverter/test-data/radial-gradient.png')
     ];
-    await page.getByTestId('file-input').setInputFiles(testImagePaths);
+    await uploadFiles(page, testImagePaths);
 
     // Wait for file processing progress card to disappear
     const processingCard = page.getByTestId('file-processing-progress-card');
@@ -89,7 +88,7 @@ test.describe('Image Converter Plugin', () => {
       path.join(process.cwd(), 'src/plugins/imageConverter/test-data/radial-gradient.png')
     ];
 
-    await page.getByTestId('file-input').setInputFiles(testImagePaths);
+    await uploadFiles(page, testImagePaths);
 
     // Wait for file processing progress card to disappear
     const processingCard = page.getByTestId('file-processing-progress-card');
@@ -135,15 +134,19 @@ test.describe('Image Converter Plugin', () => {
 
     // Try to upload a text file (should be rejected)
     const testFilePath = path.join(process.cwd(), 'package.json'); // Use an existing non-image file
-    await page.getByTestId('file-input').setInputFiles([testFilePath]);
+    await uploadFiles(page, testFilePath);
 
-    // Wait a moment for potential processing
-    await page.waitForTimeout(1000);
-
-    // Check that no files were processed - drop zone should still be visible
-    await expect(page.getByTestId('drop-zone-text')).toBeVisible();
-
-    // Expect data table to be empty
-    expect(page.getByTestId("studies-data-table-empty")).toBeVisible()
+    // Wait for error toast to appear
+    const toast = page.locator('[data-sonner-toast]').filter({ hasText: /unsupported|DICOM/i });
+    await expect(toast).toBeVisible({ timeout: 5000 });
+    
+    // Check that no files were processed - files count should be 0 or not visible
+    const filesCountBadge = page.getByTestId('files-count-badge');
+    const isVisible = await filesCountBadge.isVisible().catch(() => false);
+    if (isVisible) {
+      const filesCountText = await filesCountBadge.textContent();
+      const fileCount = parseInt(filesCountText?.match(/(\d+)/)?.[1] || '0');
+      expect(fileCount).toBe(0);
+    }
   });
 });

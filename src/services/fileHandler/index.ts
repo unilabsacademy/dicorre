@@ -93,7 +93,7 @@ export const FileHandlerLive = Layer.effect(
         }
 
         return yield* Effect.fail(new ValidationError({
-          message: `File ${fileName} does not appear to be a valid DICOM file`,
+          message: `File ${fileName} has unsupported format. Only DICOM files (.dcm) and ZIP archives are supported`,
           fileName,
         }))
       })
@@ -267,9 +267,11 @@ export const FileHandlerLive = Layer.effect(
             )
         }
         
-        // No plugin found - try to read as DICOM anyway (might be headerless)
-        const dicomFile = yield* readSingleDicomFile(file)
-        return [dicomFile]
+        // No plugin found and not a recognized format
+        return yield* Effect.fail(new FileHandlerError({
+          message: `File ${file.name} has unsupported format. Only DICOM files (.dcm), ZIP archives, and supported image formats are accepted`,
+          fileName: file.name
+        }))
       })
     
     return {

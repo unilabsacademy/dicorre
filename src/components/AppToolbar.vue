@@ -56,6 +56,7 @@ const emit = defineEmits<{
   clearAll: []
   testConnection: []
   configLoaded: []
+  addFiles: [files: File[]]
 }>()
 
 const showProjectEditSheet = ref(false)
@@ -74,6 +75,15 @@ async function handleClearProject() {
 
 async function handleShareProject() {
   await copyShareableUrl()
+}
+
+function handleFileInput(event: Event) {
+  const target = event.target as HTMLInputElement
+  const files = Array.from(target.files || [])
+  if (files.length > 0) {
+    emit('addFiles', files)
+    target.value = ''
+  }
 }
 </script>
 
@@ -146,6 +156,24 @@ async function handleShareProject() {
 
     <!-- Right Side: Actions -->
     <div class="flex items-center gap-2">
+      <input
+        type="file"
+        multiple
+        @change="handleFileInput"
+        class="hidden"
+        id="toolbar-file-input"
+        data-testid="toolbar-file-input"
+      >
+      <Button asChild variant="outline" size="sm">
+        <label
+          for="toolbar-file-input"
+          class="cursor-pointer"
+          data-testid="toolbar-add-button"
+        >
+          <Plus class="w-4 h-4 mr-2" />
+          Add Files
+        </label>
+      </Button>
       <Button
         @click="emit('anonymizeSelected')"
         :disabled="props.selectedStudiesCount === 0"

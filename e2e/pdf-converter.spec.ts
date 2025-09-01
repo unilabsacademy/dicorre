@@ -1,23 +1,21 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
+import { uploadFiles, waitForAppReady } from './helpers';
 
 test.describe('PDF Converter Plugin', () => {
   test.beforeEach(async ({ page }) => {
     // Navigate to app and wait for it to be ready
     await page.goto('/');
     
-    // Wait for app to be ready - either drop zone or toolbar should be visible
-    await Promise.race([
-      page.getByTestId('drop-zone-text').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {}),
-      page.getByTestId('app-toolbar').waitFor({ state: 'visible', timeout: 5000 }).catch(() => {})
-    ]);
+    // Wait for app to be ready
+    await waitForAppReady(page);
     
     // If there's already data, clear it
     const clearButton = page.getByTestId('clear-all-button');
     if (await clearButton.isVisible()) {
       await clearButton.click();
       // Wait for drop zone to reappear after clearing
-      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+      await waitForAppReady(page);
     }
   });
 
@@ -25,7 +23,7 @@ test.describe('PDF Converter Plugin', () => {
 
     // Upload the test PDF
     const testPdfPath = path.join(process.cwd(), 'src/plugins/pdfConverter/test-data/test-document.pdf');
-    await page.getByTestId('file-input').setInputFiles([testPdfPath]);
+    await uploadFiles(page, testPdfPath);
 
     // Wait for file processing progress card to disappear
     const processingCard = page.getByTestId('file-processing-progress-card');
@@ -50,7 +48,7 @@ test.describe('PDF Converter Plugin', () => {
 
     // Upload the test PDF
     const testPdfPath = path.join(process.cwd(), 'src/plugins/pdfConverter/test-data/test-document.pdf');
-    await page.getByTestId('file-input').setInputFiles([testPdfPath]);
+    await uploadFiles(page, testPdfPath);
 
     // Wait for file processing progress card to disappear
     const processingCard = page.getByTestId('file-processing-progress-card');

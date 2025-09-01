@@ -1,6 +1,7 @@
 import { test, expect } from '@playwright/test';
 import path from 'path';
 import fs from 'fs';
+import { waitForAppReady } from './helpers';
 
 test.describe('Config Loading', () => {
   test.beforeEach(async ({ page }) => {
@@ -30,7 +31,7 @@ test.describe('Config Loading', () => {
 
     try {
       // Wait for initial app to load
-      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+      await waitForAppReady(page);
       
       // Open settings menu and click Load Config
       await page.getByTestId('settings-menu-button').click();
@@ -69,7 +70,7 @@ test.describe('Config Loading', () => {
 
     try {
       // Wait for initial app to load
-      await expect(page.getByTestId('drop-zone-text')).toBeVisible({ timeout: 5000 });
+      await waitForAppReady(page);
       
       // Open settings menu and click Load Config
       await page.getByTestId('settings-menu-button').click();

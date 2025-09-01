@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import path from 'path'
+import { uploadFiles, waitForAppReady } from './helpers'
 
 test.describe('Download Functionality', () => {
   test('should download selected studies as ZIP file', async ({ page }) => {
@@ -7,11 +8,11 @@ test.describe('Download Functionality', () => {
     await page.goto('/')
     
     // Wait for the app to be ready
-    await expect(page.getByTestId('drop-zone-text')).toBeVisible()
+    await waitForAppReady(page)
     
     // Upload test ZIP file
     const testZipPath = path.join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip')
-    await page.getByTestId('file-input').setInputFiles(testZipPath)
+    await uploadFiles(page, testZipPath)
     
     // Wait for file processing to complete
     const processingCard = page.getByTestId('file-processing-progress-card')
@@ -74,7 +75,7 @@ test.describe('Download Functionality', () => {
     
     // Upload and wait for processing
     const testZipPath = path.join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip')
-    await page.getByTestId('file-input').setInputFiles(testZipPath)
+    await uploadFiles(page, testZipPath)
     
     const processingCard = page.getByTestId('file-processing-progress-card')
     await expect(processingCard).toBeHidden({ timeout: 10000 })
@@ -107,7 +108,7 @@ test.describe('Download Functionality', () => {
     
     // Upload test data
     const testZipPath = path.join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip')
-    await page.getByTestId('file-input').setInputFiles(testZipPath)
+    await uploadFiles(page, testZipPath)
     
     const processingCard = page.getByTestId('file-processing-progress-card')
     await expect(processingCard).toBeHidden({ timeout: 10000 })
@@ -139,7 +140,7 @@ test.describe('Download Functionality', () => {
     
     // Upload test data
     const testZipPath = path.join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip')
-    await page.getByTestId('file-input').setInputFiles(testZipPath)
+    await uploadFiles(page, testZipPath)
     
     const processingCard = page.getByTestId('file-processing-progress-card')
     await expect(processingCard).toBeHidden({ timeout: 10000 })
@@ -160,7 +161,7 @@ test.describe('Download Functionality', () => {
     
     // Upload test data
     const testZipPath = path.join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip')
-    await page.getByTestId('file-input').setInputFiles(testZipPath)
+    await uploadFiles(page, testZipPath)
     
     const processingCard = page.getByTestId('file-processing-progress-card')
     await expect(processingCard).toBeHidden({ timeout: 10000 })

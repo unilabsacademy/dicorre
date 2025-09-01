@@ -52,11 +52,6 @@ const isAppReady = computed(() => {
   return !appState.configLoading.value && !appState.configError.value && appState.config.value !== null
 })
 
-const showFileDropZone = computed(() => {
-  return isAppReady.value &&
-    (!appState.studies.value || appState.studies.value.length === 0) &&
-    !isRestoring.value
-})
 
 const showStudiesTable = computed(() => {
   return isAppReady.value && appState.studies.value && appState.studies.value.length > 0
@@ -221,6 +216,7 @@ onUnmounted(() => {
         @clear-all="clearFiles"
         @test-connection="testConnection"
         @config-loaded="handleConfigLoaded"
+        @add-files="(files) => { addFilesToUploaded(files); processNewFiles(files) }"
       />
 
       <!-- File Processing Progress -->
@@ -233,46 +229,6 @@ onUnmounted(() => {
         :current-file-index="fileProcessingState.currentFileIndex"
       />
 
-      <!-- File Drop Zone -->
-      <Card
-        v-if="showFileDropZone"
-        data-testid="file-drop-zone"
-        class="border-dashed border-2 cursor-pointer transition-colors hover:border-primary/50"
-        :class="{ 'border-primary bg-primary/5': isDragOver }"
-        @drop="(event: any) => handleDrop(event, { onFilesAdded: addFilesToUploaded, onProcessFiles: processNewFiles })"
-        @dragover="(event: any) => handleDragOver(event)"
-        @dragleave="() => handleDragLeave()"
-      >
-        <CardContent class="flex flex-col items-center justify-center py-16">
-          <div class="text-center space-y-4">
-            <div class="text-6xl text-muted-foreground">📁</div>
-            <div>
-              <p
-                data-testid="drop-zone-text"
-                class="text-lg text-muted-foreground mb-4"
-              >Drop DICOM files here or</p>
-              <input
-                type="file"
-                accept=".dcm,.zip,.jpg,.jpeg,.png,.bmp"
-                multiple
-                @change="(event) => handleFileInput(event, { onFilesAdded: addFilesToUploaded, onProcessFiles: processNewFiles })"
-                class="hidden"
-                id="file-input"
-                data-testid="file-input"
-              >
-              <Button asChild>
-                <label
-                  for="file-input"
-                  class="cursor-pointer"
-                  data-testid="browse-files-button"
-                >
-                  Browse Files
-                </label>
-              </Button>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
 
       <!-- Studies Data Table -->
       <DataTable

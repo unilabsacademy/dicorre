@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test'
 import path from 'path'
+import { uploadFiles } from './helpers'
 
 test.describe('DICOM Sending with Real Orthanc Server', () => {
 
@@ -14,7 +15,7 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
     await page.waitForSelector('[data-sonner-toast]', { timeout: 5000 })
 
     const testZipPath = path.join(process.cwd(), 'test-data/CASES/1_case_3_series_6_images.zip')
-    await page.getByTestId('file-input').setInputFiles(testZipPath)
+    await uploadFiles(page, testZipPath)
 
     const processingCard = page.getByTestId('file-processing-progress-card')
     await expect(processingCard).toBeHidden({ timeout: 10000 })
