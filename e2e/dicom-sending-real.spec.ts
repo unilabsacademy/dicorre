@@ -69,7 +69,7 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
         data: '--boundary123\r\nContent-Type: application/dicom\r\n\r\n\r\n--boundary123--'
       })
       expect(postResponse.status()).toBeLessThan(500)
-    } catch (error) {}
+    } catch {}
     
     const browserResponse = await page.evaluate(async () => {
       try {

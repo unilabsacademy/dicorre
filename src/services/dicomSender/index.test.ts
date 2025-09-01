@@ -32,7 +32,10 @@ describe('DicomSender Service (Effect Service Testing)', () => {
       await expect(
         runTest(Effect.gen(function* () {
           const sender = yield* DicomSender
-          return yield* sender.testConnection
+          return yield* sender.testConnection({
+            url: 'http://localhost:8042',
+            description: 'Test Server'
+          })
         }))
       ).rejects.toThrow()
     })
@@ -63,7 +66,10 @@ describe('DicomSender Service (Effect Service Testing)', () => {
       await expect(
         runTest(Effect.gen(function* () {
           const sender = yield* DicomSender
-          return yield* sender.sendFile(mockFile)
+          return yield* sender.sendFile(mockFile, {
+            url: 'http://localhost:8042',
+            description: 'Test Server'
+          })
         }))
       ).rejects.toThrow()
     })

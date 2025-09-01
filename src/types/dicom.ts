@@ -63,6 +63,7 @@ export interface DicomFileMetadata {
   fileSize: number
   metadata?: DicomMetadata
   anonymized?: boolean
+  sent?: boolean
   // Reference to OPFS file
   opfsFileId?: string
 }

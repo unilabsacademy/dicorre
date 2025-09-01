@@ -44,7 +44,8 @@ export const SessionPersistenceLive = Layer.scoped(
             fileName: f.fileName,
             fileSize: f.fileSize,
             metadata: f.metadata,
-            anonymized: f.anonymized
+            anonymized: f.anonymized,
+            sent: f.sent
           }))
         }
         try {
@@ -62,18 +63,19 @@ export const SessionPersistenceLive = Layer.scoped(
 
         for (const file of files) {
           if (!existingIds.has(file.id)) {
-            try {
-              const exists = yield* storage.fileExists(file.id)
-              if (!exists) {
-                yield* storage.saveFile(file.id, file.arrayBuffer)
-                const verify = yield* storage.fileExists(file.id)
-                if (!verify) {
-                  // best-effort; do not fail the persistence effect
+            yield* Effect.catchAll(
+              Effect.gen(function* () {
+                const exists = yield* storage.fileExists(file.id)
+                if (!exists) {
+                  yield* storage.saveFile(file.id, file.arrayBuffer)
+                  const verify = yield* storage.fileExists(file.id)
+                  if (!verify) {
+                    // best-effort; do not fail the persistence effect
+                  }
                 }
-              }
-            } catch {
-              // ignore OPFS failures in persist
-            }
+              }),
+              () => Effect.succeed(undefined) // ignore OPFS failures in persist
+            )
           }
         }
 
@@ -90,26 +92,19 @@ export const SessionPersistenceLive = Layer.scoped(
         const restored: DicomFile[] = []
         for (let idx = 0; idx < persisted.files.length; idx++) {
           const meta = persisted.files[idx]
-          try {
-            const arrayBuffer = yield* storage.loadFile(meta.id)
-            restored.push({
-              id: meta.id,
-              fileName: meta.fileName,
-              fileSize: meta.fileSize,
-              arrayBuffer,
-              metadata: meta.metadata,
-              anonymized: meta.anonymized
-            })
-          } catch {
-            restored.push({
-              id: meta.id,
-              fileName: meta.fileName,
-              fileSize: meta.fileSize,
-              arrayBuffer: new ArrayBuffer(0),
-              metadata: meta.metadata,
-              anonymized: meta.anonymized
-            })
-          }
+          const arrayBuffer = yield* Effect.catchAll(
+            storage.loadFile(meta.id),
+            () => Effect.succeed(new ArrayBuffer(0))
+          )
+          restored.push({
+            id: meta.id,
+            fileName: meta.fileName,
+            fileSize: meta.fileSize,
+            arrayBuffer,
+            metadata: meta.metadata,
+            anonymized: meta.anonymized,
+            sent: meta.sent
+          })
           if (onProgress) {
             try {
               onProgress(Math.round(((idx + 1) / persisted.files.length) * 100))
@@ -117,7 +112,10 @@ export const SessionPersistenceLive = Layer.scoped(
           }
         }
 
-        const studies = yield* processor.groupFilesByStudy(restored)
+        const studies = yield* Effect.catchAll(
+          processor.groupFilesByStudy(restored),
+          () => Effect.succeed([] as DicomStudy[])
+        )
         return { files: restored, studies }
       })
 
@@ -125,9 +123,10 @@ export const SessionPersistenceLive = Layer.scoped(
       try {
         localStorage.setItem(STORAGE_KEY, JSON.stringify({ files: [] } satisfies PersistedSession))
       } catch { }
-      try {
-        yield* storage.clearAllFiles
-      } catch { }
+      yield* Effect.catchAll(
+        storage.clearAllFiles,
+        () => Effect.succeed(undefined)
+      )
     })
 
     return {

@@ -13,7 +13,6 @@ import { AnonymizerLive } from '../anonymizer'
 import { DicomSenderLive } from '../dicomSender'
 import { DownloadServiceLive } from '../downloadService'
 import { SessionPersistenceLive } from '../sessionPersistence'
-import { EventBusLayer } from '../eventBus'
 
 /**
  * Base services with no dependencies
@@ -49,7 +48,6 @@ export const AdvancedServicesLayer = Layer.mergeAll(
  * Complete application layer with all services
  */
 export const AppLayer = Layer.mergeAll(
-  EventBusLayer,
   ConfigServiceLive.pipe(Layer.provide(ConfigPersistenceLocalStorage)),
   PluginRegistryLive,
   OPFSStorageLive,

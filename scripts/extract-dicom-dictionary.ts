@@ -67,7 +67,7 @@ console.log()
 
 // Output the complete dictionary to a TypeScript file
 const outputPath = '../src/utils/dicom-tag-dictionary.ts'
-const tsContent = `/**
+const _tsContent = `/**
  * DICOM Tag Dictionary
  * Generated from DICOM deidentification reference data
  * Maps between tag hex values and official DICOM tag names

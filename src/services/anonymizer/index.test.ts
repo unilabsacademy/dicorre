@@ -4,7 +4,6 @@ import { readFileSync } from 'fs'
 import { join } from 'path'
 import { Anonymizer, AnonymizerLive } from './index'
 import { DicomProcessor, DicomProcessorLive } from '../dicomProcessor'
-import { EventBusLayer } from '../eventBus'
 import { Layer } from 'effect'
 import { clearValueCache } from './handlers'
 import type { DicomFile } from '@/types/dicom'
@@ -31,7 +30,6 @@ function loadTestDicomFile(relativePath: string): DicomFile {
 describe('Anonymizer Service (Effect Service Testing)', () => {
   // AnonymizerLive requires DicomProcessor and ConfigService, so we compose them properly
   const testLayer = Layer.mergeAll(
-    EventBusLayer,
     DicomProcessorLive,
     TestConfigLayer,
     AnonymizerLive.pipe(Layer.provide(Layer.mergeAll(DicomProcessorLive, TestConfigLayer)))

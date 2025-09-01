@@ -17,7 +17,7 @@ export function useProjectSharing() {
   async function generateShareableUrl(): Promise<string> {
     try {
       // Get current config
-      const config = await runtime.runPromise(
+      const config = await runtime?.runPromise(
         Effect.gen(function* () {
           const configService = yield* ConfigService
           return yield* configService.getCurrentConfig
@@ -81,7 +81,7 @@ export function useProjectSharing() {
 
         const decompressed = pako.inflate(compressed, { to: 'string' })
         config = JSON.parse(decompressed) as AppConfig
-      } catch (_decompressError) {
+      } catch {
         try {
           // If decompression fails, try parsing as uncompressed base64
           const jsonString = atob(paddedBase64)

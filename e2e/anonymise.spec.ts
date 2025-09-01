@@ -126,8 +126,8 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
 
   if (cellCount > 0) {
     for (let i = 0; i < Math.min(cellCount, 3); i++) {
-      const cellText = await anonymizedCells.nth(i).textContent();
-      expect(cellText).toBe('Anonymized');
+      const cellText = anonymizedCells.nth(i);
+      await expect(cellText).toHaveText('Anonymized');
     }
   }
 

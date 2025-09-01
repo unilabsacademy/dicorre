@@ -5,7 +5,6 @@
  */
 
 import { execSync } from 'child_process'
-import { readFileSync } from 'fs'
 import { isValidTagHex, getTagName } from '../src/utils/dicom-tag-dictionary'
 
 function findHexTags() {

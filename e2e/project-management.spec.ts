@@ -35,11 +35,11 @@ test.describe('Project Management', () => {
     await expect(page.getByText(`Project "${projectName}" created`)).toBeVisible()
 
     // Sheet should close
-    await expect(page.getByText('Create New Project')).not.toBeVisible()
+    await expect(page.getByText('Create New Project')).toBeHidden()
 
     // Project should now be active - wait for UI to update
     await expect(page.getByTestId('project-title')).toContainText(projectName, { timeout: 3000 })
-    await expect(page.getByText('No active project')).not.toBeVisible()
+    await expect(page.getByText('No active project')).toBeHidden()
 
     // Step 2: Generate shareable URL - wait for button to be enabled
     await expect(page.getByTestId('share-project-button')).toBeEnabled()
@@ -51,7 +51,6 @@ test.describe('Project Management', () => {
     // Step 3: Test loading project from URL
     // Get the current URL with project parameter (simulating clipboard content)
     // For testing purposes, we'll create a test URL manually since clipboard access is limited in tests
-    const currentUrl = page.url()
 
     // Clear the project first to test URL loading
     await page.getByTestId('clear-project-button').click()
@@ -131,6 +130,6 @@ test.describe('Project Management', () => {
 
     // Cancel should work
     await page.getByTestId('cancel-project-button').click()
-    await expect(page.getByText('Create New Project')).not.toBeVisible()
+    await expect(page.getByText('Create New Project')).toBeHidden()
   })
 })

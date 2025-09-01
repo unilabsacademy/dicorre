@@ -20,7 +20,7 @@ import { DicomProcessor } from '../dicomProcessor'
 import type { AnonymizationConfig } from '../config/schema'
 import { getAllSpecialHandlers } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
-import { AnonymizationError, type AnonymizerError, ConfigurationError } from '@/types/effects'
+import { AnonymizationError, type AnonymizerError } from '@/types/effects'
 import { tag } from '@/utils/dicom-tag-dictionary'
 
 export interface AnonymizationProgress {

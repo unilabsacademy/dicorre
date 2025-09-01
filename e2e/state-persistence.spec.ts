@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test'
 import path from 'path'
-import { uploadFiles, waitForAppReady } from './helpers'
+import { uploadFiles } from './helpers'
 
 test('persists uploaded files and UI state across page reload', async ({ page }) => {
   await page.goto('/')

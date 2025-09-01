@@ -2,7 +2,7 @@
  * Test layers for isolated testing (without dependencies)
  */
 
-import { Effect, Layer } from "effect"
+import { Effect, Layer, Stream } from "effect"
 import { ConfigService } from '../config'
 import { FileHandler } from '../fileHandler'
 import { OPFSStorage } from '../opfsStorage'
@@ -79,7 +79,8 @@ export const TestConfigLayer = Layer.succeed(
       id: crypto.randomUUID(),
       createdAt: new Date().toISOString()
     }),
-    clearProject: Effect.succeed(undefined)
+    clearProject: Effect.succeed(undefined),
+    configChanges: Stream.empty
   })
 )
 

@@ -3,8 +3,7 @@ import {
   DicomDeidentifier, 
   BasicProfile, 
   CleanDescOption,
-  CleanGraphOption,
-  RetainDeviceIdentOption 
+  CleanGraphOption
 } from '@umessen/dicom-deidentifier'
 import * as fs from 'fs'
 import * as path from 'path'
@@ -105,7 +104,7 @@ async function testAnonymization() {
         
         try {
           const minimalDeidentifier = new DicomDeidentifier(minimalConfig)
-          const minimalResult = minimalDeidentifier.deidentify(uint8Array)
+          minimalDeidentifier.deidentify(uint8Array)
           console.log('✅ Minimal anonymization succeeded!')
         } catch (minimalError: any) {
           console.error('❌ Even minimal config failed:', minimalError.message)

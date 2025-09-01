@@ -3,7 +3,6 @@ import { Effect, Layer } from 'effect'
 import { ConfigService, ConfigServiceLive } from './index'
 import type { AppConfig, DicomProfileOption } from './schema'
 import { ConfigPersistence } from '@/services/configPersistence'
-import defaultConfig from '@/../app.config.json'
 
 describe('ConfigService (Effect Service Testing)', () => {
   // Create a test persistence layer that doesn't use localStorage

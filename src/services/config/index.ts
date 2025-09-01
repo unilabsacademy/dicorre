@@ -1,6 +1,6 @@
 import { Effect, Context, Layer, SubscriptionRef, Stream } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption, ProjectConfig } from './schema'
-import { ConfigurationError, type ConfigurationError as ConfigurationErrorType, type ParseError } from '@/types/effects'
+import { ConfigurationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig } from './schema'
 import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'

@@ -39,7 +39,7 @@ export function useFileProcessing() {
       const fileHandler = yield* FileHandler
       const processor = yield* DicomProcessor
 
-      let localDicomFiles: DicomFile[] = []
+      const localDicomFiles: DicomFile[] = []
 
       for (let i = 0; i < newUploadedFiles.length; i++) {
         const file = newUploadedFiles[i]
