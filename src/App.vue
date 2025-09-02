@@ -47,7 +47,6 @@ const {
 } = appState.dragAndDrop
 
 const {
-  fileProcessingState,
   individualFileProcessingStates,
   getActiveFileProcessingStates,
   getAllFileProcessingStates,
@@ -230,16 +229,6 @@ onUnmounted(() => {
       />
 
       <!-- File Processing Progress -->
-      <!-- Global file processing progress (when organizing files into studies) -->
-      <FileProcessingProgress
-        v-if="fileProcessingState?.isProcessing"
-        :file-name="fileProcessingState.fileName"
-        :current-step="fileProcessingState.currentStep"
-        :progress="fileProcessingState.progress"
-        :total-files="fileProcessingState.totalFiles"
-        :current-file-index="fileProcessingState.currentFileIndex"
-      />
-
       <!-- Individual file processing progress indicators -->
       <div
         v-if="getAllFileProcessingStates().length > 0"

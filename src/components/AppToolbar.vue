@@ -131,6 +131,10 @@ const clearDialogDescription = computed(() => {
   >
     <!-- Left Side: Project Info -->
     <div class="flex items-center gap-3">
+      <img
+        src="/logo.png"
+        class="w-14"
+      ></img>
       <div class="flex items-center gap-2">
         <div class="mr-4 flex gap-2 items-center">
           <Folder class="h-5 w-5 text-primary" />

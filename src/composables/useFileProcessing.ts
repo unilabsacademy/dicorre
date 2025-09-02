@@ -1,5 +1,5 @@
 import { ref } from 'vue'
-import { Effect, Fiber, FiberRef } from 'effect'
+import { Effect, Fiber } from 'effect'
 import type { DicomFile, DicomStudy } from '@/types/dicom'
 import type { RuntimeType } from '@/types/effects'
 import { FileHandler } from '@/services/fileHandler'
@@ -30,8 +30,8 @@ export function useFileProcessing(runtime: RuntimeType) {
   const fileProcessingState = ref<FileProcessingState | null>(null)
   // Map to track individual file processing states for concurrent operations
   const individualFileProcessingStates = ref<Map<string, IndividualFileProcessingState>>(new Map())
-  // Keep track of active processing fibers for interruption
-  const activeProcessingFiber = ref<Fiber.RuntimeFiber<DicomFile[], Error> | null>(null)
+  // Keep track of multiple active processing operations
+  const activeProcessingOperations = ref<Map<string, Fiber.RuntimeFiber<DicomFile[], Error>>>(new Map())
 
   const processNewFilesEffect = (
     newUploadedFiles: File[],
@@ -206,6 +206,18 @@ export function useFileProcessing(runtime: RuntimeType) {
               isProcessing: false
             })
 
+            // Clear successful state immediately (no delay)
+            setTimeout(() => {
+              if (individualFileProcessingStates.value.has(fileId)) {
+                const state = individualFileProcessingStates.value.get(fileId)
+                // Only remove if still completed (not reused by another operation)
+                if (state && !state.isProcessing && !state.error) {
+                  individualFileProcessingStates.value.delete(fileId)
+                  individualFileProcessingStates.value = new Map(individualFileProcessingStates.value)
+                }
+              }
+            }, 0) // Use setTimeout with 0 to defer until after current execution
+
             console.log(`File ${file.name} processed successfully: ${parsedFiles.length} DICOM files`)
             return parsedFiles
 
@@ -284,7 +296,8 @@ export function useFileProcessing(runtime: RuntimeType) {
 
       console.log(`Successfully processed ${localDicomFiles.length} new DICOM files from ${newUploadedFiles.length} uploaded files using concurrent processing`)
 
-      // Clear only successfully processed individual file states (keep error states visible)
+      // Clear successfully completed individual file states immediately (no delay)
+      // Keep error states visible for user review
       const errorStates = new Map<string, IndividualFileProcessingState>()
       for (const [key, state] of individualFileProcessingStates.value.entries()) {
         if (state.error) {
@@ -296,20 +309,20 @@ export function useFileProcessing(runtime: RuntimeType) {
       // Clean up error states after a delay
       if (errorStates.size > 0) {
         setTimeout(() => {
-          individualFileProcessingStates.value.clear()
-          individualFileProcessingStates.value = new Map()
+          // Only clear the error states that are still the same (not from new operations)
+          const currentStates = individualFileProcessingStates.value
+          const activeStates = new Map()
+          for (const [key, state] of currentStates.entries()) {
+            if (state.isProcessing || !errorStates.has(key)) {
+              activeStates.set(key, state)
+            }
+          }
+          individualFileProcessingStates.value = activeStates
         }, 5000)
       }
 
-      // Final phase: Organize into studies
-      fileProcessingState.value = {
-        isProcessing: true,
-        fileName: `${localDicomFiles.length} DICOM files`,
-        currentStep: 'Organizing files into studies...',
-        progress: 95,
-        totalFiles: localDicomFiles.length,
-        currentFileIndex: localDicomFiles.length
-      }
+      // Final phase: Organize into studies (internal state only, not shown in UI)
+      console.log('Organizing files into studies...')
 
       // Only now add to existing DICOM files (after OPFS persistence is complete)
       const updatedFiles = [...options.dicomFiles, ...localDicomFiles]
@@ -321,29 +334,22 @@ export function useFileProcessing(runtime: RuntimeType) {
 
       console.log(`Organized ${localDicomFiles.length} new files, total: ${updatedFiles.length} files in ${groupedStudies.length} studies`)
 
-      fileProcessingState.value = {
-        isProcessing: true,
-        fileName: `Processing complete`,
-        currentStep: `Successfully processed ${localDicomFiles.length} files into ${groupedStudies.length} studies`,
-        progress: 100,
-        currentFileIndex: localDicomFiles.length,
-        totalFiles: localDicomFiles.length
-      }
-
-      // Clear processing states after completion
-      setTimeout(() => {
-        fileProcessingState.value = null
-        individualFileProcessingStates.value.clear()
-        individualFileProcessingStates.value = new Map()
-      }, 2000)
+      // No delay for successful completion - states were already cleared above
 
       return localDicomFiles
     })
 
   const clearProcessingState = () => {
     fileProcessingState.value = null
-    individualFileProcessingStates.value.clear()
-    individualFileProcessingStates.value = new Map()
+    // Only clear non-processing states
+    const currentStates = individualFileProcessingStates.value
+    const activeStates = new Map()
+    for (const [key, state] of currentStates.entries()) {
+      if (state.isProcessing) {
+        activeStates.set(key, state)
+      }
+    }
+    individualFileProcessingStates.value = activeStates
   }
 
   const getActiveFileProcessingStates = () => {
@@ -359,7 +365,9 @@ export function useFileProcessing(runtime: RuntimeType) {
     const activeStates = new Map()
 
     for (const [key, state] of currentStates.entries()) {
-      if (state.isProcessing) {
+      // Keep processing states and recent errors (less than 5 seconds old)
+      const isRecentError = state.error && (Date.now() - state.startTime < 5000)
+      if (state.isProcessing || isRecentError) {
         activeStates.set(key, state)
       }
     }
@@ -372,30 +380,34 @@ export function useFileProcessing(runtime: RuntimeType) {
   }
 
   const cancelProcessing = () => {
-    if (activeProcessingFiber.value) {
-      console.log('Cancelling active file processing...')
-      // Interrupt the fiber
-      Effect.runSync(Fiber.interrupt(activeProcessingFiber.value))
-      activeProcessingFiber.value = null
-
-      // Update UI states
-      fileProcessingState.value = null
-
-      // Mark all processing files as cancelled
-      const currentStates = individualFileProcessingStates.value
-      for (const [key, state] of currentStates.entries()) {
-        if (state.isProcessing) {
-          currentStates.set(key, {
-            ...state,
-            isProcessing: false,
-            currentStep: 'Processing cancelled',
-            error: 'Processing was cancelled by user',
-            progress: 100
-          })
-        }
-      }
-      individualFileProcessingStates.value = new Map(currentStates)
+    console.log('Cancelling all active file processing...')
+    
+    // Interrupt all active operations
+    for (const [_opId, fiber] of activeProcessingOperations.value.entries()) {
+      Effect.runSync(Fiber.interrupt(fiber))
     }
+    
+    // Clear all operations
+    activeProcessingOperations.value.clear()
+    activeProcessingOperations.value = new Map()
+
+    // Update UI states
+    fileProcessingState.value = null
+
+    // Mark all processing files as cancelled
+    const currentStates = individualFileProcessingStates.value
+    for (const [key, state] of currentStates.entries()) {
+      if (state.isProcessing) {
+        currentStates.set(key, {
+          ...state,
+          isProcessing: false,
+          currentStep: 'Processing cancelled',
+          error: 'Processing was cancelled by user',
+          progress: 100
+        })
+      }
+    }
+    individualFileProcessingStates.value = new Map(currentStates)
   }
 
   const processNewFilesWithInterruption = async (
@@ -408,18 +420,36 @@ export function useFileProcessing(runtime: RuntimeType) {
       onUpdateStudies?: (updatedStudies: DicomStudy[]) => void
     }
   ) => {
-    // Clear any previous processing state
-    clearProcessingState()
-
+    // Generate unique operation ID for this batch
+    const operationId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    
     try {
-      // Run through the provided runtime which has all dependencies
-      return await runtime.runPromise(processNewFilesEffect(newUploadedFiles, options))
-
+      // Start the fiber for this operation
+      const fiber = runtime.runFork(processNewFilesEffect(newUploadedFiles, options))
+      
+      // Track this operation
+      activeProcessingOperations.value.set(operationId, fiber)
+      activeProcessingOperations.value = new Map(activeProcessingOperations.value)
+      
+      // Wait for completion
+      const result = await runtime.runPromise(Fiber.join(fiber))
+      
+      // Clean up completed operation
+      activeProcessingOperations.value.delete(operationId)
+      activeProcessingOperations.value = new Map(activeProcessingOperations.value)
+      
+      return result
     } catch (error) {
-      activeProcessingFiber.value = null
+      // Clean up on error
+      activeProcessingOperations.value.delete(operationId)
+      activeProcessingOperations.value = new Map(activeProcessingOperations.value)
       console.error('Error in file processing:', error)
       throw error
     }
+  }
+
+  const hasActiveOperations = () => {
+    return activeProcessingOperations.value.size > 0
   }
 
   return {
@@ -432,6 +462,7 @@ export function useFileProcessing(runtime: RuntimeType) {
     getAllFileProcessingStates,
     removeCompletedFileProcessingStates,
     hasActiveProcessing,
-    cancelProcessing
+    cancelProcessing,
+    hasActiveOperations
   }
 }
