@@ -3,6 +3,8 @@ import type { DicomStudy } from '@/types/dicom'
 import { h } from 'vue'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
+import { ArrowUp, ArrowDown } from 'lucide-vue-next'
 import StudyProgressIndicator from '@/components/StudyProgressIndicator.vue'
 
 export const columns: ColumnDef<DicomStudy>[] = [
@@ -23,7 +25,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     accessorKey: 'accessionNumber',
-    header: 'Accession Number',
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Accession Number'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const accessionNumber = row.getValue('accessionNumber') as string
       return h('div', { class: 'font-medium' }, accessionNumber || 'Unknown Accession Number')
@@ -31,7 +45,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     accessorKey: 'patientId',
-    header: 'Patient ID',
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Patient ID'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const patientId = row.getValue('patientId') as string
       return h('div', { class: 'text-muted-foreground' }, patientId || 'Unknown')
@@ -39,7 +65,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     accessorKey: 'assignedPatientId',
-    header: 'Assigned Patient ID',
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Assigned Patient ID'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const pid = row.getValue('assignedPatientId') as string
       return h('div', { class: 'font-medium' }, pid || '-')
@@ -47,7 +85,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     accessorKey: 'studyDate',
-    header: 'Study Date',
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Study Date'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const date = row.getValue('studyDate') as string
       if (date && date.length === 8) {
@@ -60,7 +110,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     accessorKey: 'studyDescription',
-    header: 'Study Description',
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Study Description'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const description = row.getValue('studyDescription') as string
       return h('div', { class: 'max-w-[200px] truncate' }, description || 'No description')
@@ -68,7 +130,20 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     id: 'seriesCount',
-    header: 'Series',
+    accessorFn: row => row.series.length,
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Series'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const study = row.original
       return h(Badge, { variant: 'secondary' }, () => study.series.length.toString())
@@ -76,7 +151,20 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     id: 'fileCount',
-    header: 'Files',
+    accessorFn: row => row.series.reduce((sum, s) => sum + s.files.length, 0),
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Files'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const study = row.original
       const fileCount = study.series.reduce((sum, s) => sum + s.files.length, 0)
@@ -85,7 +173,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     accessorKey: 'studyInstanceUID',
-    header: 'Study UID',
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Study UID'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const uid = row.getValue('studyInstanceUID') as string
       return h('div', {
@@ -96,7 +196,24 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     id: 'anonymized',
-    header: 'Anonymized',
+    accessorFn: row => {
+      const totalFiles = row.series.reduce((sum, s) => sum + s.files.length, 0)
+      const anonymizedFiles = row.series.reduce((sum, s) => sum + s.files.filter(f => f.anonymized).length, 0)
+      return totalFiles > 0 ? (anonymizedFiles / totalFiles) : 0
+    },
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Anonymized'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const study = row.original
       const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)
@@ -112,7 +229,24 @@ export const columns: ColumnDef<DicomStudy>[] = [
   },
   {
     id: 'sent',
-    header: 'Sent',
+    accessorFn: row => {
+      const totalFiles = row.series.reduce((sum, s) => sum + s.files.length, 0)
+      const sentFiles = row.series.reduce((sum, s) => sum + s.files.filter(f => f.sent).length, 0)
+      return totalFiles > 0 ? (sentFiles / totalFiles) : 0
+    },
+    header: ({ column }) => {
+      return h(Button, {
+        variant: 'ghost',
+        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
+      }, () => [
+        h('span', {}, 'Sent'),
+        column.getIsSorted() ? h(
+          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
+          { class: 'ml-1 h-3 w-3 opacity-50' }
+        ) : null
+      ])
+    },
     cell: ({ row }) => {
       const study = row.original
       const totalFiles = study.series.reduce((sum, s) => sum + s.files.length, 0)

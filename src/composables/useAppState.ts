@@ -78,6 +78,12 @@ export function useAppState(runtime: RuntimeType) {
     studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, assignedPatientId: targetAssignedId } : s)
   }
 
+  const assignPatientIdToSelected = (patientId: string): void => {
+    if (!patientId || selectedStudies.value.length === 0) return
+    const selectedUids = new Set(selectedStudies.value.map(s => s.studyInstanceUID))
+    studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, assignedPatientId: patientId } : s)
+  }
+
   const loadConfig = async () => { /* stream-backed; kept for API compatibility */ }
 
   const loadServerUrl = async () => { /* replaced by stream; keep for API compatibility */ }
@@ -729,6 +735,7 @@ export function useAppState(runtime: RuntimeType) {
     processFiles,
     anonymizeSelected,
     groupSelectedStudies,
+    assignPatientIdToSelected,
     testConnection,
     handleSendSelected,
     clearFiles,

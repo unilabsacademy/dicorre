@@ -216,6 +216,7 @@ onUnmounted(() => {
         @clear-project="appState.handleClearProject"
         @anonymize-selected="anonymizeSelected"
         @group-selected="appState.groupSelectedStudies()"
+        @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
         @send-selected="handleSendSelected(appState.selectedStudies.value)"
         @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
         @clear-all="clearFiles"

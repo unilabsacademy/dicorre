@@ -32,13 +32,15 @@ import {
   Plus,
   Pencil,
   Upload,
-  Layers
+  Layers,
+  MoreVertical
 } from 'lucide-vue-next'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import ConfigLoader from '@/components/ConfigLoader.vue'
 import ProjectEditSheet from '@/components/ProjectEditSheet.vue'
 import type { ProjectConfig } from '@/services/config/schema'
 import type { DicomStudy } from '@/types/dicom'
+import { Input } from '@/components/ui/input'
 
 const props = defineProps<{
   currentProject?: ProjectConfig
@@ -53,6 +55,7 @@ const emit = defineEmits<{
   clearProject: []
   anonymizeSelected: []
   groupSelected: []
+  assignPatientId: [patientId: string]
   sendSelected: []
   downloadSelected: []
   clearAll: []
@@ -65,6 +68,8 @@ const emit = defineEmits<{
 const showProjectEditSheet = ref(false)
 const showClearProjectDialog = ref(false)
 const showClearDialog = ref(false)
+const showEditDialog = ref(false)
+const editPatientId = ref('')
 
 const { copyShareableUrl } = useProjectSharing()
 
@@ -245,17 +250,6 @@ const clearDialogDescription = computed(() => {
         Download
       </Button>
 
-      <Button
-        @click="emit('groupSelected')"
-        :disabled="props.selectedStudiesCount < 2"
-        variant="outline"
-        size="sm"
-        data-testid="group-button"
-      >
-        <Layers class="w-4 h-4 mr-2" />
-        Group
-      </Button>
-
       <AlertDialog
         :open="showClearDialog"
         @update:open="showClearDialog = $event"
@@ -298,10 +292,30 @@ const clearDialogDescription = computed(() => {
             size="sm"
             data-testid="settings-menu-button"
           >
-            <Settings2 class="w-4 h-4" />
+            <MoreVertical class="w-4 h-4" />
           </Button>
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
+          <DropdownMenuItem
+            @click="emit('groupSelected')"
+            :disabled="props.selectedStudiesCount < 2"
+            data-testid="group-menu-item"
+          >
+            <Layers class="w-4 h-4 mr-2" />
+            Group Studies
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            @click="showEditDialog = true"
+            :disabled="props.selectedStudiesCount === 0"
+            data-testid="edit-patient-id-menu-item"
+          >
+            <Pencil class="w-4 h-4 mr-2" />
+            Edit Patient ID
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
           <DropdownMenuItem
             @click="emit('testConnection')"
             data-testid="test-connection-menu-item"
@@ -319,6 +333,39 @@ const clearDialogDescription = computed(() => {
           />
         </DropdownMenuContent>
       </DropdownMenu>
+
+      <!-- Edit Assigned Patient ID Dialog (moved outside dropdown) -->
+      <AlertDialog
+        :open="showEditDialog"
+        @update:open="showEditDialog = $event"
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Edit Assigned Patient ID</AlertDialogTitle>
+            <AlertDialogDescription>
+              Set the assigned Patient ID for all selected studies.
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <div class="py-2">
+            <Input
+              placeholder="Enter Patient ID"
+              :model-value="editPatientId"
+              @update:model-value="(v) => editPatientId = v as string"
+              data-testid="edit-patient-id-input"
+            />
+          </div>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              :disabled="!editPatientId"
+              @click="emit('assignPatientId', editPatientId); editPatientId = ''; showEditDialog = false"
+              data-testid="confirm-assign-patient-id"
+            >
+              Assign
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
   </div>
 </template>
