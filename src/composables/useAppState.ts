@@ -36,7 +36,7 @@ export function useAppState(runtime: RuntimeType) {
   const isProjectMode = computed(() => !!currentProject.value)
 
   // Initialize composables
-  const fileProcessing = useFileProcessing()
+  const fileProcessing = useFileProcessing(runtime)
   const dragAndDrop = useDragAndDrop()
   const dicomSender = useDicomSender(runtime)
   const anonymizer = useAnonymizer(runtime)
@@ -200,31 +200,29 @@ export function useAppState(runtime: RuntimeType) {
 
   const processNewFiles = async (newFiles: File[], isAppReady: boolean) => {
     try {
-      await runtime.runPromise(
-        fileProcessing.processNewFilesEffect(newFiles, {
-          isAppReady,
-          concurrency: concurrency.value,
-          dicomFiles: dicomFiles.value,
-          onUpdateFiles: (updatedFiles) => {
-            dicomFiles.value = updatedFiles
-          },
-          onUpdateStudies: (updatedStudies) => {
-            // Assign patient IDs for preview/mapping
-            runtime.runPromise(
-              Effect.gen(function* () {
-                const processor = yield* DicomProcessor
-                const cfgService = yield* ConfigService
-                const cfg = yield* cfgService.getAnonymizationConfig
-                const withAssigned = yield* processor.assignPatientIds(updatedStudies, cfg)
-                studies.value = withAssigned
-              })
-            ).catch(err => {
-              console.error('Failed to assign patient IDs:', err)
-              studies.value = updatedStudies
+      await fileProcessing.processNewFilesWithInterruption(newFiles, {
+        isAppReady,
+        concurrency: concurrency.value,
+        dicomFiles: dicomFiles.value,
+        onUpdateFiles: (updatedFiles) => {
+          dicomFiles.value = updatedFiles
+        },
+        onUpdateStudies: (updatedStudies) => {
+          // Assign patient IDs for preview/mapping
+          runtime.runPromise(
+            Effect.gen(function* () {
+              const processor = yield* DicomProcessor
+              const cfgService = yield* ConfigService
+              const cfg = yield* cfgService.getAnonymizationConfig
+              const withAssigned = yield* processor.assignPatientIds(updatedStudies, cfg)
+              studies.value = withAssigned
             })
-          }
-        })
-      )
+          ).catch(err => {
+            console.error('Failed to assign patient IDs:', err)
+            studies.value = updatedStudies
+          })
+        }
+      })
       successMessage.value = ''
     } catch (error) {
       console.error('Error processing files:', error)

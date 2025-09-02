@@ -27,9 +27,14 @@ test.describe('PDF Converter Plugin', () => {
     const testPdfPath = path.join(process.cwd(), 'src/plugins/pdfConverter/test-data/test-document.pdf');
     await uploadFiles(page, testPdfPath);
 
-    // Wait for file processing progress card to disappear
-    const processingCard = page.getByTestId('file-processing-progress-card');
-    await expect(processingCard).toBeHidden({ timeout: 10000 });
+    // Wait for all processing cards to be hidden (concurrent processing may show multiple cards)
+    await page.waitForFunction(
+      () => {
+        const cards = document.querySelectorAll('[data-testid="file-processing-progress-card"]');
+        return cards.length === 0;
+      },
+      { timeout: 15000 }
+    );
 
     // Check if files were processed - wait for files count badge to appear
     await expect(page.getByTestId('files-count-badge')).toBeVisible({ timeout: 5000 });
@@ -52,9 +57,14 @@ test.describe('PDF Converter Plugin', () => {
     const testPdfPath = path.join(process.cwd(), 'src/plugins/pdfConverter/test-data/test-document.pdf');
     await uploadFiles(page, testPdfPath);
 
-    // Wait for file processing progress card to disappear
-    const processingCard = page.getByTestId('file-processing-progress-card');
-    await expect(processingCard).toBeHidden({ timeout: 10000 });
+    // Wait for all processing cards to be hidden (concurrent processing may show multiple cards)
+    await page.waitForFunction(
+      () => {
+        const cards = document.querySelectorAll('[data-testid="file-processing-progress-card"]');
+        return cards.length === 0;
+      },
+      { timeout: 15000 }
+    );
 
     // Verify studies table appears and select all studies
     await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 10000 });

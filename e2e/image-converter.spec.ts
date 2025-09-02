@@ -31,9 +31,14 @@ test.describe('Image Converter Plugin', () => {
     ];
     await uploadFiles(page, testImagePaths);
 
-    // Wait for file processing progress card to disappear
-    const processingCard = page.getByTestId('file-processing-progress-card');
-    await expect(processingCard).toBeHidden({ timeout: 10000 });
+    // Wait for all processing cards to be hidden (concurrent processing may show multiple cards)
+    await page.waitForFunction(
+      () => {
+        const cards = document.querySelectorAll('[data-testid="file-processing-progress-card"]');
+        return cards.length === 0;
+      },
+      { timeout: 15000 }
+    );
 
     // Check if files were processed
     const filesCountBadge = page.getByTestId('files-count-badge');
@@ -60,9 +65,14 @@ test.describe('Image Converter Plugin', () => {
     ];
     await uploadFiles(page, testImagePaths);
 
-    // Wait for file processing progress card to disappear
-    const processingCard = page.getByTestId('file-processing-progress-card');
-    await expect(processingCard).toBeHidden({ timeout: 10000 });
+    // Wait for all processing cards to be hidden (concurrent processing may show multiple cards)
+    await page.waitForFunction(
+      () => {
+        const cards = document.querySelectorAll('[data-testid="file-processing-progress-card"]');
+        return cards.length === 0;
+      },
+      { timeout: 15000 }
+    );
 
     // Check if files were processed
     const filesCountBadge = page.getByTestId('files-count-badge');
@@ -92,9 +102,14 @@ test.describe('Image Converter Plugin', () => {
 
     await uploadFiles(page, testImagePaths);
 
-    // Wait for file processing progress card to disappear
-    const processingCard = page.getByTestId('file-processing-progress-card');
-    await expect(processingCard).toBeHidden({ timeout: 10000 });
+    // Wait for all processing cards to be hidden (concurrent processing may show multiple cards)
+    await page.waitForFunction(
+      () => {
+        const cards = document.querySelectorAll('[data-testid="file-processing-progress-card"]');
+        return cards.length === 0;
+      },
+      { timeout: 15000 }
+    );
 
     // Check if files were processed
     const filesCountBadge = page.getByTestId('files-count-badge');

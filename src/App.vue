@@ -46,15 +46,17 @@ const {
   handleFileInput
 } = appState.dragAndDrop
 
-const { fileProcessingState } = appState.fileProcessing
+const {
+  fileProcessingState,
+  individualFileProcessingStates,
+  getActiveFileProcessingStates,
+  getAllFileProcessingStates,
+  hasActiveProcessing,
+  cancelProcessing
+} = appState.fileProcessing
 
 const isAppReady = computed(() => {
   return !appState.configLoading.value && !appState.configError.value && appState.config.value !== null
-})
-
-
-const showStudiesTable = computed(() => {
-  return isAppReady.value && appState.studies.value && appState.studies.value.length > 0
 })
 
 const studiesData = computed(() => {
@@ -210,7 +212,7 @@ onUnmounted(() => {
         :current-project="appState.currentProject.value"
         :is-project-mode="appState.isProjectMode.value"
         :selected-studies-count="appState.selectedStudiesCount.value"
-        :is-processing="fileProcessingState?.isProcessing || false"
+        :is-processing="hasActiveProcessing()"
         :is-downloading="isDownloading"
         @create-project="appState.handleCreateProject"
         @updateProject="appState.handleUpdateProject"
@@ -228,6 +230,7 @@ onUnmounted(() => {
       />
 
       <!-- File Processing Progress -->
+      <!-- Global file processing progress (when organizing files into studies) -->
       <FileProcessingProgress
         v-if="fileProcessingState?.isProcessing"
         :file-name="fileProcessingState.fileName"
@@ -236,6 +239,42 @@ onUnmounted(() => {
         :total-files="fileProcessingState.totalFiles"
         :current-file-index="fileProcessingState.currentFileIndex"
       />
+
+      <!-- Individual file processing progress indicators -->
+      <div
+        v-if="getAllFileProcessingStates().length > 0"
+        class="space-y-2"
+      >
+        <div
+          v-if="getActiveFileProcessingStates().length > 0"
+          class="flex items-center justify-between mb-2"
+        >
+          <div class="text-sm font-medium text-muted-foreground">
+            Processing {{ getActiveFileProcessingStates().length }} file{{ getActiveFileProcessingStates().length !== 1
+              ? 's' : '' }} concurrently
+          </div>
+          <Button
+            variant="outline"
+            size="sm"
+            class="h-7 px-3 text-xs"
+            @click="cancelProcessing"
+          >
+            Cancel All
+          </Button>
+        </div>
+
+        <FileProcessingProgress
+          v-for="state in getAllFileProcessingStates()"
+          :key="state.fileId"
+          :file-name="state.fileName"
+          :current-step="state.currentStep"
+          :progress="state.progress"
+          :error="state.error"
+          :start-time="state.startTime"
+          :is-individual-file="true"
+          :show-cancel-button="false"
+        />
+      </div>
 
 
       <!-- Studies Data Table -->

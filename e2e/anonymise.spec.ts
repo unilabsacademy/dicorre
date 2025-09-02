@@ -10,8 +10,14 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   const testZipPath = path.join(process.cwd(), 'test-data/CASES/3_cases_each_with_3_series_6_images.zip');
   await uploadFiles(page, testZipPath);
 
-  const processingCard = page.getByTestId('file-processing-progress-card');
-  await expect(processingCard).toBeHidden({ timeout: 10000 });
+  // Wait for all processing cards to be hidden (concurrent processing may show multiple cards)
+  await page.waitForFunction(
+    () => {
+      const cards = document.querySelectorAll('[data-testid="file-processing-progress-card"]');
+      return cards.length === 0;
+    },
+    { timeout: 15000 }
+  );
 
   await expect(page.getByTestId('files-count-badge')).toBeVisible({ timeout: 15000 });
 

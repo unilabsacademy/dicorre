@@ -71,11 +71,11 @@ async function handleSaveProject() {
         ...props.currentProject,
         name: projectName.value.trim(),
         plugins: {
-          ...(props.currentProject.plugins || {}),
+          ...props.currentProject.plugins,
           settings: {
-            ...(((props.currentProject.plugins as any)?.settings) || {}),
+            ...((props.currentProject.plugins as any)?.settings),
             ['sent-notifier']: {
-              ...((((props.currentProject.plugins as any)?.settings) || {})['sent-notifier'] || {}),
+              ...(((props.currentProject.plugins as any)?.settings) || {})['sent-notifier'],
               params: toRecord(params.value)
             }
           }
