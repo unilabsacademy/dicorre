@@ -213,6 +213,7 @@ onUnmounted(() => {
         :is-processing="fileProcessingState?.isProcessing || false"
         :is-downloading="isDownloading"
         @create-project="appState.handleCreateProject"
+        @updateProject="appState.handleUpdateProject"
         @clear-project="appState.handleClearProject"
         @anonymize-selected="anonymizeSelected"
         @group-selected="appState.groupSelectedStudies()"

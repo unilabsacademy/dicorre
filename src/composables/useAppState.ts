@@ -156,6 +156,22 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
+  const handleUpdateProject = async (project: ProjectConfig): Promise<void> => {
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          yield* configService.updateProject(project)
+        })
+      )
+      toast.success(`Project "${project.name}" updated`)
+    } catch (error) {
+      console.error('Failed to update project:', error)
+      toast.error('Failed to update project')
+      throw error
+    }
+  }
+
   const handleLoadConfig = async (configData: unknown): Promise<void> => {
     try {
       const loadedConfig = await runtime.runPromise(
@@ -442,6 +458,9 @@ export function useAppState(runtime: RuntimeType) {
               yield* plugin.hooks.beforeSend(study).pipe(
                 Effect.catchAll((error) => {
                   console.error(`Plugin ${plugin.id} beforeSend hook failed:`, error)
+                  const message = (error && (error as any).message) ? String((error as any).message) : String(error)
+                  const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
+                  toast.error(`Plugin ${pluginId} beforeSend error`, { description: message })
                   return Effect.succeed(undefined)
                 })
               )
@@ -518,6 +537,9 @@ export function useAppState(runtime: RuntimeType) {
                             yield* plugin.hooks.afterSend(sentStudy).pipe(
                               Effect.catchAll((error) => {
                                 console.error(`Plugin ${plugin.id} afterSend hook failed:`, error)
+                                const message = (error && (error as any).message) ? String((error as any).message) : String(error)
+                                const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
+                                toast.error(`Plugin ${pluginId} afterSend error`, { description: message })
                                 return Effect.succeed(undefined)
                               })
                             )
@@ -551,6 +573,9 @@ export function useAppState(runtime: RuntimeType) {
                             yield* plugin.hooks.onSendError(errorStudy, event.error).pipe(
                               Effect.catchAll((error) => {
                                 console.error(`Plugin ${plugin.id} onSendError hook failed:`, error)
+                                const message = (error && (error as any).message) ? String((error as any).message) : String(error)
+                                const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
+                                toast.error(`Plugin ${pluginId} onSendError error`, { description: message })
                                 return Effect.succeed(undefined)
                               })
                             )
@@ -724,6 +749,7 @@ export function useAppState(runtime: RuntimeType) {
     handleConfigReload,
     handleCreateProject,
     handleClearProject,
+    handleUpdateProject,
     handleLoadConfig,
     processNewFiles,
     addFilesToUploaded,

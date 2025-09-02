@@ -100,6 +100,14 @@ export const ProjectConfigSchema = Schema.Struct({
     Schema.filter((date) => !isNaN(Date.parse(date)), {
       message: () => "createdAt must be a valid ISO date string"
     })
+  ),
+  plugins: Schema.optional(
+    Schema.Struct({
+      settings: Schema.optional(Schema.Record({
+        key: Schema.String,
+        value: Schema.Any
+      }))
+    })
   )
 }).pipe(
   Schema.annotations({

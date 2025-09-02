@@ -33,19 +33,19 @@ export interface ConversionOptions {
  */
 export interface FileFormatPlugin extends Plugin {
   type: 'file-format'
-  
+
   /** File extensions this plugin can handle (e.g., ['.jpg', '.png']) */
   supportedExtensions: string[]
-  
+
   /** MIME types this plugin can handle (e.g., ['image/jpeg', 'image/png']) */
   supportedMimeTypes?: string[]
-  
+
   /** Check if this plugin can process a specific file */
   canProcess: (file: File) => Effect.Effect<boolean, PluginError>
-  
+
   /** Convert the file to DICOM format */
   convertToDicom: (file: File, metadata: DicomMetadata, options?: ConversionOptions) => Effect.Effect<DicomFile[], PluginError>
-  
+
   /** Validate that the file is valid for this converter */
   validateFile?: (file: File) => Effect.Effect<boolean, PluginError>
 }
@@ -55,25 +55,25 @@ export interface FileFormatPlugin extends Plugin {
  */
 export interface PluginHooks {
   /** Called before files are processed */
-  beforeProcess?: (files: File[]) => Effect.Effect<void, PluginError>
-  
+  beforeProcess?: (files: File[]) => Effect.Effect<void, PluginError, any>
+
   /** Called after files are processed */
-  afterProcess?: (files: DicomFile[]) => Effect.Effect<void, PluginError>
-  
+  afterProcess?: (files: DicomFile[]) => Effect.Effect<void, PluginError, any>
+
   /** Called before anonymization */
-  beforeAnonymize?: (files: DicomFile[]) => Effect.Effect<void, PluginError>
-  
+  beforeAnonymize?: (files: DicomFile[]) => Effect.Effect<void, PluginError, any>
+
   /** Called after anonymization */
-  afterAnonymize?: (files: DicomFile[]) => Effect.Effect<void, PluginError>
-  
+  afterAnonymize?: (files: DicomFile[]) => Effect.Effect<void, PluginError, any>
+
   /** Called before sending to DICOM server */
-  beforeSend?: (study: DicomStudy) => Effect.Effect<void, PluginError>
-  
+  beforeSend?: (study: DicomStudy) => Effect.Effect<void, PluginError, any>
+
   /** Called after successful send to DICOM server */
-  afterSend?: (study: DicomStudy) => Effect.Effect<void, PluginError>
-  
+  afterSend?: (study: DicomStudy) => Effect.Effect<void, PluginError, any>
+
   /** Called if send fails */
-  onSendError?: (study: DicomStudy, error: Error) => Effect.Effect<void, PluginError>
+  onSendError?: (study: DicomStudy, error: Error) => Effect.Effect<void, PluginError, any>
 }
 
 /**

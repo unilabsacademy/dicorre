@@ -37,7 +37,8 @@
     "enabled": [
       "image-converter",
       "pdf-converter",
-      "send-logger"
+      "send-logger",
+      "sent-notifier"
     ],
     "settings": {
       "image-converter": {
@@ -50,6 +51,9 @@
       },
       "send-logger": {
         "logLevel": "detailed"
+      },
+      "sent-notifier": {
+        "url": "https://example.org/api/sent"
       }
     }
   }

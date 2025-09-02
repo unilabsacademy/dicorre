@@ -52,6 +52,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   createProject: [name: string]
+  updateProject: [project: ProjectConfig]
   clearProject: []
   anonymizeSelected: []
   groupSelected: []
@@ -143,6 +144,7 @@ const clearDialogDescription = computed(() => {
           :open="showProjectEditSheet"
           @update:open="showProjectEditSheet = $event"
           @create-project="handleCreateProject"
+          @update-project="(p) => emit('updateProject', p)"
         />
 
         <Button
