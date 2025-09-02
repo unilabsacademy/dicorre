@@ -172,7 +172,19 @@ export function useAppState(runtime: RuntimeType) {
             dicomFiles.value = updatedFiles
           },
           onUpdateStudies: (updatedStudies) => {
-            studies.value = updatedStudies
+            // Assign patient IDs for preview/mapping
+            runtime.runPromise(
+              Effect.gen(function* () {
+                const processor = yield* DicomProcessor
+                const cfgService = yield* ConfigService
+                const cfg = yield* cfgService.getAnonymizationConfig
+                const withAssigned = yield* processor.assignPatientIds(updatedStudies, cfg)
+                studies.value = withAssigned
+              })
+            ).catch(err => {
+              console.error('Failed to assign patient IDs:', err)
+              studies.value = updatedStudies
+            })
           }
         })
       )
@@ -186,7 +198,7 @@ export function useAppState(runtime: RuntimeType) {
           // Extract filename from error message if present
           const fileNameMatch = error.message.match(/File ([^\s]+) has unsupported format/)
           const fileName = fileNameMatch ? fileNameMatch[1] : 'Unknown file'
-          
+
           toast.error('Unsupported file format', {
             description: `${fileName} could not be processed. Only DICOM files (.dcm), ZIP archives, and supported image formats are accepted.`,
             duration: 5000
@@ -230,10 +242,20 @@ export function useAppState(runtime: RuntimeType) {
       const studyStreamEffects = selectedStudies.value.map(study => {
         const studyFiles = study.series.flatMap(series => series.files)
 
+        // Build patientIdMap based on currently assigned IDs for all studies in memory
+        const patientIdMap: Record<string, string> = {}
+        studies.value.forEach(s => {
+          const orig = s.patientId || 'Unknown'
+          if (s.assignedPatientId) {
+            patientIdMap[orig] = s.assignedPatientId
+          }
+        })
+
         return anonymizer.anonymizeStudyStream(
           study.studyInstanceUID,
           studyFiles,
-          concurrency.value
+          concurrency.value,
+          patientIdMap
         ).pipe(
           Stream.tap((event) =>
             Effect.sync(() => {
@@ -276,16 +298,29 @@ export function useAppState(runtime: RuntimeType) {
                   removeStudyProgress(event.studyId)
                   console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
 
-                  // Immediately regenerate studies structure to reflect the anonymized data
+                  // Update only the affected study to preserve assigned IDs on others
                   runtime.runPromise(
                     Effect.gen(function* () {
                       const processor = yield* DicomProcessor
-                      const updatedStudies = yield* processor.groupFilesByStudy(dicomFiles.value)
-                      studies.value = updatedStudies
-                      console.log(`Studies updated after ${event.studyId} completion`)
+                      const current = studies.value
+                      const existing = current.find(s => s.studyInstanceUID === event.studyId)
+                      const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === event.studyId)
+                      const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
+                      if (rebuilt.length > 0) {
+                        const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
+                        const idx = current.findIndex(s => s.studyInstanceUID === event.studyId)
+                        if (idx !== -1) {
+                          const next = [...current]
+                          next[idx] = updatedStudy
+                          studies.value = next
+                        } else {
+                          studies.value = [...current, updatedStudy]
+                        }
+                      }
+                      console.log(`Study ${event.studyId} updated after completion`)
                     })
                   ).catch(error => {
-                    console.error('Failed to update studies after anonymization:', error)
+                    console.error('Failed to update study after anonymization:', error)
                   })
                   break
 
@@ -433,18 +468,31 @@ export function useAppState(runtime: RuntimeType) {
                     }
                   })
 
-                  // Update studies with dicomFiles to reflect changes in UI
+                  // Update only the affected study to preserve assigned IDs on others
                   runtime.runPromise(
                     Effect.gen(function* () {
                       const processor = yield* DicomProcessor
-                      const updatedStudies = yield* processor.groupFilesByStudy(dicomFiles.value)
-                      studies.value = updatedStudies
-                      console.log(`Studies updated after ${event.studyId} completion`)
+                      const current = studies.value
+                      const existing = current.find(s => s.studyInstanceUID === event.studyId)
+                      const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === event.studyId)
+                      const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
+                      if (rebuilt.length > 0) {
+                        const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
+                        const idx = current.findIndex(s => s.studyInstanceUID === event.studyId)
+                        if (idx !== -1) {
+                          const next = [...current]
+                          next[idx] = updatedStudy
+                          studies.value = next
+                        } else {
+                          studies.value = [...current, updatedStudy]
+                        }
+                      }
+                      console.log(`Study ${event.studyId} updated after send completion`)
 
                       // Call afterSend hooks
                       const registry = yield* PluginRegistry
                       const hookPlugins = yield* registry.getHookPlugins()
-                      const sentStudy = updatedStudies.find(s => s.studyInstanceUID === event.studyId)
+                      const sentStudy = studies.value.find(s => s.studyInstanceUID === event.studyId)
 
                       if (sentStudy) {
                         for (const plugin of hookPlugins) {
@@ -566,10 +614,10 @@ export function useAppState(runtime: RuntimeType) {
 
   const clearSelected = () => {
     const selectedStudiesToClear = selectedStudies.value
-    
+
     // Get study IDs to clear
     const studyIdsToClear = new Set(selectedStudiesToClear.map(s => s.studyInstanceUID))
-    
+
     // Remove files associated with selected studies
     dicomFiles.value = dicomFiles.value.filter(file => {
       if (file.metadata?.studyInstanceUID && studyIdsToClear.has(file.metadata.studyInstanceUID)) {
@@ -579,19 +627,19 @@ export function useAppState(runtime: RuntimeType) {
       }
       return true
     })
-    
+
     // Remove selected studies from studies array
     studies.value = studies.value.filter(study => !studyIdsToClear.has(study.studyInstanceUID))
-    
+
     // Clear progress for removed studies
     selectedStudiesToClear.forEach(study => {
       removeStudyProgress(study.studyInstanceUID)
       removeStudySendingProgress(study.studyInstanceUID)
     })
-    
+
     // Clear selection
     clearSelection()
-    
+
     successMessage.value = `Cleared ${selectedStudiesToClear.length} selected ${selectedStudiesToClear.length === 1 ? 'study' : 'studies'}`
   }
 

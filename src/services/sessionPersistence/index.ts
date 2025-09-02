@@ -5,6 +5,11 @@ import type { DicomFile, DicomFileMetadata, DicomStudy } from "@/types/dicom"
 
 interface PersistedSession {
   files: DicomFileMetadata[]
+  studies: Array<{
+    studyInstanceUID: string
+    patientId?: string
+    assignedPatientId?: string
+  }>
 }
 
 const STORAGE_KEY = 'dicom-session'
@@ -12,7 +17,7 @@ const STORAGE_KEY = 'dicom-session'
 export class SessionPersistence extends Context.Tag("SessionPersistence")<
   SessionPersistence,
   {
-    readonly persist: (files: ReadonlyArray<DicomFile>) => Effect.Effect<void, never>
+    readonly persist: (files: ReadonlyArray<DicomFile>, studies?: ReadonlyArray<DicomStudy>) => Effect.Effect<void, never>
     readonly restore: (onProgress?: (progress: number) => void) => Effect.Effect<{ files: DicomFile[]; studies: DicomStudy[] }, never>
     readonly clear: Effect.Effect<void, never>
   }
@@ -27,16 +32,17 @@ export const SessionPersistenceLive = Layer.scoped(
     const readPersisted = Effect.sync(() => {
       try {
         const raw = localStorage.getItem(STORAGE_KEY)
-        if (!raw) return { files: [] } as PersistedSession
+        if (!raw) return { files: [], studies: [] } as PersistedSession
         const parsed = JSON.parse(raw) as PersistedSession
-        if (!parsed || !Array.isArray(parsed.files)) return { files: [] }
+        if (!parsed || !Array.isArray(parsed.files)) return { files: [], studies: [] }
+        if (!Array.isArray((parsed as any).studies)) (parsed as any).studies = []
         return parsed
       } catch {
-        return { files: [] }
+        return { files: [], studies: [] }
       }
     })
 
-    const writePersisted = (files: ReadonlyArray<DicomFile>) =>
+    const writePersisted = (files: ReadonlyArray<DicomFile>, studies?: ReadonlyArray<DicomStudy>) =>
       Effect.sync(() => {
         const payload: PersistedSession = {
           files: files.map<DicomFileMetadata>((f) => ({
@@ -46,6 +52,11 @@ export const SessionPersistenceLive = Layer.scoped(
             metadata: f.metadata,
             anonymized: f.anonymized,
             sent: f.sent
+          })),
+          studies: (studies ?? []).map((s) => ({
+            studyInstanceUID: s.studyInstanceUID,
+            patientId: s.patientId,
+            assignedPatientId: (s as any).assignedPatientId
           }))
         }
         try {
@@ -55,7 +66,7 @@ export const SessionPersistenceLive = Layer.scoped(
         }
       })
 
-    const persist = (files: ReadonlyArray<DicomFile>): Effect.Effect<void, never> =>
+    const persist = (files: ReadonlyArray<DicomFile>, studiesArg?: ReadonlyArray<DicomStudy>): Effect.Effect<void, never> =>
       Effect.gen(function* () {
         if (files.length === 0) return
 
@@ -79,7 +90,7 @@ export const SessionPersistenceLive = Layer.scoped(
           }
         }
 
-        yield* writePersisted(files)
+        yield* writePersisted(files, studiesArg)
       })
 
     const restore = (onProgress?: (progress: number) => void): Effect.Effect<{ files: DicomFile[]; studies: DicomStudy[] }, never> =>
@@ -116,12 +127,17 @@ export const SessionPersistenceLive = Layer.scoped(
           processor.groupFilesByStudy(restored),
           () => Effect.succeed([] as DicomStudy[])
         )
-        return { files: restored, studies }
+
+        // Merge persisted assignedPatientId back into rebuilt studies
+        const map = new Map(persisted.studies.map(s => [s.studyInstanceUID, s.assignedPatientId]))
+        const merged = studies.map(s => ({ ...s, assignedPatientId: map.get(s.studyInstanceUID) || (s as any).assignedPatientId }))
+
+        return { files: restored, studies: merged }
       })
 
     const clear: Effect.Effect<void, never> = Effect.gen(function* () {
       try {
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ files: [] } satisfies PersistedSession))
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({ files: [], studies: [] } satisfies PersistedSession))
       } catch { }
       yield* Effect.catchAll(
         storage.clearAllFiles,

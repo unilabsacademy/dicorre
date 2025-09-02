@@ -15,7 +15,8 @@ export function useAnonymizer(runtime: RuntimeType) {
   const anonymizeStudyStream = (
     studyId: string,
     files: DicomFile[],
-    concurrency: number
+    concurrency: number,
+    patientIdMap?: Record<string, string>
   ): Stream.Stream<AnonymizationEvent, Error> =>
     Stream.async<AnonymizationEvent, Error>((emit) => {
       // Get config and pass it to worker
@@ -23,38 +24,39 @@ export function useAnonymizer(runtime: RuntimeType) {
         Effect.gen(function* () {
           const configService = yield* ConfigService
           const anonymizationConfig = yield* configService.getAnonymizationConfig
-          
+
           const workerManager = getAnonymizationWorkerManager()
           workerManager.anonymizeStudy({
             studyId,
             files,
             anonymizationConfig,
             concurrency,
-        onProgress: (progressData) => {
-          emit.single({
-            _tag: "AnonymizationProgress",
-            studyId,
-            completed: progressData.completed,
-            total: progressData.total,
-            currentFile: progressData.currentFile
-          })
-        },
-        onComplete: (anonymizedFiles) => {
-          emit.single({
-            _tag: "StudyAnonymized",
-            studyId,
-            files: anonymizedFiles
-          })
-          emit.end()
-        },
-        onError: (err) => {
-          emit.single({
-            _tag: "AnonymizationError",
-            studyId,
-            error: err
-          })
-          emit.fail(err)
-        }
+            patientIdMap,
+            onProgress: (progressData) => {
+              emit.single({
+                _tag: "AnonymizationProgress",
+                studyId,
+                completed: progressData.completed,
+                total: progressData.total,
+                currentFile: progressData.currentFile
+              })
+            },
+            onComplete: (anonymizedFiles) => {
+              emit.single({
+                _tag: "StudyAnonymized",
+                studyId,
+                files: anonymizedFiles
+              })
+              emit.end()
+            },
+            onError: (err) => {
+              emit.single({
+                _tag: "AnonymizationError",
+                studyId,
+                error: err
+              })
+              emit.fail(err)
+            }
           })
 
           // Emit start event immediately

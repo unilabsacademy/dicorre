@@ -36,6 +36,7 @@ export interface BaseJob {
 export interface AnonymizationJob extends BaseJob {
   anonymizationConfig: any // AnonymizationConfig from schema
   onComplete?: (anonymizedFiles: DicomFile[]) => void
+  patientIdMap?: Record<string, string>
 }
 
 // Sending-specific job
@@ -325,7 +326,8 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
         studyId: job.studyId,
         files,
         anonymizationConfig: job.anonymizationConfig,
-        concurrency: job.concurrency
+        concurrency: job.concurrency,
+        patientIdMap: job.patientIdMap
       }
     }
   }

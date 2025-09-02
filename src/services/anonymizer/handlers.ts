@@ -62,7 +62,7 @@ function getCachedValue(fieldName: string, originalValue: string, studyId: strin
   }
 
   const studyCache = studyValueCache.get(studyId)!
-  
+
   if (!studyCache.has(fieldName)) {
     studyCache.set(fieldName, new Map())
   }
@@ -217,7 +217,7 @@ export function createDateJitterHandler(maxDays: number = 31) {
 /**
  * Special handler for value replacements
  */
-export function createValueReplacementHandler(studyId: string) {
+export function createValueReplacementHandler(studyId: string, options?: { disablePatientId?: boolean }) {
   return (element: DicomElement, _options: any) => {
     const tagName = element.keyword || element.name || ''
     const tagNumber = element.tag?.toString() || ''
@@ -233,7 +233,9 @@ export function createValueReplacementHandler(studyId: string) {
         newValue = 'Anonymous'
         break
       case 'PatientID':
-        newValue = getCachedValue('PatientID', originalValue, studyId)
+        if (!options?.disablePatientId) {
+          newValue = getCachedValue('PatientID', originalValue, studyId)
+        }
         break
       case 'StudyID':
         newValue = getCachedValue('StudyID', originalValue, studyId)
@@ -261,7 +263,9 @@ export function createValueReplacementHandler(studyId: string) {
           newValue = 'Anonymous'
           break
         case tag('Patient ID'):
-          newValue = getCachedValue('PatientID', originalValue, studyId)
+          if (!options?.disablePatientId) {
+            newValue = getCachedValue('PatientID', originalValue, studyId)
+          }
           break
         case tag('Study Instance UID'):
           newValue = getCachedValue('StudyInstanceUID', originalValue, studyId)
@@ -319,11 +323,11 @@ export function clearValueCache() {
 /**
  * Get all special handlers as an array
  */
-export function getAllSpecialHandlers(jitterDays: number = 31, tagsToRemove: string[] = [], studyId: string = 'default') {
+export function getAllSpecialHandlers(jitterDays: number = 31, tagsToRemove: string[] = [], studyId: string = 'default', options?: { disablePatientId?: boolean }) {
   return [
     createRemoveTagsHandler(tagsToRemove),
     createDateJitterHandler(jitterDays),
-    createValueReplacementHandler(studyId),
+    createValueReplacementHandler(studyId, { disablePatientId: options?.disablePatientId }),
     createAddTagsHandler()
   ]
 }

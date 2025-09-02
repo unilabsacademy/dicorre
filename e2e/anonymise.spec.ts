@@ -121,7 +121,7 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   expect(accessionNumbersChanged).toBe(true);
   expect(patientIdsChanged).toBe(true);
 
-  const anonymizedCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(9)');
+  const anonymizedCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(10)');
   const cellCount = await anonymizedCells.count();
 
   if (cellCount > 0) {

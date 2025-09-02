@@ -20,13 +20,14 @@ export function useSessionPersistence(
     await runtime.runPromise(
       Effect.gen(function* () {
         const svc = yield* SessionPersistence
-        yield* svc.persist(extractedDicomFiles.value)
+        yield* svc.persist(extractedDicomFiles.value, studies.value)
       })
     )
   }
 
-  // Watch for changes to extracted files and persist automatically
+  // Watch for changes to extracted files and studies and persist automatically
   watch(extractedDicomFiles, persist, { deep: true })
+  watch(studies, persist, { deep: true })
 
   /**
    * Restore previous session (if any)

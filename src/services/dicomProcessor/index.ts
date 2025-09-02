@@ -10,6 +10,7 @@ export class DicomProcessor extends Context.Tag("DicomProcessor")<
     readonly parseFile: (file: DicomFile) => Effect.Effect<DicomFile, DicomProcessorError>
     readonly parseFiles: (files: DicomFile[], concurrency?: number, options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }) => Effect.Effect<DicomFile[], DicomProcessorError>
     readonly groupFilesByStudy: (files: DicomFile[]) => Effect.Effect<DicomStudy[], DicomProcessorError>
+    readonly assignPatientIds: (studies: DicomStudy[], anonymizationConfig: { replacements?: Record<string, string> }) => Effect.Effect<DicomStudy[], never>
     readonly validateFile: (file: DicomFile) => Effect.Effect<void, ValidationError>
   }
 >() { }
@@ -210,10 +211,39 @@ export const DicomProcessorLive = Layer.succeed(
         return studies
       })
 
+    const assignPatientIds = (studies: DicomStudy[], anonymizationConfig: { replacements?: Record<string, string> }): Effect.Effect<DicomStudy[], never> =>
+      Effect.sync(() => {
+        const pattern = anonymizationConfig.replacements?.['Patient ID'] || anonymizationConfig.replacements?.[tag('Patient ID')] || 'PAT{random}'
+
+        const generateRandomString = (): string => {
+          const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
+          let result = ''
+          for (let i = 0; i < 7; i++) {
+            result += chars.charAt(Math.floor(Math.random() * chars.length))
+          }
+          return result
+        }
+
+        const originalToAssigned = new Map<string, string>()
+
+        const updated = studies.map(study => {
+          const original = study.patientId || 'Unknown'
+          if (!originalToAssigned.has(original)) {
+            const assigned = pattern.replace('{random}', generateRandomString())
+            originalToAssigned.set(original, assigned)
+          }
+          const assignedPatientId = originalToAssigned.get(original)!
+          return { ...study, assignedPatientId }
+        })
+
+        return updated
+      })
+
     return {
       parseFile,
       parseFiles,
       groupFilesByStudy,
+      assignPatientIds,
       validateFile
     } as const
   })()

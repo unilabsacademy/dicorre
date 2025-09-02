@@ -38,6 +38,14 @@ export const columns: ColumnDef<DicomStudy>[] = [
     },
   },
   {
+    accessorKey: 'assignedPatientId',
+    header: 'Assigned Patient ID',
+    cell: ({ row }) => {
+      const pid = row.getValue('assignedPatientId') as string
+      return h('div', { class: 'font-medium' }, pid || '-')
+    },
+  },
+  {
     accessorKey: 'studyDate',
     header: 'Study Date',
     cell: ({ row }) => {

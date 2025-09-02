@@ -32,7 +32,7 @@ const status = computed(() => {
         variant: 'secondary' as const
       }
     }
-    
+
     if (props.sentFiles === props.totalFiles && props.sentFiles > 0) {
       return {
         showProgress: false,
@@ -40,7 +40,7 @@ const status = computed(() => {
         variant: 'default' as const
       }
     }
-    
+
     if ((props.sentFiles || 0) > 0) {
       return {
         showProgress: false,
@@ -48,14 +48,14 @@ const status = computed(() => {
         variant: 'secondary' as const
       }
     }
-    
+
     return {
       showProgress: false,
       text: 'Not Sent',
       variant: 'destructive' as const
     }
   }
-  
+
   if (props.showOnly === 'anonymization') {
     // Anonymization-only column
     if (progressInfo.value?.isProcessing) {
@@ -65,7 +65,7 @@ const status = computed(() => {
         variant: 'secondary' as const
       }
     }
-    
+
     if (props.anonymizedFiles === props.totalFiles && props.anonymizedFiles > 0) {
       return {
         showProgress: false,
@@ -73,7 +73,7 @@ const status = computed(() => {
         variant: 'default' as const
       }
     }
-    
+
     if ((props.anonymizedFiles || 0) > 0) {
       return {
         showProgress: false,
@@ -81,14 +81,14 @@ const status = computed(() => {
         variant: 'secondary' as const
       }
     }
-    
+
     return {
       showProgress: false,
       text: 'Not Anonymized',
       variant: 'destructive' as const
     }
   }
-  
+
   // Original combined logic (fallback)
   if (sendingProgressInfo.value?.isProcessing) {
     return {
@@ -97,7 +97,7 @@ const status = computed(() => {
       variant: 'secondary' as const
     }
   }
-  
+
   if (progressInfo.value?.isProcessing) {
     return {
       showProgress: true,
@@ -105,7 +105,7 @@ const status = computed(() => {
       variant: 'secondary' as const
     }
   }
-  
+
   if (props.sentFiles === props.totalFiles && props.sentFiles > 0) {
     return {
       showProgress: false,
@@ -113,7 +113,7 @@ const status = computed(() => {
       variant: 'default' as const
     }
   }
-  
+
   if ((props.sentFiles || 0) > 0) {
     return {
       showProgress: false,
@@ -121,7 +121,7 @@ const status = computed(() => {
       variant: 'secondary' as const
     }
   }
-  
+
   if ((props.anonymizedFiles || 0) === props.totalFiles && (props.anonymizedFiles || 0) > 0) {
     return {
       showProgress: false,
@@ -129,7 +129,7 @@ const status = computed(() => {
       variant: 'default' as const
     }
   }
-  
+
   if ((props.anonymizedFiles || 0) > 0) {
     return {
       showProgress: false,
@@ -137,7 +137,7 @@ const status = computed(() => {
       variant: 'secondary' as const
     }
   }
-  
+
   return {
     showProgress: false,
     text: 'Not Processed',
@@ -152,14 +152,14 @@ const progressValue = computed(() => {
     }
     return ((props.sentFiles || 0) / props.totalFiles) * 100
   }
-  
+
   if (props.showOnly === 'anonymization') {
     if (progressInfo.value?.isProcessing) {
       return progressInfo.value.progress || 0
     }
     return ((props.anonymizedFiles || 0) / props.totalFiles) * 100
   }
-  
+
   // Original combined logic
   if (sendingProgressInfo.value?.isProcessing) {
     return sendingProgressInfo.value.progress || 0
@@ -173,15 +173,25 @@ const progressValue = computed(() => {
 
 <template>
   <div class="min-w-[120px]">
-    <div v-if="status.showProgress" class="space-y-1">
+    <div
+      v-if="status.showProgress"
+      class="space-y-1"
+    >
       <div class="flex justify-between items-center text-xs">
         <span class="text-muted-foreground">Processing...</span>
         <span class="font-medium">{{ status.text }}</span>
       </div>
-      <Progress :model-value="progressValue" class="h-1.5" />
+      <Progress
+        :model-value="progressValue"
+        class="h-1.5"
+      />
     </div>
-    
-    <Badge v-else :variant="status.variant" class="min-w-[80px] justify-center">
+
+    <Badge
+      v-else
+      :variant="status.variant"
+      class="min-w-[80px] justify-center"
+    >
       {{ status.text }}
     </Badge>
   </div>

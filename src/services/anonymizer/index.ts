@@ -40,8 +40,8 @@ export interface StudyAnonymizationResult {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string) => Effect.Effect<DicomFile, AnonymizerError>
-    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
+    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>) => Effect.Effect<DicomFile, AnonymizerError>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string> }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
   }
 >() { }
 
@@ -49,7 +49,7 @@ export const AnonymizerLive = Layer.effect(
   Anonymizer,
   Effect.gen(function* () {
     const dicomProcessor = yield* DicomProcessor
-    
+
     const generateRandomString = (): string => {
       const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
       let result = ''
@@ -72,7 +72,7 @@ export const AnonymizerLive = Layer.effect(
       return processed
     }
 
-    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string): Effect.Effect<DicomFile, AnonymizerError> =>
+    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>): Effect.Effect<DicomFile, AnonymizerError> =>
       Effect.gen(function* () {
         // Check if file has metadata
         if (!file.metadata) {
@@ -92,112 +92,124 @@ export const AnonymizerLive = Layer.effect(
         )
         console.log('Processed replacements result:', processedReplacements)
 
-      // Map string profile options to actual profile objects
-      const profileOptions: ProfileOption[] = (config.profileOptions || ['BasicProfile']).map(option => {
-        switch (option) {
-          case 'BasicProfile':
-            return BasicProfile
-          case 'RetainLongModifDatesOption':
-            return RetainLongModifDatesOption
-          case 'RetainLongFullDatesOption':
-            return RetainLongFullDatesOption
-          case 'RetainUIDsOption':
-            return RetainUIDsOption
-          case 'CleanGraphOption':
-            return CleanGraphOption
-          case 'RetainPatientCharsOption':
-            return RetainPatientCharsOption
-          case 'RetainSafePrivateOption':
-            return RetainSafePrivateOption
-          case 'CleanDescOption':
-            return CleanDescOption
-          case 'RetainDeviceIdentOption':
-            return RetainDeviceIdentOption
-          case 'RetainInstIdentOption':
-            return RetainInstIdentOption
-          case 'CleanStructContOption':
-            return CleanStructContOption
-          default:
-            return BasicProfile
-        }
-      })
-
-      // Configure deidentifier options
-      const deidentifierConfig: DeidentifyOptions = {
-        profileOptions,
-        dummies: {
-          default: processedReplacements.default || 'REMOVED',
-          lookup: processedReplacements
-        },
-        keep: config.preserveTags ? [...config.preserveTags] : undefined,
-        getReferenceDate: getDicomReferenceDate,
-        getReferenceTime: getDicomReferenceTime
-      }
-
-      // Add custom special handlers if enabled
-      if (config.useCustomHandlers) {
-        const tagsToRemove = config.tagsToRemove ? [...config.tagsToRemove] : []
-        // For individual files, use the Study Instance UID as the cache key
-        const studyId = file.metadata?.studyInstanceUID || 'unknown'
-        const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId)
-        deidentifierConfig.specialHandlers = specialHandlers
-      }
-
-      // Create deidentifier instance
-      const deidentifier = yield* Effect.try({
-        try: () => {
-          const instance = new DicomDeidentifier(deidentifierConfig)
-          console.log(`Created deidentifier for ${file.fileName} with ${config.useCustomHandlers ? 'custom' : 'standard'} handlers`)
-          return instance
-        },
-        catch: (error) => new AnonymizationError({
-          message: `Cannot create anonymizer: ${error}`,
-          fileName: file.fileName,
-          cause: error
-        })
-      })
-
-      // Convert ArrayBuffer to Uint8Array for the deidentifier
-      const uint8Array = new Uint8Array(file.arrayBuffer)
-      console.log(`Converted to Uint8Array for ${file.fileName}, size: ${uint8Array.length}`)
-
-      // Anonymize the DICOM file
-      const anonymizedUint8Array = yield* Effect.try({
-        try: () => {
-          const result = deidentifier.deidentify(uint8Array)
-          console.log(`Deidentified ${file.fileName} using library, result size: ${result.length}`)
-          return result
-        },
-        catch: (error: any) => {
-          console.error(`Library deidentification failed:`, error)
-          console.error(`Error stack:`, error.stack)
-
-          // Try to provide more context about the error
-          if (error.message?.includes("Cannot read properties of undefined")) {
-            console.error(`This might be due to malformed DICOM tags or unsupported private tags in ${file.fileName}`)
-            console.error(`Consider enabling removePrivateTags option or checking the DICOM file structure`)
+        // If a patientIdMap is provided and the file has an original patientId, override the Patient ID replacement
+        const originalPatientId = file.metadata?.patientId
+        if (patientIdMap && originalPatientId) {
+          const assignedId = patientIdMap[originalPatientId]
+          if (assignedId) {
+            processedReplacements[tag('Patient ID')] = assignedId
+            console.log(`Overriding Patient ID replacement using mapping for ${file.fileName}: ${originalPatientId} -> ${assignedId}`)
           }
+        }
 
-          return new AnonymizationError({
-            message: `Cannot anonymize file ${file.fileName}: ${error.message || error}`,
+        // Map string profile options to actual profile objects
+        const profileOptions: ProfileOption[] = (config.profileOptions || ['BasicProfile']).map(option => {
+          switch (option) {
+            case 'BasicProfile':
+              return BasicProfile
+            case 'RetainLongModifDatesOption':
+              return RetainLongModifDatesOption
+            case 'RetainLongFullDatesOption':
+              return RetainLongFullDatesOption
+            case 'RetainUIDsOption':
+              return RetainUIDsOption
+            case 'CleanGraphOption':
+              return CleanGraphOption
+            case 'RetainPatientCharsOption':
+              return RetainPatientCharsOption
+            case 'RetainSafePrivateOption':
+              return RetainSafePrivateOption
+            case 'CleanDescOption':
+              return CleanDescOption
+            case 'RetainDeviceIdentOption':
+              return RetainDeviceIdentOption
+            case 'RetainInstIdentOption':
+              return RetainInstIdentOption
+            case 'CleanStructContOption':
+              return CleanStructContOption
+            default:
+              return BasicProfile
+          }
+        })
+
+        // Configure deidentifier options
+        const deidentifierConfig: DeidentifyOptions = {
+          profileOptions,
+          dummies: {
+            default: processedReplacements.default || 'REMOVED',
+            lookup: processedReplacements
+          },
+          keep: config.preserveTags ? [...config.preserveTags] : undefined,
+          getReferenceDate: getDicomReferenceDate,
+          getReferenceTime: getDicomReferenceTime
+        }
+
+        // Add custom special handlers if enabled
+        if (config.useCustomHandlers) {
+          const tagsToRemove = config.tagsToRemove ? [...config.tagsToRemove] : []
+          // For individual files, use the Study Instance UID as the cache key
+          const studyId = file.metadata?.studyInstanceUID || 'unknown'
+          // If a patientIdMap is provided, disable PatientID generation in handlers to prevent conflicts
+          const disablePatientId = !!patientIdMap
+          const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId, { disablePatientId })
+          deidentifierConfig.specialHandlers = specialHandlers
+        }
+
+        // Create deidentifier instance
+        const deidentifier = yield* Effect.try({
+          try: () => {
+            const instance = new DicomDeidentifier(deidentifierConfig)
+            console.log(`Created deidentifier for ${file.fileName} with ${config.useCustomHandlers ? 'custom' : 'standard'} handlers`)
+            return instance
+          },
+          catch: (error) => new AnonymizationError({
+            message: `Cannot create anonymizer: ${error}`,
             fileName: file.fileName,
             cause: error
           })
+        })
+
+        // Convert ArrayBuffer to Uint8Array for the deidentifier
+        const uint8Array = new Uint8Array(file.arrayBuffer)
+        console.log(`Converted to Uint8Array for ${file.fileName}, size: ${uint8Array.length}`)
+
+        // Anonymize the DICOM file
+        const anonymizedUint8Array = yield* Effect.try({
+          try: () => {
+            const result = deidentifier.deidentify(uint8Array)
+            console.log(`Deidentified ${file.fileName} using library, result size: ${result.length}`)
+            return result
+          },
+          catch: (error: any) => {
+            console.error(`Library deidentification failed:`, error)
+            console.error(`Error stack:`, error.stack)
+
+            // Try to provide more context about the error
+            if (error.message?.includes("Cannot read properties of undefined")) {
+              console.error(`This might be due to malformed DICOM tags or unsupported private tags in ${file.fileName}`)
+              console.error(`Consider enabling removePrivateTags option or checking the DICOM file structure`)
+            }
+
+            return new AnonymizationError({
+              message: `Cannot anonymize file ${file.fileName}: ${error.message || error}`,
+              fileName: file.fileName,
+              cause: error
+            })
+          }
+        })
+
+        // Convert back to ArrayBuffer
+        const anonymizedArrayBuffer = anonymizedUint8Array.buffer.slice(
+          anonymizedUint8Array.byteOffset,
+          anonymizedUint8Array.byteOffset + anonymizedUint8Array.byteLength
+        )
+
+        // Create anonymized file with new data
+        const anonymizedFile: DicomFile = {
+          ...file,
+          arrayBuffer: anonymizedArrayBuffer,
+          anonymized: true
         }
-      })
-
-      // Convert back to ArrayBuffer
-      const anonymizedArrayBuffer = anonymizedUint8Array.buffer.slice(
-        anonymizedUint8Array.byteOffset,
-        anonymizedUint8Array.byteOffset + anonymizedUint8Array.byteLength
-      )
-
-      // Create anonymized file with new data
-      const anonymizedFile: DicomFile = {
-        ...file,
-        arrayBuffer: anonymizedArrayBuffer,
-        anonymized: true
-      }
 
         // Re-parse the anonymized file
         const finalFile = yield* dicomProcessor.parseFile(anonymizedFile)
@@ -209,10 +221,11 @@ export const AnonymizerLive = Layer.effect(
       studyId: string,
       files: DicomFile[],
       config: AnonymizationConfig,
-      options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void } = {}
+      options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string> } = {}
     ): Effect.Effect<StudyAnonymizationResult, AnonymizerError> =>
       Effect.gen(function* () {
         const { concurrency = 3, onProgress } = options
+        const patientIdMap = options.patientIdMap
 
         console.log(`[Effect Anonymizer] Starting anonymization of study ${studyId} with ${files.length} files`)
 
@@ -220,46 +233,46 @@ export const AnonymizerLive = Layer.effect(
         const sharedRandom = generateRandomString()
         console.log(`[Effect Anonymizer] Using shared random string for study ${studyId}: ${sharedRandom}`)
 
-      let completed = 0
-      const total = files.length
+        let completed = 0
+        const total = files.length
 
-      // Create individual effects with progress tracking
-      const effectsWithProgress = files.map((file, index) =>
-        Effect.gen(function* () {
-          // Send progress update before processing
-          if (onProgress) {
-            onProgress({
-              total,
-              completed,
-              percentage: Math.round((completed / total) * 100),
-              currentFile: file.fileName
-            })
-          }
+        // Create individual effects with progress tracking
+        const effectsWithProgress = files.map((file, index) =>
+          Effect.gen(function* () {
+            // Send progress update before processing
+            if (onProgress) {
+              onProgress({
+                total,
+                completed,
+                percentage: Math.round((completed / total) * 100),
+                currentFile: file.fileName
+              })
+            }
 
-          console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
+            console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
 
-          // Anonymize individual file with shared random string
-          const result = yield* anonymizeFile(file, config, sharedRandom)
+            // Anonymize individual file with shared random string
+            const result = yield* anonymizeFile(file, config, sharedRandom, patientIdMap)
 
-          completed++
+            completed++
 
-          // Send progress update after completion
-          if (onProgress) {
-            onProgress({
-              total,
-              completed,
-              percentage: Math.round((completed / total) * 100),
-              currentFile: file.fileName
-            })
-          }
+            // Send progress update after completion
+            if (onProgress) {
+              onProgress({
+                total,
+                completed,
+                percentage: Math.round((completed / total) * 100),
+                currentFile: file.fileName
+              })
+            }
 
-          console.log(`[Effect Anonymizer] Completed file ${index + 1}/${total}: ${file.fileName}`)
-          return result
-        })
-      )
+            console.log(`[Effect Anonymizer] Completed file ${index + 1}/${total}: ${file.fileName}`)
+            return result
+          })
+        )
 
-      // Run all effects concurrently with specified concurrency
-      const anonymizedFiles = yield* Effect.all(effectsWithProgress, { concurrency, batching: true })
+        // Run all effects concurrently with specified concurrency
+        const anonymizedFiles = yield* Effect.all(effectsWithProgress, { concurrency, batching: true })
 
         console.log(`[Effect Anonymizer] Study ${studyId} anonymization completed: ${anonymizedFiles.length} files processed`)
 

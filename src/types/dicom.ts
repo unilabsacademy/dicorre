@@ -35,6 +35,7 @@ export interface DicomStudy {
   studyInstanceUID: string
   patientName?: string
   patientId?: string
+  assignedPatientId?: string
   studyDate?: string
   studyDescription?: string
   series: DicomSeries[]

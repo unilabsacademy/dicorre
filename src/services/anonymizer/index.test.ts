@@ -233,6 +233,42 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
         expect(file.anonymized).toBe(true)
       })
     })
+
+    it('respects provided patientIdMap and keeps same assigned ID for same original IDs', async () => {
+      // Load two files that will share the same original patientId after parsing
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC'),
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC'),
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      // Build patientIdMap using parsed metadata patientId
+      const originalId = parsedFiles[0].metadata?.patientId || 'Unknown'
+      const patientIdMap: Record<string, string> = { [originalId]: 'PATFIXED123' }
+
+      const result = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
+
+        return yield* anonymizer.anonymizeStudy(
+          'test-study-mapping',
+          parsedFiles,
+          config,
+          { concurrency: 2, patientIdMap }
+        )
+      }))
+
+      expect(result.anonymizedFiles.length).toBe(2)
+      const ids = result.anonymizedFiles.map(f => f.metadata?.patientId)
+      expect(ids.every(id => id === 'PATFIXED123')).toBe(true)
+    })
   })
 
   describe('Error handling', () => {
