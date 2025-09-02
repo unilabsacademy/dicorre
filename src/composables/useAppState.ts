@@ -218,12 +218,9 @@ export function useAppState(runtime: RuntimeType) {
       if (error instanceof Error) {
         // Check if it's an unsupported file format error
         if (error.message.includes('unsupported format')) {
-          // Extract filename from error message if present
-          const fileNameMatch = error.message.match(/File ([^\s]+) has unsupported format/)
-          const fileName = fileNameMatch ? fileNameMatch[1] : 'Unknown file'
-
+          // Use the error message directly as it now contains dynamic supported formats
           toast.error('Unsupported file format', {
-            description: `${fileName} could not be processed. Only DICOM files (.dcm), ZIP archives, and supported image formats are accepted.`,
+            description: error.message,
             duration: 5000
           })
         } else if (error.message.includes('No valid DICOM files found')) {

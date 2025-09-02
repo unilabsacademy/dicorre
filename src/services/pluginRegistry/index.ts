@@ -13,6 +13,8 @@ export class PluginRegistry extends Context.Tag("PluginRegistry")<
     readonly getFileFormatPlugins: () => Effect.Effect<FileFormatPlugin[], never>
     readonly getHookPlugins: () => Effect.Effect<HookPlugin[], never>
     readonly getPluginForFile: (file: File) => Effect.Effect<FileFormatPlugin | undefined, PluginErrorType>
+    readonly getSupportedExtensions: () => Effect.Effect<string[], never>
+    readonly getSupportedMimeTypes: () => Effect.Effect<string[], never>
     readonly enablePlugin: (pluginId: string) => Effect.Effect<void, PluginErrorType>
     readonly disablePlugin: (pluginId: string) => Effect.Effect<void, PluginErrorType>
     readonly loadPluginConfig: (config: PluginConfig) => Effect.Effect<void, PluginErrorType>
@@ -111,6 +113,22 @@ export const PluginRegistryLive = Layer.succeed(
         return undefined
       })
 
+    const getSupportedExtensions = (): Effect.Effect<string[], never> =>
+      Effect.gen(function* () {
+        const fileFormatPlugins = yield* getFileFormatPlugins()
+        const allExtensions = fileFormatPlugins.flatMap(plugin => plugin.supportedExtensions)
+        // Remove duplicates and sort
+        return [...new Set(['.zip', '.dcm', '.dicom', ...allExtensions])].sort()
+      })
+
+    const getSupportedMimeTypes = (): Effect.Effect<string[], never> =>
+      Effect.gen(function* () {
+        const fileFormatPlugins = yield* getFileFormatPlugins()
+        const allMimeTypes = fileFormatPlugins.flatMap(plugin => plugin.supportedMimeTypes || [])
+        // Remove duplicates and sort
+        return [...new Set(['application/zip', ...allMimeTypes])].sort()
+      })
+
     const enablePlugin = (pluginId: string): Effect.Effect<void, PluginErrorType> =>
       Effect.gen(function* () {
         const plugin = plugins.get(pluginId)
@@ -167,6 +185,8 @@ export const PluginRegistryLive = Layer.succeed(
       getFileFormatPlugins,
       getHookPlugins,
       getPluginForFile,
+      getSupportedExtensions,
+      getSupportedMimeTypes,
       enablePlugin,
       disablePlugin,
       loadPluginConfig

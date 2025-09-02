@@ -113,7 +113,7 @@ export const FileHandlerLive = Layer.effect(
         }
 
         return yield* Effect.fail(new ValidationError({
-          message: `File ${fileName} has unsupported format. Only DICOM files (.dcm) and ZIP archives are supported`,
+          message: `File ${fileName} is not a valid DICOM file`,
           fileName,
         }))
       })
@@ -276,8 +276,13 @@ export const FileHandlerLive = Layer.effect(
         }
 
         // No plugin found and not a recognized format
+        // Get supported extensions dynamically
+        const supportedExtensions = yield* registry.getSupportedExtensions()
+          .pipe(Effect.catchAll(() => Effect.succeed(['.zip', '.dcm', '.dicom'])))
+        
+        const extensionsList = supportedExtensions.join(', ')
         return yield* Effect.fail(new FileHandlerError({
-          message: `File ${file.name} has unsupported format. Only DICOM files (.dcm), ZIP archives, and supported image formats are accepted`,
+          message: `File ${file.name} has unsupported format. Only DICOM files (.dcm), ZIP archives, and supported formats (${extensionsList}) are accepted`,
           fileName: file.name
         }))
       })
