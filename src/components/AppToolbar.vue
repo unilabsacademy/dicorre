@@ -51,6 +51,7 @@ const emit = defineEmits<{
   createProject: [name: string]
   clearProject: []
   anonymizeSelected: []
+  groupSelected: []
   sendSelected: []
   downloadSelected: []
   clearAll: []
@@ -98,19 +99,19 @@ function handleClearConfirm() {
 }
 
 const clearButtonText = computed(() => {
-  return props.selectedStudiesCount > 0 
+  return props.selectedStudiesCount > 0
     ? `Clear Selected (${props.selectedStudiesCount})`
     : 'Clear All'
 })
 
 const clearDialogTitle = computed(() => {
-  return props.selectedStudiesCount > 0 
+  return props.selectedStudiesCount > 0
     ? 'Clear Selected Studies'
     : 'Clear All Studies'
 })
 
 const clearDialogDescription = computed(() => {
-  return props.selectedStudiesCount > 0 
+  return props.selectedStudiesCount > 0
     ? `Are you sure you want to clear the ${props.selectedStudiesCount} selected ${props.selectedStudiesCount === 1 ? 'study' : 'studies'}? This action cannot be undone.`
     : 'Are you sure you want to clear all studies? This action cannot be undone.'
 })
@@ -148,7 +149,10 @@ const clearDialogDescription = computed(() => {
           <Link class="h-4 w-4" />
         </Button>
 
-        <AlertDialog :open="showClearProjectDialog" @update:open="showClearProjectDialog = $event">
+        <AlertDialog
+          :open="showClearProjectDialog"
+          @update:open="showClearProjectDialog = $event"
+        >
           <AlertDialogTrigger asChild>
             <Button
               variant="outline"
@@ -170,7 +174,7 @@ const clearDialogDescription = computed(() => {
             </AlertDialogHeader>
             <AlertDialogFooter>
               <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction 
+              <AlertDialogAction
                 @click="handleClearProject"
                 variant="destructive"
                 data-testid="confirm-clear-project"
@@ -193,7 +197,11 @@ const clearDialogDescription = computed(() => {
         id="toolbar-file-input"
         data-testid="toolbar-file-input"
       >
-      <Button asChild variant="outline" size="sm">
+      <Button
+        asChild
+        variant="outline"
+        size="sm"
+      >
         <label
           for="toolbar-file-input"
           class="cursor-pointer"
@@ -212,6 +220,16 @@ const clearDialogDescription = computed(() => {
       >
         <Shield class="w-4 h-4 mr-2" />
         Anonymize ({{ props.selectedStudiesCount }})
+      </Button>
+
+      <Button
+        @click="emit('groupSelected')"
+        :disabled="props.selectedStudiesCount < 2"
+        variant="secondary"
+        size="sm"
+        data-testid="group-button"
+      >
+        Group ({{ props.selectedStudiesCount }})
       </Button>
 
       <Button
@@ -236,7 +254,10 @@ const clearDialogDescription = computed(() => {
         Download ({{ props.selectedStudiesCount }})
       </Button>
 
-      <AlertDialog :open="showClearDialog" @update:open="showClearDialog = $event">
+      <AlertDialog
+        :open="showClearDialog"
+        @update:open="showClearDialog = $event"
+      >
         <AlertDialogTrigger asChild>
           <Button
             variant="destructive"
@@ -256,7 +277,7 @@ const clearDialogDescription = computed(() => {
           </AlertDialogHeader>
           <AlertDialogFooter>
             <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction 
+            <AlertDialogAction
               @click="handleClearConfirm"
               variant="destructive"
               data-testid="confirm-clear"

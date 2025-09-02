@@ -228,7 +228,10 @@ export const DicomProcessorLive = Layer.succeed(
 
         const updated = studies.map(study => {
           const original = study.patientId || 'Unknown'
-          if (!originalToAssigned.has(original)) {
+          // Respect existing assignedPatientId if set (pre-grouped)
+          if (study.assignedPatientId) {
+            originalToAssigned.set(original, study.assignedPatientId)
+          } else if (!originalToAssigned.has(original)) {
             const assigned = pattern.replace('{random}', generateRandomString())
             originalToAssigned.set(original, assigned)
           }

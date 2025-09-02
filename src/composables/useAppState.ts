@@ -60,6 +60,23 @@ export function useAppState(runtime: RuntimeType) {
   const clearAppError = () => {
     appError.value = null
   }
+  const groupSelectedStudies = async (): Promise<void> => {
+    const selected = selectedStudies.value
+    if (selected.length < 2) return
+
+    // Require an existing assignedPatientId on at least one selected study
+    const targetAssignedId = selected.find(s => s.assignedPatientId)?.assignedPatientId
+    if (!targetAssignedId) {
+      toast.error('Cannot group studies', {
+        description: 'Assign a patient ID to one of the selected studies before grouping.'
+      })
+      return
+    }
+
+    // Apply to all selected studies
+    const selectedUids = new Set(selected.map(s => s.studyInstanceUID))
+    studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, assignedPatientId: targetAssignedId } : s)
+  }
 
   const loadConfig = async () => { /* stream-backed; kept for API compatibility */ }
 
@@ -711,6 +728,7 @@ export function useAppState(runtime: RuntimeType) {
     addFilesToUploaded,
     processFiles,
     anonymizeSelected,
+    groupSelectedStudies,
     testConnection,
     handleSendSelected,
     clearFiles,

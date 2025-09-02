@@ -215,6 +215,7 @@ onUnmounted(() => {
         @create-project="appState.handleCreateProject"
         @clear-project="appState.handleClearProject"
         @anonymize-selected="anonymizeSelected"
+        @group-selected="appState.groupSelectedStudies()"
         @send-selected="handleSendSelected(appState.selectedStudies.value)"
         @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
         @clear-all="clearFiles"
@@ -241,9 +242,12 @@ onUnmounted(() => {
         :data="studiesData"
         data-testid="studies-data-table"
       />
-      
+
       <!-- File counts for testing (small text at bottom) -->
-      <div v-if="appState.dicomFiles.value.length > 0 || appState.anonymizedFilesCount.value > 0" class="text-xs text-muted-foreground mt-4 flex gap-4">
+      <div
+        v-if="appState.dicomFiles.value.length > 0 || appState.anonymizedFilesCount.value > 0"
+        class="text-xs text-muted-foreground mt-4 flex gap-4"
+      >
         <span data-testid="files-count-badge">Files: {{ appState.dicomFiles.value.length }}</span>
         <span data-testid="anonymized-count-badge">Anonymized: {{ appState.anonymizedFilesCount.value }}</span>
       </div>
