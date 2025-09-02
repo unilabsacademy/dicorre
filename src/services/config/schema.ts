@@ -108,10 +108,35 @@ export const ProjectConfigSchema = Schema.Struct({
   })
 )
 
+// Plugin configuration schemas
+const PluginSettingsSchema = Schema.Record({
+  key: Schema.String,
+  value: Schema.Any
+}).pipe(
+  Schema.annotations({
+    description: "Settings for individual plugins"
+  })
+)
+
+const PluginsConfigSchema = Schema.Struct({
+  enabled: Schema.Array(Schema.String).pipe(
+    Schema.annotations({
+      description: "List of enabled plugin IDs"
+    })
+  ),
+  settings: Schema.optional(PluginSettingsSchema)
+}).pipe(
+  Schema.annotations({
+    identifier: "PluginsConfig",
+    description: "Plugin configuration including enabled plugins and their settings"
+  })
+)
+
 export const AppConfigSchema = Schema.Struct({
   dicomServer: DicomServerConfigSchema,
   anonymization: AnonymizationConfigSchema,
-  project: Schema.optional(ProjectConfigSchema)
+  project: Schema.optional(ProjectConfigSchema),
+  plugins: Schema.optional(PluginsConfigSchema)
 })
 
 // Type extraction
@@ -120,6 +145,7 @@ export type AppConfigInput = Schema.Schema.Encoded<typeof AppConfigSchema>
 export type AnonymizationConfig = Schema.Schema.Type<typeof AnonymizationConfigSchema>
 export type DicomServerConfig = Schema.Schema.Type<typeof DicomServerConfigSchema>
 export type ProjectConfig = Schema.Schema.Type<typeof ProjectConfigSchema>
+export type PluginsConfig = Schema.Schema.Type<typeof PluginsConfigSchema>
 
 // Validation functions
 export const validateAppConfig = (input: unknown) =>

@@ -124,10 +124,8 @@ export function useAppState(runtime: RuntimeType) {
         Effect.gen(function* () {
           const configService = yield* ConfigService
           const project = yield* configService.createProject(name)
-          // Get current config and add the project to it
-          const currentConfig = yield* configService.getCurrentConfig
-          const updatedConfig = { ...currentConfig, project }
-          yield* configService.loadConfig(updatedConfig)
+          // Update only the project field, preserving all other config
+          yield* configService.updateProject(project)
         })
       )
 

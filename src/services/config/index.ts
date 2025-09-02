@@ -16,6 +16,7 @@ export class ConfigService extends Context.Tag("ConfigService")<
     readonly getCurrentConfig: Effect.Effect<AppConfig, never>
     readonly getCurrentProject: Effect.Effect<ProjectConfig | undefined, never>
     readonly createProject: (name: string) => Effect.Effect<ProjectConfig, never>
+    readonly updateProject: (project: ProjectConfig) => Effect.Effect<void, ConfigurationErrorType>
     readonly clearProject: Effect.Effect<void, ConfigurationErrorType>
     readonly configChanges: Stream.Stream<AppConfig>
   }
@@ -99,6 +100,12 @@ export const ConfigServiceLive = Layer.scoped(
         createdAt: new Date().toISOString()
       })
 
+    const updateProject = (project: ProjectConfig): Effect.Effect<void, ConfigurationErrorType> => Effect.gen(function* () {
+      yield* SubscriptionRef.update(ref, (c) => ({ ...c, project }))
+      const updated = yield* SubscriptionRef.get(ref)
+      yield* persistence.save(updated)
+      console.log('Project updated:', project.name)
+    })
 
     const clearProject: Effect.Effect<void, ConfigurationErrorType> = Effect.gen(function* () {
       yield* SubscriptionRef.update(ref, (c) => {
@@ -118,6 +125,7 @@ export const ConfigServiceLive = Layer.scoped(
       getCurrentConfig,
       getCurrentProject,
       createProject,
+      updateProject,
       clearProject,
       configChanges: ref.changes
     } as const
