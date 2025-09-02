@@ -1,6 +1,6 @@
 import { Effect, Context, Layer } from "effect"
 import JSZip from 'jszip'
-import type { DicomFile } from '@/types/dicom'
+import type { DicomFile, DicomMetadata } from '@/types/dicom'
 import { FileHandlerError, ValidationError, type FileHandlerErrorType } from '@/types/effects'
 import { PluginRegistry } from '@/services/pluginRegistry'
 
@@ -21,9 +21,29 @@ export const FileHandlerLive = Layer.effect(
   FileHandler,
   Effect.gen(function* () {
     const registry = yield* PluginRegistry
-    
+
     const generateFileId = (): string => {
       return `file-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
+    }
+
+    const truncateToDICOMLO = (value: string): string => {
+      return value.length <= 64 ? value : value.slice(0, 64)
+    }
+
+    const createDefaultConversionMetadata = (file: File): DicomMetadata => {
+      return {
+        patientName: 'Converted^File',
+        patientId: `CONV-${Date.now()}`,
+        studyInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
+        seriesInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
+        sopInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
+        studyDate: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
+        modality: 'SC',
+        studyDescription: truncateToDICOMLO(file.name),
+        seriesDescription: 'File Conversion',
+        instanceNumber: 1,
+        transferSyntaxUID: '1.2.840.10008.1.2.1'
+      }
     }
 
     const validateDicomFile = (arrayBuffer: ArrayBuffer, fileName: string): Effect.Effect<boolean, ValidationError> =>
@@ -209,12 +229,12 @@ export const FileHandlerLive = Layer.effect(
         if (file.name.toLowerCase().endsWith('.zip')) {
           return yield* extractZipFile(file)
         }
-        
+
         // Check if it's a DICOM file
-        const isDicomFile = file.name.toLowerCase().endsWith('.dcm') || 
-                           file.name.toLowerCase().endsWith('.dicom') ||
-                           !file.name.includes('.')
-        
+        const isDicomFile = file.name.toLowerCase().endsWith('.dcm') ||
+          file.name.toLowerCase().endsWith('.dicom') ||
+          !file.name.includes('.')
+
         if (isDicomFile) {
           // Try to read as DICOM first
           const arrayBuffer = yield* Effect.tryPromise({
@@ -225,38 +245,26 @@ export const FileHandlerLive = Layer.effect(
               cause: error
             })
           })
-          
+
           const isValidDicom = yield* validateDicomFile(arrayBuffer, file.name)
             .pipe(Effect.catchAll(() => Effect.succeed(false)))
-          
+
           if (isValidDicom) {
             const dicomFile = yield* readSingleDicomFile(file)
             return [dicomFile]
           }
         }
-        
+
         // Not a DICOM file - check if any plugin can handle it
         const plugin = yield* registry.getPluginForFile(file)
           .pipe(Effect.catchAll(() => Effect.succeed(undefined)))
-        
+
         if (plugin) {
           console.log(`Using plugin ${plugin.id} to process ${file.name}`)
-          
+
           // Create complete metadata for file conversion - all required fields
-          const defaultMetadata = {
-            patientName: 'Converted^File',
-            patientId: `CONV-${Date.now()}`,
-            studyInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
-            seriesInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
-            sopInstanceUID: `2.25.${Math.floor(Math.random() * 1e15)}`,
-            studyDate: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
-            modality: 'SC', // Secondary Capture
-            studyDescription: `Converted from ${file.name}`,
-            seriesDescription: 'File Conversion',
-            instanceNumber: 1,
-            transferSyntaxUID: '1.2.840.10008.1.2.1' // Explicit VR Little Endian
-          }
-          
+          const defaultMetadata = createDefaultConversionMetadata(file)
+
           return yield* plugin.convertToDicom(file, defaultMetadata)
             .pipe(
               Effect.mapError((error) => new FileHandlerError({
@@ -266,14 +274,14 @@ export const FileHandlerLive = Layer.effect(
               }))
             )
         }
-        
+
         // No plugin found and not a recognized format
         return yield* Effect.fail(new FileHandlerError({
           message: `File ${file.name} has unsupported format. Only DICOM files (.dcm), ZIP archives, and supported image formats are accepted`,
           fileName: file.name
         }))
       })
-    
+
     return {
       extractZipFile,
       readSingleDicomFile,

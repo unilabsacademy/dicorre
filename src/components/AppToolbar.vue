@@ -225,7 +225,7 @@ const clearDialogDescription = computed(() => {
         data-testid="anonymize-button"
       >
         <Shield class="w-4 h-4 mr-2" />
-        Anonymize
+        Anonymize{{ props.selectedStudiesCount > 0 ? ` (${props.selectedStudiesCount})` : '' }}
       </Button>
 
       <Button
@@ -239,58 +239,13 @@ const clearDialogDescription = computed(() => {
         Send
       </Button>
 
-      <Button
-        @click="emit('downloadSelected')"
-        :disabled="props.isDownloading || props.selectedStudiesCount === 0"
-        variant="outline"
-        size="sm"
-        data-testid="download-button"
-      >
-        <Download class="w-4 h-4 mr-2" />
-        Download
-      </Button>
-
-      <AlertDialog
-        :open="showClearDialog"
-        @update:open="showClearDialog = $event"
-      >
-        <AlertDialogTrigger asChild>
-          <Button
-            variant="outline"
-            size="sm"
-            data-testid="clear-all-button"
-          >
-            <Trash2 class="w-4 h-4 mr-2" />
-            {{ clearButtonText }}
-          </Button>
-        </AlertDialogTrigger>
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>{{ clearDialogTitle }}</AlertDialogTitle>
-            <AlertDialogDescription>
-              {{ clearDialogDescription }}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              @click="handleClearConfirm"
-              variant="destructive"
-              data-testid="confirm-clear"
-            >
-              Clear
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
-
       <!-- Settings Dropdown -->
       <DropdownMenu>
         <DropdownMenuTrigger asChild>
           <Button
             variant="outline"
             size="sm"
-            data-testid="settings-menu-button"
+            data-testid="dropdown-menu-trigger"
           >
             <MoreVertical class="w-4 h-4" />
           </Button>
@@ -314,6 +269,25 @@ const clearDialogDescription = computed(() => {
             Edit Patient ID
           </DropdownMenuItem>
 
+          <DropdownMenuItem
+            @click="emit('downloadSelected')"
+            :disabled="props.isDownloading || props.selectedStudiesCount === 0"
+            data-testid="download-menu-item"
+          >
+            <Download class="w-4 h-4 mr-2" />
+            Download Selected
+          </DropdownMenuItem>
+
+          <DropdownMenuSeparator />
+
+          <DropdownMenuItem
+            @click="showClearDialog = true"
+            data-testid="clear-menu-item"
+          >
+            <Trash2 class="w-4 h-4 mr-2" />
+            {{ clearButtonText }}
+          </DropdownMenuItem>
+
           <DropdownMenuSeparator />
 
           <DropdownMenuItem
@@ -334,7 +308,7 @@ const clearDialogDescription = computed(() => {
         </DropdownMenuContent>
       </DropdownMenu>
 
-      <!-- Edit Assigned Patient ID Dialog (moved outside dropdown) -->
+      <!-- Edit Assigned Patient ID Dialog -->
       <AlertDialog
         :open="showEditDialog"
         @update:open="showEditDialog = $event"
@@ -362,6 +336,31 @@ const clearDialogDescription = computed(() => {
               data-testid="confirm-assign-patient-id"
             >
               Assign
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <!-- Clear Confirmation Dialog -->
+      <AlertDialog
+        :open="showClearDialog"
+        @update:open="showClearDialog = $event"
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>{{ clearDialogTitle }}</AlertDialogTitle>
+            <AlertDialogDescription>
+              {{ clearDialogDescription }}
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              @click="handleClearConfirm"
+              variant="destructive"
+              data-testid="confirm-clear"
+            >
+              Clear
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>

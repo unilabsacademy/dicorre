@@ -94,7 +94,7 @@ test.describe('DICOM Sending E2E Tests', () => {
       })
     })
 
-    await page.getByTestId('settings-menu-button').click()
+    await page.getByTestId('dropdown-menu-trigger').click()
     await page.getByTestId('test-connection-menu-item').click()
     await expect(page.locator('[data-sonner-toast]')).toBeVisible({ timeout: 5000 })
   })

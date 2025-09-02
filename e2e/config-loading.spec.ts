@@ -34,7 +34,7 @@ test.describe('Config Loading', () => {
       await waitForAppReady(page);
       
       // Open settings menu and click Load Config
-      await page.getByTestId('settings-menu-button').click();
+      await page.getByTestId('dropdown-menu-trigger').click();
       await page.getByTestId('load-config-menu-item').click();
       
       // Now set the file input (it's hidden but clicking the menu item should trigger it)
@@ -73,7 +73,7 @@ test.describe('Config Loading', () => {
       await waitForAppReady(page);
       
       // Open settings menu and click Load Config
-      await page.getByTestId('settings-menu-button').click();
+      await page.getByTestId('dropdown-menu-trigger').click();
       await page.getByTestId('load-config-menu-item').click();
       
       // Now set the file input

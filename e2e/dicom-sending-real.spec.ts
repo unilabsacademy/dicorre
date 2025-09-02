@@ -8,7 +8,7 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
 
     await page.goto('/')
 
-    await page.getByTestId('settings-menu-button').click()
+    await page.getByTestId('dropdown-menu-trigger').click()
     await expect(page.getByTestId('test-connection-menu-item')).toBeVisible()
     await page.getByTestId('test-connection-menu-item').click()
     
