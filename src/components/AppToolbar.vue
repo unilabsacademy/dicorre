@@ -31,7 +31,8 @@ import {
   X,
   Plus,
   Pencil,
-  Upload
+  Upload,
+  Layers
 } from 'lucide-vue-next'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import ConfigLoader from '@/components/ConfigLoader.vue'
@@ -100,7 +101,7 @@ function handleClearConfirm() {
 
 const clearButtonText = computed(() => {
   return props.selectedStudiesCount > 0
-    ? `Clear Selected (${props.selectedStudiesCount})`
+    ? 'Clear Selected'
     : 'Clear All'
 })
 
@@ -119,7 +120,7 @@ const clearDialogDescription = computed(() => {
 
 <template>
   <div
-    class="flex items-center justify-between bg-muted/50 p-4 rounded-lg border"
+    class="flex items-center justify-between"
     data-testid="app-toolbar"
   >
     <!-- Left Side: Project Info -->
@@ -214,33 +215,23 @@ const clearDialogDescription = computed(() => {
       <Button
         @click="emit('anonymizeSelected')"
         :disabled="props.selectedStudiesCount === 0"
-        variant="default"
+        variant="outline"
         size="sm"
         data-testid="anonymize-button"
       >
         <Shield class="w-4 h-4 mr-2" />
-        Anonymize ({{ props.selectedStudiesCount }})
-      </Button>
-
-      <Button
-        @click="emit('groupSelected')"
-        :disabled="props.selectedStudiesCount < 2"
-        variant="secondary"
-        size="sm"
-        data-testid="group-button"
-      >
-        Group ({{ props.selectedStudiesCount }})
+        Anonymize
       </Button>
 
       <Button
         @click="emit('sendSelected')"
         :disabled="props.isProcessing || props.selectedStudiesCount === 0"
-        variant="secondary"
+        variant="outline"
         size="sm"
         data-testid="send-button"
       >
         <Send class="w-4 h-4 mr-2" />
-        Send ({{ props.selectedStudiesCount }})
+        Send
       </Button>
 
       <Button
@@ -251,7 +242,18 @@ const clearDialogDescription = computed(() => {
         data-testid="download-button"
       >
         <Download class="w-4 h-4 mr-2" />
-        Download ({{ props.selectedStudiesCount }})
+        Download
+      </Button>
+
+      <Button
+        @click="emit('groupSelected')"
+        :disabled="props.selectedStudiesCount < 2"
+        variant="outline"
+        size="sm"
+        data-testid="group-button"
+      >
+        <Layers class="w-4 h-4 mr-2" />
+        Group
       </Button>
 
       <AlertDialog
@@ -260,7 +262,7 @@ const clearDialogDescription = computed(() => {
       >
         <AlertDialogTrigger asChild>
           <Button
-            variant="destructive"
+            variant="outline"
             size="sm"
             data-testid="clear-all-button"
           >
