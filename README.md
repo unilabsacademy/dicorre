@@ -10,15 +10,7 @@ Developed by Unilabs Academy to facilitate anonymisation and uploading of cases 
 
 ## Quick Start
 
-### 1. [OPTIONAL] Start the development DICOM Server (Orthanc)
-
-```bash
-# Start Orthanc DICOM server
-docker-compose up -d
-```
-Access Orthanc web interface at: http://localhost:8080/app/explorer.html
-
-### 2. Start the Development Server
+### 1. Start the Development Server
 
 ```bash
 # Install dependencies
@@ -30,17 +22,27 @@ pnpm dev
 
 The application will be available at: http://localhost:5173
 
-### 3. Test the Application
+### 2. [OPTIONAL] Start the development DICOM Server (Orthanc)
 
-**Unit tests**
 ```bash
-pnpm test:unit
+# Start Orthanc DICOM server
+docker-compose up -d
 ```
+Access Orthanc web interface at: http://localhost:8080/app/explorer.html
 
-**E2E tests**
+### 3. Testing
+
 ```bash
+# Unit tests
+pnpm test:unit
+
+#E2E tests
 pnpm test:e2e --workers=1
 ```
+
+### 4. Configuration
+
+See app.config.json
 
 ## Features
 
@@ -79,10 +81,6 @@ pnpm test:e2e --workers=1
 - **DICOM Processing**: dcmjs
 - **DICOM Sending**: dicomweb-client
 - **File Handling**: JSZip
-
-## Configuration
-
-See app.config.json
 
 ## Development Commands
 
