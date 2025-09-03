@@ -15,29 +15,104 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { appConfigEditSchema, type FieldSchema, shouldShowField } from '@/services/config/editSchema'
+import { appConfigEditSchema, type FieldSchema, type ConfigEditSchema, shouldShowField } from '@/services/config/editSchema'
 import type { RuntimeType } from '@/types/effects'
 import { toast } from 'vue-sonner'
+import type { ProjectConfig } from '@/services/config/schema'
 
 const props = defineProps<{
   open: boolean
   runtime: RuntimeType
+  currentProject?: ProjectConfig
+  isProjectMode: boolean
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'config-updated': []
+  'create-project': [name: string]
+  'update-project': [project: ProjectConfig]
 }>()
 
 const isProcessing = ref(false)
 const editedConfig = ref<any>({})
-const expandedSections = ref<Set<string>>(new Set(['dicomServer']))
+const expandedSections = ref<Set<string>>(new Set(['project', 'dicomServer']))
+
+// Project-specific state
+const projectName = ref('')
+type ParamRow = { key: string; value: string }
+const params = ref<ParamRow[]>([])
 
 function toggleSection(section: string) {
   if (expandedSections.value.has(section)) {
     expandedSections.value.delete(section)
   } else {
     expandedSections.value.add(section)
+  }
+}
+
+// Project-related functions
+watch(() => props.open, (newOpen) => {
+  if (newOpen) {
+    // Set project data when opening
+    projectName.value = props.currentProject?.name || ''
+    const existing = ((props.currentProject as any)?.plugins?.settings?.['sent-notifier']?.params || {}) as Record<string, string>
+    params.value = Object.entries(existing).map(([key, value]) => ({ key, value: String(value ?? '') }))
+  }
+})
+
+function toRecord(rows: ParamRow[]): Record<string, string> {
+  const out: Record<string, string> = {}
+  for (const r of rows) {
+    const k = r.key.trim()
+    if (!k) continue
+    out[k] = r.value
+  }
+  return out
+}
+
+function addParam() {
+  params.value = [...params.value, { key: '', value: '' }]
+}
+
+function removeParam(index: number) {
+  params.value = params.value.filter((_, i) => i !== index)
+}
+
+async function handleSaveProject() {
+  if (!projectName.value.trim()) {
+    return
+  }
+
+  isProcessing.value = true
+  try {
+    if (props.currentProject) {
+      const next: ProjectConfig = {
+        ...props.currentProject,
+        name: projectName.value.trim(),
+        plugins: {
+          ...props.currentProject.plugins,
+          settings: {
+            ...((props.currentProject.plugins as any)?.settings),
+            ['sent-notifier']: {
+              ...(((props.currentProject.plugins as any)?.settings) || {})['sent-notifier'],
+              params: toRecord(params.value)
+            }
+          }
+        }
+      }
+      emit('update-project', next)
+    } else {
+      emit('create-project', projectName.value.trim())
+    }
+    toast.success('Project saved successfully')
+  } catch (error) {
+    console.error('Failed to save project:', error)
+    toast.error('Failed to save project', {
+      description: error instanceof Error ? error.message : 'Unknown error'
+    })
+  } finally {
+    isProcessing.value = false
   }
 }
 
@@ -230,9 +305,9 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
       class="w-[600px] sm:max-w-[600px] overflow-y-auto"
     >
       <SheetHeader>
-        <SheetTitle>Edit Configuration</SheetTitle>
+        <SheetTitle>Settings</SheetTitle>
         <SheetDescription>
-          Modify application settings. Changes will be saved to local storage.
+          Configure project settings and application configuration.
         </SheetDescription>
       </SheetHeader>
 
@@ -240,6 +315,83 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
         class="space-y-4 py-4"
         v-if="editedConfig"
       >
+        <!-- Project Configuration -->
+        <Card>
+          <CardHeader
+            class="cursor-pointer"
+            @click="toggleSection('project')"
+          >
+            <CardTitle class="text-base">Project Settings</CardTitle>
+            <CardDescription>Configure project name and plugin parameters</CardDescription>
+          </CardHeader>
+          <CardContent v-if="expandedSections.has('project')">
+            <div class="space-y-4">
+              <!-- Project Name -->
+              <div class="space-y-2">
+                <Label
+                  for="project-name"
+                  class="text-sm font-medium"
+                >Project Name</Label>
+                <div class="flex gap-2">
+                  <Input
+                    id="project-name"
+                    v-model="projectName"
+                    :placeholder="currentProject ? 'Enter project name...' : 'Enter project name (e.g., Untitled)...'"
+                    :disabled="isProcessing"
+                    class="flex-1"
+                  />
+                  <Button
+                    @click="handleSaveProject"
+                    :disabled="isProcessing || !projectName.trim()"
+                    size="sm"
+                  >
+                    {{ isProcessing ? '...' : (currentProject ? 'Update' : 'Create') }}
+                  </Button>
+                </div>
+              </div>
+
+              <!-- Sent Notifier Parameters -->
+              <div class="space-y-2">
+                <Label class="text-sm font-medium">Sent Notifier Parameters</Label>
+                <div class="space-y-2">
+                  <div
+                    v-for="(row, idx) in params"
+                    :key="idx"
+                    class="flex gap-2"
+                  >
+                    <Input
+                      v-model="row.key"
+                      placeholder="Key"
+                      :disabled="isProcessing"
+                    />
+                    <Input
+                      v-model="row.value"
+                      placeholder="Value"
+                      :disabled="isProcessing"
+                    />
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      @click="removeParam(idx)"
+                      :disabled="isProcessing"
+                    >
+                      <X class="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    @click="addParam"
+                    :disabled="isProcessing"
+                  >
+                    <Plus class="w-4 h-4 mr-2" />
+                    Add Parameter
+                  </Button>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <!-- DICOM Server Configuration -->
         <Card>
           <CardHeader
@@ -336,7 +488,7 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                 <Label>Anonymization Profiles</Label>
                 <div class="space-y-2 max-h-60 overflow-y-auto border rounded-md p-2">
                   <div
-                    v-for="option in (appConfigEditSchema.anonymization.profileOptions as any).options"
+                    v-for="option in ((appConfigEditSchema.anonymization as ConfigEditSchema).profileOptions as FieldSchema).options || []"
                     :key="option.value"
                     class="flex items-start space-x-2"
                   >
@@ -532,7 +684,7 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                 <Label>Enabled Plugins</Label>
                 <div class="space-y-2 border rounded-md p-2">
                   <div
-                    v-for="option in (appConfigEditSchema.plugins.enabled as any).options"
+                    v-for="option in ((appConfigEditSchema.plugins as ConfigEditSchema).enabled as FieldSchema).options || []"
                     :key="option.value"
                     class="flex items-center space-x-2"
                   >

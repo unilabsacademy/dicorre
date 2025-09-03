@@ -37,7 +37,6 @@ import {
 import { Sheet } from '@/components/ui/sheet'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import ConfigLoader from '@/components/ConfigLoader.vue'
-import ProjectEditSheet from '@/components/ProjectEditSheet.vue'
 import ConfigEditSheet from '@/components/ConfigEditSheet.vue'
 import type { ProjectConfig } from '@/services/config/schema'
 import { Input } from '@/components/ui/input'
@@ -68,7 +67,6 @@ const emit = defineEmits<{
   addFiles: [files: File[]]
 }>()
 
-const showProjectEditSheet = ref(false)
 const showConfigEditSheet = ref(false)
 const showClearProjectDialog = ref(false)
 const showClearDialog = ref(false)
@@ -146,13 +144,14 @@ const clearDialogDescription = computed(() => {
           </span>
         </div>
 
-        <ProjectEditSheet
-          :current-project="props.currentProject"
-          :open="showProjectEditSheet"
-          @update:open="showProjectEditSheet = $event"
-          @create-project="handleCreateProject"
-          @update-project="(p) => emit('updateProject', p)"
-        />
+        <Button
+          @click="showConfigEditSheet = true"
+          variant="outline"
+          size="sm"
+          data-testid="edit-project-button"
+        >
+          <Pencil class="w-4 h-4" />
+        </Button>
 
         <Button
           @click="handleShareProject"
@@ -387,8 +386,13 @@ const clearDialogDescription = computed(() => {
       <!-- Config Edit Sheet -->
       <ConfigEditSheet
         :runtime="props.runtime"
+        :current-project="props.currentProject"
+        :is-project-mode="props.isProjectMode"
         :open="showConfigEditSheet"
         @update:open="showConfigEditSheet = $event"
+        @config-updated="emit('configLoaded')"
+        @create-project="(name) => emit('createProject', name)"
+        @update-project="(project) => emit('updateProject', project)"
       />
     </div>
   </div>
