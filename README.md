@@ -44,14 +44,12 @@ pnpm test:e2e --workers=1
 
 ## Features
 
-- 🏥 **DICOM Anonymization**: Remove patient identifiable information from DICOM files
-- 📤 **DICOMweb Sending**: Send anonymized files to PACS/radiology destinations via STOW-RS
-- 📦 **Batch Processing**: Process multiple files and ZIP archives
-- 🔌 **Plugin Architecture**: Extensible system for format converters and custom processing
-- 💾 **Session Persistence**: Automatic save/restore of anonymization progress
-- 📊 **Progress Tracking**: Real-time progress monitoring for large datasets
-- 🖼️ **Multi-format Support**: Convert PDFs and images to DICOM
-- ⚙️ **Configuration Management**: Save and share project configurations
+- **DICOM Anonymization**: Remove patient identifiable information from DICOM files
+- **DICOMweb Sending**: Send anonymized files to PACS/radiology destinations via STOW-RS
+- **Batch Processing**: Process multiple files and ZIP archives
+- **Plugin Architecture**: Extensible system for format converters and custom processing
+- **Session Persistence**: Automatic save/restore of anonymization progress
+- **Configuration Management**: Save and share project configurations
 
 ## Architecture
 
@@ -63,7 +61,7 @@ pnpm test:e2e --workers=1
 - **DicomSender**: DICOMweb STOW-RS client for sending to PACS
 - **OpfsStorage**: Browser-based file storage using Origin Private File System
 - **SessionPersistence**: Automatic save/restore of session state
-- **ConfigPersistence**: Configuration management and sharing
+- **ConfigService**: Configuration service with persistance
 - **DownloadService**: Export anonymized files as ZIP
 - **PluginRegistry**: Plugin management system
 
