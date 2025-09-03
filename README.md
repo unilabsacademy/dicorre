@@ -67,14 +67,14 @@ pnpm test:e2e --workers=1
 
 ### Plugins
 
-- **ImageConverter**: Convert JPEG/PNG images to DICOM format
-- **PdfConverter**: Convert PDF documents to DICOM secondary capture
-- **SentNotifier**: Desktop notifications for successful transmissions
+- **ImageConverter**: Convert JPEG/PNG images to DICOM images
+- **PdfConverter**: Convert PDF documents to DICOM series
+- **SentNotifier**: Configurable notifier for external system upon hook triggers
 - **SendLogger**: Log all transmitted DICOM files for audit (Example plugin)
 
 ### Tech Stack
 
-- **Frontend**: Vue 3 + TypeScript + Vite
+- **Frontend**: Vue 3 + TypeScript + Effect + Vite
 - **Anonymization**: @umessen/dicom-deidentifier
 - **DICOM Processing**: dcmjs
 - **DICOM Sending**: dicomweb-client
