@@ -188,21 +188,6 @@ onUnmounted(() => {
         </CardContent>
       </Card>
 
-      <!-- Session Restore Loading State -->
-      <Card v-else-if="isRestoring">
-        <CardContent class="flex items-center justify-center py-8">
-          <div class="text-center space-y-4 w-full max-w-md">
-            <p class="text-muted-foreground">
-              {{ isRestoring ? 'Restoring previous session...' : 'Processing files...' }}
-            </p>
-            <Progress
-              v-if="isRestoring && restoreProgress > 0"
-              :model-value="restoreProgress"
-              class="w-full"
-            />
-          </div>
-        </CardContent>
-      </Card>
 
       <!-- Consolidated Toolbar -->
       <AppToolbar
@@ -262,8 +247,23 @@ onUnmounted(() => {
       </div>
 
 
-      <!-- Studies Data Table -->
+      <!-- Studies Data Table or Session Restore Loading State -->
+      <Card v-if="isRestoring">
+        <CardContent class="flex items-center justify-center py-8">
+          <div class="text-center space-y-4 w-full max-w-md">
+            <p class="text-muted-foreground">
+              {{ isRestoring ? 'Restoring previous session...' : 'Processing files...' }}
+            </p>
+            <Progress
+              v-if="isRestoring && restoreProgress > 0"
+              :model-value="restoreProgress"
+              class="w-full"
+            />
+          </div>
+        </CardContent>
+      </Card>
       <DataTable
+        v-else
         :columns="columns"
         :data="studiesData"
         data-testid="studies-data-table"
