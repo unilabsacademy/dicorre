@@ -200,37 +200,39 @@ export function useAppState(runtime: RuntimeType) {
 
   const processNewFiles = async (newFiles: File[], isAppReady: boolean) => {
     try {
-      await fileProcessing.processNewFilesWithInterruption(newFiles, {
+      fileProcessing.addFiles(newFiles, {
         isAppReady,
-        concurrency: concurrency.value,
-        dicomFiles: dicomFiles.value,
-        onUpdateFiles: (updatedFiles) => {
-          dicomFiles.value = updatedFiles
-        },
-        onUpdateStudies: (updatedStudies) => {
-          // Assign patient IDs for preview/mapping
+        parseConcurrency: concurrency.value,
+        onAppendFiles: (files: DicomFile[]) => {
+          const nextFiles = [...dicomFiles.value, ...files]
+          dicomFiles.value = nextFiles
           runtime.runPromise(
             Effect.gen(function* () {
               const processor = yield* DicomProcessor
               const cfgService = yield* ConfigService
               const cfg = yield* cfgService.getAnonymizationConfig
-              const withAssigned = yield* processor.assignPatientIds(updatedStudies, cfg)
+              const grouped = yield* processor.groupFilesByStudy(nextFiles)
+              const withAssigned = yield* processor.assignPatientIds(grouped, cfg)
               studies.value = withAssigned
             })
           ).catch(err => {
-            console.error('Failed to assign patient IDs:', err)
-            studies.value = updatedStudies
+            console.error('Failed to group/assign patient IDs:', err)
+            // Fallback: try grouping without assignment
+            runtime.runPromise(
+              Effect.gen(function* () {
+                const processor = yield* DicomProcessor
+                studies.value = yield* processor.groupFilesByStudy(nextFiles)
+              })
+            ).catch(() => { })
           })
         }
       })
       successMessage.value = ''
     } catch (error) {
       console.error('Error processing files:', error)
-      fileProcessing.clearProcessingState()
+      fileProcessing.clearAllTasks()
       if (error instanceof Error) {
-        // Check if it's an unsupported file format error
         if (error.message.includes('unsupported format')) {
-          // Use the error message directly as it now contains dynamic supported formats
           toast.error('Unsupported file format', {
             description: error.message,
             duration: 5000
@@ -241,7 +243,6 @@ export function useAppState(runtime: RuntimeType) {
             duration: 5000
           })
         } else {
-          // For other errors, show generic error message
           toast.error('Failed to process files', {
             description: error.message,
             duration: 5000
@@ -647,7 +648,7 @@ export function useAppState(runtime: RuntimeType) {
     dicomFiles.value = []
     studies.value = []
     successMessage.value = ''
-    fileProcessing.clearProcessingState()
+    fileProcessing.clearAllTasks()
     clearAllProgress()
     clearAllSendingProgress()
     clearSelection()

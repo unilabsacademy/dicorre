@@ -1,468 +1,207 @@
-import { ref } from 'vue'
+import { shallowRef } from 'vue'
 import { Effect, Fiber } from 'effect'
-import type { DicomFile, DicomStudy } from '@/types/dicom'
+import type { DicomFile } from '@/types/dicom'
 import type { RuntimeType } from '@/types/effects'
 import { FileHandler } from '@/services/fileHandler'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { OPFSStorage } from '@/services/opfsStorage'
 
-export interface FileProcessingState {
-  isProcessing: boolean
-  fileName: string
-  currentStep: string
-  progress: number
-  totalFiles?: number
-  currentFileIndex?: number
-}
+export type TaskStatus = 'running' | 'success' | 'error' | 'cancelled'
 
-// Individual file processing state for concurrent operations
-export interface IndividualFileProcessingState {
-  isProcessing: boolean
+export interface Task {
+  taskId: string
   fileName: string
   currentStep: string
   progress: number
-  fileId: string
+  status: TaskStatus
   startTime: number
+  endTime?: number
   error?: string
 }
 
 export function useFileProcessing(runtime: RuntimeType) {
-  const fileProcessingState = ref<FileProcessingState | null>(null)
-  // Map to track individual file processing states for concurrent operations
-  const individualFileProcessingStates = ref<Map<string, IndividualFileProcessingState>>(new Map())
-  // Keep track of multiple active processing operations
-  const activeProcessingOperations = ref<Map<string, Fiber.RuntimeFiber<DicomFile[], Error>>>(new Map())
+  const tasks = shallowRef<Map<string, Task>>(new Map())
+  const fibers = shallowRef<Map<string, Fiber.RuntimeFiber<DicomFile[], Error>>>(new Map())
 
-  const processNewFilesEffect = (
-    newUploadedFiles: File[],
+  const setTask = (taskId: string, patch: Partial<Task>) => {
+    const prev = tasks.value.get(taskId)
+    if (!prev) return
+    tasks.value.set(taskId, { ...prev, ...patch })
+    tasks.value = new Map(tasks.value)
+  }
+
+  const addTask = (task: Task) => {
+    tasks.value.set(task.taskId, task)
+    tasks.value = new Map(tasks.value)
+  }
+
+  const removeTask = (taskId: string) => {
+    if (!tasks.value.has(taskId)) return
+    tasks.value.delete(taskId)
+    tasks.value = new Map(tasks.value)
+  }
+
+  const saveAllToOpfs = (files: DicomFile[], onProgress: (i: number) => void) =>
+    Effect.gen(function* () {
+      const opfs = yield* OPFSStorage
+      for (let i = 0; i < files.length; i++) {
+        const f = files[i]
+        yield* opfs.saveFile(f.id, f.arrayBuffer)
+        const exists = yield* opfs.fileExists(f.id)
+        if (!exists) {
+          return yield* Effect.fail(new Error(`Failed to verify file in storage: ${f.fileName}`))
+        }
+        onProgress(i + 1)
+      }
+      return files
+    })
+
+  const startTask = (
+    file: File,
     options: {
       isAppReady: boolean
-      concurrency: number
-      dicomFiles: DicomFile[]
-      onUpdateFiles?: (updatedFiles: DicomFile[]) => void
-      onUpdateStudies?: (updatedStudies: DicomStudy[]) => void
+      parseConcurrency: number
+      onAppendFiles?: (files: DicomFile[]) => void
     }
-  ) =>
-    Effect.gen(function* () {
-      if (!options.isAppReady) {
-        return yield* Effect.fail(new Error('Configuration not loaded'))
-      }
+  ) => {
+    if (!options.isAppReady) {
+      const id = `${file.name}-${Date.now()}-not-ready`
+      addTask({
+        taskId: id,
+        fileName: file.name,
+        currentStep: 'Configuration not loaded',
+        progress: 100,
+        status: 'error',
+        startTime: Date.now(),
+        endTime: Date.now(),
+        error: 'Configuration not loaded'
+      })
+      setTimeout(() => removeTask(id), 5000)
+      return id
+    }
 
-      if (newUploadedFiles.length === 0) {
-        return yield* Effect.succeed([])
-      }
+    const taskId = `${file.name}-${Date.now()}-${Math.random().toString(36).slice(2)}`
+    addTask({
+      taskId,
+      fileName: file.name,
+      currentStep: 'Reading input…',
+      progress: 0,
+      status: 'running',
+      startTime: Date.now()
+    })
 
+    const effect = Effect.gen(function* () {
       const fileHandler = yield* FileHandler
       const processor = yield* DicomProcessor
 
-      // Smart concurrency based on file count and system capability
-      const fileConcurrency = Math.min(
-        newUploadedFiles.length,
-        Math.max(1, Math.floor((navigator.hardwareConcurrency || 4) / 2)),
-        3 // Max 3 concurrent file processing operations
-      )
+      const processed = yield* fileHandler.processFile(file)
+      if (processed.length === 0) {
+        setTask(taskId, { status: 'error', error: 'No DICOM files found', progress: 100, currentStep: 'No files', endTime: Date.now() })
+        return []
+      }
 
-      console.log(`Starting concurrent processing of ${newUploadedFiles.length} files with concurrency ${fileConcurrency}`)
+      setTask(taskId, { currentStep: `Parsing ${processed.length} file(s)…`, progress: 10 })
+      const parsed = yield* processor.parseFiles(processed, options.parseConcurrency, {
+        onProgress: (completed: number, total: number, current?: DicomFile) => {
+          const p = Math.min(10 + Math.round((completed / total) * 60), 70)
+          setTask(taskId, { progress: p, currentStep: `Parsing: ${current?.fileName ?? 'processing…'}` })
+        }
+      })
+      if (parsed.length === 0) {
+        setTask(taskId, { status: 'error', error: 'Parse failed', progress: 100, currentStep: 'Parse failed', endTime: Date.now() })
+        return []
+      }
 
-      // Helper to update individual file processing state
-      const updateFileProcessingState = (fileId: string, state: Partial<IndividualFileProcessingState>) =>
+      setTask(taskId, { currentStep: 'Saving to storage…', progress: 70 })
+      const saved = yield* saveAllToOpfs(parsed, (i) => {
+        const p = 70 + Math.round((i / parsed.length) * 30)
+        setTask(taskId, { progress: Math.min(p, 100), currentStep: `Saved ${i}/${parsed.length}` })
+      })
+
+      options.onAppendFiles?.(saved)
+
+      setTask(taskId, { status: 'success', progress: 100, currentStep: `Done (${saved.length})`, endTime: Date.now() })
+      setTimeout(() => removeTask(taskId), 0)
+      return saved
+    }).pipe(
+      Effect.catchAll((e) =>
         Effect.sync(() => {
-          const currentState = individualFileProcessingStates.value.get(fileId)
-          if (currentState) {
-            const updatedState = { ...currentState, ...state }
-            individualFileProcessingStates.value.set(fileId, updatedState)
-            // Force reactivity by creating a new Map
-            individualFileProcessingStates.value = new Map(individualFileProcessingStates.value)
-          }
-        })
-
-      // Create individual file processing effects - each file gets processed completely by one fiber
-      const fileProcessingEffects = newUploadedFiles.map((file, index) => {
-        const fileId = `${file.name}-${Date.now()}-${index}`
-        const isZipFile = file.name.toLowerCase().endsWith('.zip')
-        const startTime = Date.now()
-
-        return Effect.gen(function* () {
-          // Initialize file processing state
-          const initialState: IndividualFileProcessingState = {
-            isProcessing: true,
-            fileName: file.name,
-            currentStep: isZipFile ? 'Extracting ZIP archive...' : 'Reading DICOM file...',
-            progress: 0,
-            fileId,
-            startTime
-          }
-
-          yield* Effect.sync(() => {
-            individualFileProcessingStates.value.set(fileId, initialState)
-            individualFileProcessingStates.value = new Map(individualFileProcessingStates.value)
+          setTask(taskId, {
+            status: 'error',
+            error: e instanceof Error ? e.message : String(e),
+            progress: 100,
+            currentStep: 'Failed',
+            endTime: Date.now()
           })
+          setTimeout(() => removeTask(taskId), 5000)
+          return []
+        })
+      ),
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          setTask(taskId, {
+            status: 'cancelled',
+            currentStep: 'Cancelled',
+            progress: 100,
+            endTime: Date.now(),
+            error: 'Processing was cancelled'
+          })
+          setTimeout(() => removeTask(taskId), 2000)
+        })
+      )
+    )
 
-          try {
-            // Phase 1: Process file (ZIP extraction or direct DICOM read) - 0-30%
-            let progressInterval: NodeJS.Timeout | null = null
-            if (isZipFile) {
-              // For ZIP files, simulate gradual progress increase during extraction
-              let currentProgress = 0
-              progressInterval = setInterval(() => {
-                currentProgress = Math.min(currentProgress + 2, 30) // 0 - 30% progress
-                const state = individualFileProcessingStates.value.get(fileId)
-                if (state && state.isProcessing) {
-                  individualFileProcessingStates.value.set(fileId, {
-                    ...state,
-                    progress: currentProgress
-                  })
-                  individualFileProcessingStates.value = new Map(individualFileProcessingStates.value)
-                }
-              }, 100)
-            }
-
-            yield* updateFileProcessingState(fileId, {
-              currentStep: isZipFile ? 'Extracting ZIP archive...' : 'Reading DICOM file...',
-              progress: 0
-            })
-
-            // Process the file using FileHandler directly (no pre-reading needed since each fiber processes one file)
-            const processedFiles = yield* fileHandler.processFile(file).pipe(
-              Effect.tap(() => updateFileProcessingState(fileId, { progress: 30 }))
-            )
-
-            // Clear the progress interval
-            if (progressInterval) {
-              clearInterval(progressInterval)
-            }
-
-            if (processedFiles.length === 0) {
-              yield* updateFileProcessingState(fileId, {
-                currentStep: 'No DICOM files found',
-                progress: 100,
-                isProcessing: false,
-                error: 'No DICOM files found in this file'
-              })
-              return []
-            }
-
-            // Phase 2: Parse DICOM files - 30-70%
-            yield* updateFileProcessingState(fileId, {
-              currentStep: `Parsing ${processedFiles.length} DICOM file(s)...`,
-              progress: 30
-            })
-
-            const parsedFiles = yield* processor.parseFiles(processedFiles, options.concurrency, {
-              onProgress: (completed: number, total: number, currentFile?: DicomFile) => {
-                const parsingProgress = Math.round(30 + (completed / total) * 40) // 30% to 70%
-                const state = individualFileProcessingStates.value.get(fileId)
-                if (state && state.isProcessing) {
-                  individualFileProcessingStates.value.set(fileId, {
-                    ...state,
-                    currentStep: `Parsing: ${currentFile?.fileName || 'processing...'}`,
-                    progress: parsingProgress
-                  })
-                  individualFileProcessingStates.value = new Map(individualFileProcessingStates.value)
-                }
-              }
-            })
-
-            if (parsedFiles.length === 0) {
-              yield* updateFileProcessingState(fileId, {
-                currentStep: 'DICOM parsing failed',
-                progress: 100,
-                isProcessing: false,
-                error: 'Failed to parse DICOM files'
-              })
-              return []
-            }
-
-            // Phase 3: Save to OPFS - 70-100%
-            const opfs = yield* OPFSStorage
-
-            for (let i = 0; i < parsedFiles.length; i++) {
-              const dicomFile = parsedFiles[i]
-              const saveProgress = Math.round(70 + ((i + 1) / parsedFiles.length) * 30) // 70% to 100%
-
-              yield* updateFileProcessingState(fileId, {
-                currentStep: `Saving ${dicomFile.fileName} to storage...`,
-                progress: saveProgress
-              })
-
-              // Save file to OPFS and verify it exists
-              yield* opfs.saveFile(dicomFile.id, dicomFile.arrayBuffer)
-              const exists = yield* opfs.fileExists(dicomFile.id)
-              if (!exists) {
-                yield* updateFileProcessingState(fileId, {
-                  currentStep: 'Failed to save to storage',
-                  progress: 100,
-                  isProcessing: false,
-                  error: `Failed to verify file in storage: ${dicomFile.fileName}`
-                })
-                return yield* Effect.fail(new Error(`Failed to verify file in storage: ${dicomFile.fileName}`))
-              }
-            }
-
-            // Completion
-            yield* updateFileProcessingState(fileId, {
-              currentStep: `Successfully processed ${parsedFiles.length} file(s)`,
-              progress: 100,
-              isProcessing: false
-            })
-
-            // Clear successful state immediately (no delay)
-            setTimeout(() => {
-              if (individualFileProcessingStates.value.has(fileId)) {
-                const state = individualFileProcessingStates.value.get(fileId)
-                // Only remove if still completed (not reused by another operation)
-                if (state && !state.isProcessing && !state.error) {
-                  individualFileProcessingStates.value.delete(fileId)
-                  individualFileProcessingStates.value = new Map(individualFileProcessingStates.value)
-                }
-              }
-            }, 0) // Use setTimeout with 0 to defer until after current execution
-
-            console.log(`File ${file.name} processed successfully: ${parsedFiles.length} DICOM files`)
-            return parsedFiles
-
-          } catch (error) {
-            // Handle errors at the file level
-            yield* updateFileProcessingState(fileId, {
-              currentStep: 'Processing failed',
-              progress: 100,
-              isProcessing: false,
-              error: error instanceof Error ? error.message : String(error)
-            })
-
-            return yield* Effect.fail(error instanceof Error ? error : new Error(String(error)))
-          }
-        }).pipe(
-          // Add error recovery per file with proper cleanup
-          Effect.catchAll((error) =>
-            Effect.gen(function* () {
-              console.error(`Failed to process file ${file.name}:`, error)
-
-              // Update file state to show error
-              yield* updateFileProcessingState(fileId, {
-                isProcessing: false,
-                currentStep: 'Processing failed',
-                error: error instanceof Error ? error.message : String(error),
-                progress: 100
-              })
-
-              return [] // Return empty array on error to continue with other files
-            })
-          ),
-          // Add interruption handling
-          Effect.onInterrupt(() =>
-            Effect.gen(function* () {
-              console.log(`File processing interrupted for ${file.name}`)
-              // Update state to show interruption
-              yield* updateFileProcessingState(fileId, {
-                isProcessing: false,
-                currentStep: 'Processing cancelled',
-                error: 'Processing was cancelled',
-                progress: 100
-              })
-            })
-          )
-        )
-      })
-
-      // Process all files concurrently
-      const fileResults = yield* Effect.all(fileProcessingEffects, {
-        concurrency: fileConcurrency,
-        batching: true
-      })
-
-      // Flatten results and filter out empty arrays
-      const localDicomFiles = fileResults.filter(files => files.length > 0).flat()
-
-      if (localDicomFiles.length === 0) {
-        // Check if we have error states to provide more specific feedback
-        const errorStates = Array.from(individualFileProcessingStates.value.values())
-          .filter(state => state.error)
-
-        let errorMessage = 'No DICOM files found in the uploaded files'
-        if (errorStates.length > 0) {
-          const errors = errorStates.map(state => `${state.fileName}: ${state.error}`).join('; ')
-          errorMessage = `Failed to process uploaded files: ${errors}`
-        }
-
-        // Keep error states visible for longer
-        setTimeout(() => {
-          individualFileProcessingStates.value.clear()
-          individualFileProcessingStates.value = new Map()
-        }, 5000) // Longer delay so user can see the errors
-
-        return yield* Effect.fail(new Error(errorMessage))
-      }
-
-      console.log(`Successfully processed ${localDicomFiles.length} new DICOM files from ${newUploadedFiles.length} uploaded files using concurrent processing`)
-
-      // Clear successfully completed individual file states immediately (no delay)
-      // Keep error states visible for user review
-      const errorStates = new Map<string, IndividualFileProcessingState>()
-      for (const [key, state] of individualFileProcessingStates.value.entries()) {
-        if (state.error) {
-          errorStates.set(key, state)
-        }
-      }
-      individualFileProcessingStates.value = errorStates
-
-      // Clean up error states after a delay
-      if (errorStates.size > 0) {
-        setTimeout(() => {
-          // Only clear the error states that are still the same (not from new operations)
-          const currentStates = individualFileProcessingStates.value
-          const activeStates = new Map()
-          for (const [key, state] of currentStates.entries()) {
-            if (state.isProcessing || !errorStates.has(key)) {
-              activeStates.set(key, state)
-            }
-          }
-          individualFileProcessingStates.value = activeStates
-        }, 5000)
-      }
-
-      // Final phase: Organize into studies (internal state only, not shown in UI)
-      console.log('Organizing files into studies...')
-
-      // Only now add to existing DICOM files (after OPFS persistence is complete)
-      const updatedFiles = [...options.dicomFiles, ...localDicomFiles]
-      options.onUpdateFiles?.(updatedFiles)
-
-      // Group files by study
-      const groupedStudies = yield* processor.groupFilesByStudy(updatedFiles)
-      options.onUpdateStudies?.(groupedStudies)
-
-      console.log(`Organized ${localDicomFiles.length} new files, total: ${updatedFiles.length} files in ${groupedStudies.length} studies`)
-
-      // No delay for successful completion - states were already cleared above
-
-      return localDicomFiles
+    const fiber = runtime.runFork(effect)
+    fibers.value.set(taskId, fiber)
+    fibers.value = new Map(fibers.value)
+    runtime.runPromise(Fiber.join(fiber)).finally(() => {
+      fibers.value.delete(taskId)
+      fibers.value = new Map(fibers.value)
     })
 
-  const clearProcessingState = () => {
-    fileProcessingState.value = null
-    // Only clear non-processing states
-    const currentStates = individualFileProcessingStates.value
-    const activeStates = new Map()
-    for (const [key, state] of currentStates.entries()) {
-      if (state.isProcessing) {
-        activeStates.set(key, state)
-      }
-    }
-    individualFileProcessingStates.value = activeStates
+    return taskId
   }
 
-  const getActiveFileProcessingStates = () => {
-    return Array.from(individualFileProcessingStates.value.values()).filter(state => state.isProcessing)
-  }
-
-  const getAllFileProcessingStates = () => {
-    return Array.from(individualFileProcessingStates.value.values())
-  }
-
-  const removeCompletedFileProcessingStates = () => {
-    const currentStates = individualFileProcessingStates.value
-    const activeStates = new Map()
-
-    for (const [key, state] of currentStates.entries()) {
-      // Keep processing states and recent errors (less than 5 seconds old)
-      const isRecentError = state.error && (Date.now() - state.startTime < 5000)
-      if (state.isProcessing || isRecentError) {
-        activeStates.set(key, state)
-      }
-    }
-
-    individualFileProcessingStates.value = activeStates
-  }
-
-  const hasActiveProcessing = () => {
-    return getActiveFileProcessingStates().length > 0 || (fileProcessingState.value?.isProcessing ?? false)
-  }
-
-  const cancelProcessing = () => {
-    console.log('Cancelling all active file processing...')
-    
-    // Interrupt all active operations
-    for (const [_opId, fiber] of activeProcessingOperations.value.entries()) {
-      Effect.runSync(Fiber.interrupt(fiber))
-    }
-    
-    // Clear all operations
-    activeProcessingOperations.value.clear()
-    activeProcessingOperations.value = new Map()
-
-    // Update UI states
-    fileProcessingState.value = null
-
-    // Mark all processing files as cancelled
-    const currentStates = individualFileProcessingStates.value
-    for (const [key, state] of currentStates.entries()) {
-      if (state.isProcessing) {
-        currentStates.set(key, {
-          ...state,
-          isProcessing: false,
-          currentStep: 'Processing cancelled',
-          error: 'Processing was cancelled by user',
-          progress: 100
-        })
-      }
-    }
-    individualFileProcessingStates.value = new Map(currentStates)
-  }
-
-  const processNewFilesWithInterruption = async (
-    newUploadedFiles: File[],
+  const addFiles = (
+    files: File[],
     options: {
       isAppReady: boolean
-      concurrency: number
-      dicomFiles: DicomFile[]
-      onUpdateFiles?: (updatedFiles: DicomFile[]) => void
-      onUpdateStudies?: (updatedStudies: DicomStudy[]) => void
+      parseConcurrency: number
+      onAppendFiles?: (files: DicomFile[]) => void
     }
-  ) => {
-    // Generate unique operation ID for this batch
-    const operationId = `op-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`
-    
-    try {
-      // Start the fiber for this operation
-      const fiber = runtime.runFork(processNewFilesEffect(newUploadedFiles, options))
-      
-      // Track this operation
-      activeProcessingOperations.value.set(operationId, fiber)
-      activeProcessingOperations.value = new Map(activeProcessingOperations.value)
-      
-      // Wait for completion
-      const result = await runtime.runPromise(Fiber.join(fiber))
-      
-      // Clean up completed operation
-      activeProcessingOperations.value.delete(operationId)
-      activeProcessingOperations.value = new Map(activeProcessingOperations.value)
-      
-      return result
-    } catch (error) {
-      // Clean up on error
-      activeProcessingOperations.value.delete(operationId)
-      activeProcessingOperations.value = new Map(activeProcessingOperations.value)
-      console.error('Error in file processing:', error)
-      throw error
+  ) => files.map((f) => startTask(f, options))
+
+  const getAllTasks = () => Array.from(tasks.value.values())
+  const getRunningTasks = () => getAllTasks().filter((t) => t.status === 'running')
+  const hasActiveProcessing = () => getRunningTasks().length > 0
+  const hasActiveOperations = () => fibers.value.size > 0
+
+  const cancelTask = (taskId: string) => {
+    const fiber = fibers.value.get(taskId)
+    if (!fiber) return
+    Effect.runSync(Fiber.interrupt(fiber))
+  }
+
+  const cancelAll = () => {
+    for (const [_id, fiber] of fibers.value.entries()) {
+      Effect.runSync(Fiber.interrupt(fiber))
     }
   }
 
-  const hasActiveOperations = () => {
-    return activeProcessingOperations.value.size > 0
+  const clearAllTasks = () => {
+    tasks.value = new Map()
   }
 
   return {
-    fileProcessingState,
-    individualFileProcessingStates,
-    processNewFilesEffect,
-    processNewFilesWithInterruption,
-    clearProcessingState,
-    getActiveFileProcessingStates,
-    getAllFileProcessingStates,
-    removeCompletedFileProcessingStates,
+    tasks,
+    addFiles,
+    startTask,
+    cancelTask,
+    cancelAll,
+    getAllTasks,
+    getRunningTasks,
     hasActiveProcessing,
-    cancelProcessing,
-    hasActiveOperations
+    hasActiveOperations,
+    clearAllTasks
   }
 }

@@ -47,11 +47,10 @@ const {
 } = appState.dragAndDrop
 
 const {
-  individualFileProcessingStates,
-  getActiveFileProcessingStates,
-  getAllFileProcessingStates,
+  getRunningTasks,
+  getAllTasks,
   hasActiveProcessing,
-  cancelProcessing
+  cancelAll
 } = appState.fileProcessing
 
 const isAppReady = computed(() => {
@@ -231,30 +230,30 @@ onUnmounted(() => {
       <!-- File Processing Progress -->
       <!-- Individual file processing progress indicators -->
       <div
-        v-if="getAllFileProcessingStates().length > 0"
+        v-if="getAllTasks().length > 0"
         class="space-y-2"
       >
         <div
-          v-if="getActiveFileProcessingStates().length > 0"
+          v-if="getRunningTasks().length > 0"
           class="flex items-center justify-between mb-2"
         >
           <div class="text-sm font-medium text-muted-foreground">
-            Processing {{ getActiveFileProcessingStates().length }} file{{ getActiveFileProcessingStates().length !== 1
+            Processing {{ getRunningTasks().length }} file{{ getRunningTasks().length !== 1
               ? 's' : '' }} concurrently
           </div>
           <Button
             variant="outline"
             size="sm"
             class="h-7 px-3 text-xs"
-            @click="cancelProcessing"
+            @click="cancelAll"
           >
             Cancel All
           </Button>
         </div>
 
         <FileProcessingProgress
-          v-for="state in getAllFileProcessingStates()"
-          :key="state.fileId"
+          v-for="state in getAllTasks()"
+          :key="state.taskId"
           :file-name="state.fileName"
           :current-step="state.currentStep"
           :progress="state.progress"
