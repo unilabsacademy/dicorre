@@ -15,6 +15,7 @@ import { useProjectSharing } from '@/composables/useProjectSharing'
 import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import AppToolbar from '@/components/AppToolbar.vue'
+import ConfigEditSheet from '@/components/ConfigEditSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
@@ -32,6 +33,7 @@ const error = computed(() => {
 
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
+const showConfigEditSheet = ref(false)
 
 const {
   isDragOver,
@@ -192,7 +194,6 @@ onUnmounted(() => {
       <!-- Consolidated Toolbar -->
       <AppToolbar
         v-if="isAppReady"
-        :runtime="runtime"
         :current-project="appState.currentProject.value"
         :is-project-mode="appState.isProjectMode.value"
         :selected-studies-count="appState.selectedStudiesCount.value"
@@ -211,6 +212,7 @@ onUnmounted(() => {
         @test-connection="testConnection"
         @config-loaded="handleConfigLoaded"
         @add-files="(files) => { addFilesToUploaded(files); processNewFiles(files) }"
+        @open-config-editor="showConfigEditSheet = true"
       />
 
       <!-- File Processing Progress -->
@@ -282,6 +284,18 @@ onUnmounted(() => {
 
     <!-- Worker Debug Panel -->
     <WorkerDebugPanel />
+
+    <!-- Config Edit Sheet (App-level) -->
+    <ConfigEditSheet
+      :runtime="runtime"
+      :current-project="appState.currentProject.value"
+      :is-project-mode="appState.isProjectMode.value"
+      :open="showConfigEditSheet"
+      @update:open="showConfigEditSheet = $event"
+      @config-updated="handleConfigLoaded"
+      @create-project="(name) => appState.handleCreateProject(name)"
+      @update-project="(project) => appState.handleUpdateProject(project)"
+    />
 
     <!-- Toast Notifications -->
     <Toaster />

@@ -19,6 +19,7 @@ import { appConfigEditSchema, type FieldSchema, type ConfigEditSchema, shouldSho
 import type { RuntimeType } from '@/types/effects'
 import { toast } from 'vue-sonner'
 import type { ProjectConfig } from '@/services/config/schema'
+import { ConfigService } from '@/services/config'
 
 const props = defineProps<{
   open: boolean
@@ -51,15 +52,22 @@ function toggleSection(section: string) {
   }
 }
 
-// Project-related functions
-watch(() => props.open, (newOpen) => {
-  if (newOpen) {
-    // Set project data when opening
-    projectName.value = props.currentProject?.name || ''
-    const existing = ((props.currentProject as any)?.plugins?.settings?.['sent-notifier']?.params || {}) as Record<string, string>
-    params.value = Object.entries(existing).map(([key, value]) => ({ key, value: String(value ?? '') }))
-  }
+// Load current config into editor state
+props.runtime.runPromise(
+  Effect.gen(function* () {
+    const svc = yield* ConfigService
+    const cfg = yield* svc.getCurrentConfig
+    editedConfig.value = JSON.parse(JSON.stringify(cfg))
+  })
+).catch((err) => {
+  console.error('Failed to load current configuration:', err)
+  editedConfig.value = {}
 })
+
+// Set project data when opening
+projectName.value = props.currentProject?.name || ''
+const existing = ((props.currentProject as any)?.plugins?.settings?.['sent-notifier']?.params || {}) as Record<string, string>
+params.value = Object.entries(existing).map(([key, value]) => ({ key, value: String(value ?? '') }))
 
 function toRecord(rows: ParamRow[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -203,12 +211,7 @@ async function handleSaveConfig() {
     // Update config through the config service
     await props.runtime.runPromise(
       Effect.gen(function* () {
-        const configModule = yield* Effect.tryPromise({
-          try: () => import('@/services/config'),
-          catch: () => new Error('Failed to import ConfigService')
-        })
-
-        const configService = yield* configModule.ConfigService
+        const configService = yield* ConfigService
         yield* configService.loadConfig(configToSave)
       })
     )
@@ -299,7 +302,10 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
 </script>
 
 <template>
-  <Sheet :open="open">
+  <Sheet
+    :open="open"
+    @update:open="$emit('update:open', $event)"
+  >
     <SheetContent
       side="left"
       class="w-[600px] sm:max-w-[600px] overflow-y-auto"
@@ -392,6 +398,7 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
             </div>
           </CardContent>
         </Card>
+
         <!-- DICOM Server Configuration -->
         <Card>
           <CardHeader
@@ -409,7 +416,6 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                 <Input
                   :value="getFieldValue('dicomServer.url')"
                   @input="setFieldValue('dicomServer.url', ($event.target as HTMLInputElement).value)"
-                  placeholder="/api/orthanc/dicom-web"
                   :disabled="isProcessing"
                 />
                 <p class="text-xs text-muted-foreground">Must start with / or http</p>
@@ -422,11 +428,52 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                   type="number"
                   :value="getFieldValue('dicomServer.timeout')"
                   @input="setFieldValue('dicomServer.timeout', parseInt(($event.target as HTMLInputElement).value) || 30000)"
-                  placeholder="30000"
                   min="1000"
                   max="600000"
                   :disabled="isProcessing"
                 />
+              </div>
+
+              <!-- Headers -->
+              <div class="space-y-2">
+                <Label>Headers</Label>
+                <div class="space-y-2">
+                  <div
+                    v-for="(value, key) in (getFieldValue('dicomServer.headers') || {})"
+                    :key="String(key)"
+                    class="flex gap-2"
+                  >
+                    <Input
+                      :value="String(key)"
+                      @input="updateRecordKey('dicomServer.headers', String(key), ($event.target as HTMLInputElement).value)"
+                      placeholder="Header name"
+                      :disabled="isProcessing"
+                    />
+                    <Input
+                      :value="String(value)"
+                      @input="updateRecordValue('dicomServer.headers', String(key), ($event.target as HTMLInputElement).value)"
+                      placeholder="Header value"
+                      :disabled="isProcessing"
+                    />
+                    <Button
+                      size="icon"
+                      variant="outline"
+                      @click="removeRecordItem('dicomServer.headers', String(key))"
+                      :disabled="isProcessing"
+                    >
+                      <X class="w-4 h-4" />
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    @click="addRecordItem('dicomServer.headers')"
+                    :disabled="isProcessing"
+                  >
+                    <Plus class="w-4 h-4 mr-2" />
+                    Add Header
+                  </Button>
+                </div>
               </div>
 
               <!-- Authentication -->
@@ -698,9 +745,54 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                 </div>
               </div>
 
-              <p class="text-sm text-muted-foreground">
-                Plugin-specific settings can be configured through project settings.
-              </p>
+              <!-- Plugin Settings -->
+              <div class="space-y-3">
+                <Label>Plugin Settings</Label>
+                <div
+                  v-for="(pluginConfig, pluginId) in (getFieldValue('plugins.settings') || {})"
+                  :key="String(pluginId)"
+                  class="border rounded-md p-2 space-y-2"
+                >
+                  <div class="text-sm font-medium">{{ String(pluginId) }}</div>
+                  <div class="space-y-2">
+                    <div
+                      v-for="(value, key) in (pluginConfig || {})"
+                      :key="String(key)"
+                      class="flex gap-2"
+                    >
+                      <Input
+                        :value="String(key)"
+                        @input="updateRecordKey(`plugins.settings.${String(pluginId)}`, String(key), ($event.target as HTMLInputElement).value)"
+                        placeholder="Key"
+                        :disabled="isProcessing"
+                      />
+                      <Input
+                        :value="String(value)"
+                        @input="updateRecordValue(`plugins.settings.${String(pluginId)}`, String(key), ($event.target as HTMLInputElement).value)"
+                        placeholder="Value"
+                        :disabled="isProcessing"
+                      />
+                      <Button
+                        size="icon"
+                        variant="outline"
+                        @click="removeRecordItem(`plugins.settings.${String(pluginId)}`, String(key))"
+                        :disabled="isProcessing"
+                      >
+                        <X class="w-4 h-4" />
+                      </Button>
+                    </div>
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      @click="addRecordItem(`plugins.settings.${String(pluginId)}`)"
+                      :disabled="isProcessing"
+                    >
+                      <Plus class="w-4 h-4 mr-2" />
+                      Add Setting
+                    </Button>
+                  </div>
+                </div>
+              </div>
             </div>
           </CardContent>
         </Card>

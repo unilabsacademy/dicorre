@@ -1,12 +1,12 @@
 import type { DicomProfileOption } from './schema'
 
-export type FieldType = 
-  | 'text' 
-  | 'number' 
-  | 'boolean' 
-  | 'select' 
-  | 'multiselect' 
-  | 'record' 
+export type FieldType =
+  | 'text'
+  | 'number'
+  | 'boolean'
+  | 'select'
+  | 'multiselect'
+  | 'record'
   | 'array'
   | 'readonly'
 
@@ -32,64 +32,84 @@ export interface ConfigEditSchema {
 
 // Define the profile options with descriptions
 const profileOptions: Array<{ value: DicomProfileOption; label: string; description: string }> = [
-  { 
-    value: 'BasicProfile', 
-    label: 'Basic Profile', 
+  {
+    value: 'BasicProfile',
+    label: 'Basic Profile',
     description: 'Default anonymization profile - removes most identifying information'
   },
-  { 
-    value: 'RetainLongModifDatesOption', 
-    label: 'Retain Long Modified Dates', 
+  {
+    value: 'RetainLongModifDatesOption',
+    label: 'Retain Long Modified Dates',
     description: 'Keep long-format modification dates'
   },
-  { 
-    value: 'RetainLongFullDatesOption', 
-    label: 'Retain Long Full Dates', 
+  {
+    value: 'RetainLongFullDatesOption',
+    label: 'Retain Long Full Dates',
     description: 'Keep full-format dates'
   },
-  { 
-    value: 'RetainUIDsOption', 
-    label: 'Retain UIDs', 
+  {
+    value: 'RetainUIDsOption',
+    label: 'Retain UIDs',
     description: 'Preserve unique identifiers (useful for maintaining relationships)'
   },
-  { 
-    value: 'CleanGraphOption', 
-    label: 'Clean Graph', 
+  {
+    value: 'CleanGraphOption',
+    label: 'Clean Graph',
     description: 'Remove burned-in annotations from images'
   },
-  { 
-    value: 'RetainPatientCharsOption', 
-    label: 'Retain Patient Characteristics', 
+  {
+    value: 'RetainPatientCharsOption',
+    label: 'Retain Patient Characteristics',
     description: 'Keep patient age, sex, and other characteristics'
   },
-  { 
-    value: 'RetainSafePrivateOption', 
-    label: 'Retain Safe Private', 
+  {
+    value: 'RetainSafePrivateOption',
+    label: 'Retain Safe Private',
     description: 'Keep private tags deemed safe'
   },
-  { 
-    value: 'CleanDescOption', 
-    label: 'Clean Descriptions', 
+  {
+    value: 'CleanDescOption',
+    label: 'Clean Descriptions',
     description: 'Remove descriptive text fields'
   },
-  { 
-    value: 'RetainDeviceIdentOption', 
-    label: 'Retain Device Identity', 
+  {
+    value: 'RetainDeviceIdentOption',
+    label: 'Retain Device Identity',
     description: 'Keep device and equipment identifiers'
   },
-  { 
-    value: 'RetainInstIdentOption', 
-    label: 'Retain Institution Identity', 
+  {
+    value: 'RetainInstIdentOption',
+    label: 'Retain Institution Identity',
     description: 'Keep institution names and identifiers'
   },
-  { 
-    value: 'CleanStructContOption', 
-    label: 'Clean Structured Content', 
+  {
+    value: 'CleanStructContOption',
+    label: 'Clean Structured Content',
     description: 'Remove structured report content'
   }
 ]
 
 export const appConfigEditSchema: ConfigEditSchema = {
+  project: {
+    name: {
+      type: 'text',
+      label: 'Project Name',
+      description: 'Human-readable project name',
+      placeholder: 'Untitled',
+      required: true
+    },
+    id: {
+      type: 'readonly',
+      label: 'Project ID',
+      description: 'Auto-generated UUID v4'
+    },
+    createdAt: {
+      type: 'readonly',
+      label: 'Created At',
+      description: 'ISO timestamp when the project was created'
+    }
+    // Note: project plugin settings are intentionally omitted. Use top-level `plugins` below.
+  },
   dicomServer: {
     url: {
       type: 'text',
@@ -99,6 +119,12 @@ export const appConfigEditSchema: ConfigEditSchema = {
       required: true,
       pattern: '^(/|http)',
       patternMessage: 'URL must start with / or http'
+    },
+    headers: {
+      type: 'record',
+      label: 'Headers',
+      description: 'Additional HTTP headers to include with DICOM requests',
+      valueType: 'text'
     },
     timeout: {
       type: 'number',
@@ -214,7 +240,7 @@ export function shouldShowField(fieldPath: string, config: any): boolean {
   if (fieldPath === 'dicomServer.auth.credentials') {
     return config?.dicomServer?.auth?.type && config.dicomServer.auth.type !== 'none'
   }
-  
+
   return true
 }
 
