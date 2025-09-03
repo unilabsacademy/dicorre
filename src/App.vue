@@ -192,6 +192,7 @@ onUnmounted(() => {
       <!-- Consolidated Toolbar -->
       <AppToolbar
         v-if="isAppReady"
+        :runtime="runtime"
         :current-project="appState.currentProject.value"
         :is-project-mode="appState.isProjectMode.value"
         :selected-studies-count="appState.selectedStudiesCount.value"

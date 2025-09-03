@@ -31,18 +31,20 @@ import {
   X,
   Plus,
   Pencil,
-  Upload,
   Layers,
   MoreVertical
 } from 'lucide-vue-next'
+import { Sheet } from '@/components/ui/sheet'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import ConfigLoader from '@/components/ConfigLoader.vue'
 import ProjectEditSheet from '@/components/ProjectEditSheet.vue'
+import ConfigEditSheet from '@/components/ConfigEditSheet.vue'
 import type { ProjectConfig } from '@/services/config/schema'
-import type { DicomStudy } from '@/types/dicom'
 import { Input } from '@/components/ui/input'
+import type { RuntimeType } from '@/types/effects'
 
 const props = defineProps<{
+  runtime: RuntimeType
   currentProject?: ProjectConfig
   isProjectMode: boolean
   selectedStudiesCount: number
@@ -67,6 +69,7 @@ const emit = defineEmits<{
 }>()
 
 const showProjectEditSheet = ref(false)
+const showConfigEditSheet = ref(false)
 const showClearProjectDialog = ref(false)
 const showClearDialog = ref(false)
 const showEditDialog = ref(false)
@@ -306,6 +309,15 @@ const clearDialogDescription = computed(() => {
 
           <DropdownMenuSeparator />
 
+          <!-- Edit Config -->
+          <DropdownMenuItem
+            @click="showConfigEditSheet = true"
+            data-testid="edit-config-menu-item"
+          >
+            <Settings2 class="w-4 h-4 mr-2" />
+            Edit Config
+          </DropdownMenuItem>
+
           <!-- Load Config in dropdown -->
           <ConfigLoader
             @config-loaded="emit('configLoaded')"
@@ -371,6 +383,13 @@ const clearDialogDescription = computed(() => {
           </AlertDialogFooter>
         </AlertDialogContent>
       </AlertDialog>
+
+      <!-- Config Edit Sheet -->
+      <ConfigEditSheet
+        :runtime="props.runtime"
+        :open="showConfigEditSheet"
+        @update:open="showConfigEditSheet = $event"
+      />
     </div>
   </div>
 </template>
