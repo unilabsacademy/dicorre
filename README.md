@@ -1,22 +1,22 @@
-# Ratatoskr - DICOM Anonymizer & Sender
+<img src="./public/logo.png" alt="Dicorre Logo" width="250">
+
+# Dicorre - DICOM Anonymizer & Sender
+
+🚨 **Still in beta - use with caution**
 
 A browser-based tool for anonymizing DICOM files and sending them to radiology destinations via DICOMweb.
 
+Developed by Unilabs Academy to facilitate anonymisation and uploading of cases at https://academy.unilabs.com
+
 ## Quick Start
 
-### 1. Start the DICOM Server (Orthanc)
+### 1. [OPTIONAL] Start the development DICOM Server (Orthanc)
 
 ```bash
 # Start Orthanc DICOM server
 docker-compose up -d
-
-# Check if Orthanc is ready
-curl http://localhost:8080/system
 ```
-
 Access Orthanc web interface at: http://localhost:8080/app/explorer.html
-
-**No authentication required** (disabled for development)
 
 ### 2. Start the Development Server
 
@@ -32,52 +32,59 @@ The application will be available at: http://localhost:5173
 
 ### 3. Test the Application
 
-1. **Get sample DICOM files:**
-   - Download from [DICOM Library](https://www.osirix-viewer.com/resources/dicom-image-library/)
-   - Or use synthetic test data from [pydicom-data](https://github.com/pydicom/pydicom-data)
+**Unit tests**
+```bash
+pnpm test:unit
+```
 
-2. **Create a ZIP file** containing DICOM files
+**E2E tests**
+```bash
+pnpm test:e2e --workers=1
+```
 
-3. **Use the application:**
-   - Drop the ZIP file into the application
-   - Click "Anonymize All" to anonymize the DICOM files
-   - Click "Test Connection" to verify Orthanc connectivity
-   - Click "Send Study" to send anonymized files to Orthanc
+## Features
+
+- 🏥 **DICOM Anonymization**: Remove patient identifiable information from DICOM files
+- 📤 **DICOMweb Sending**: Send anonymized files to PACS/radiology destinations via STOW-RS
+- 📦 **Batch Processing**: Process multiple files and ZIP archives
+- 🔌 **Plugin Architecture**: Extensible system for format converters and custom processing
+- 💾 **Session Persistence**: Automatic save/restore of anonymization progress
+- 📊 **Progress Tracking**: Real-time progress monitoring for large datasets
+- 🖼️ **Multi-format Support**: Convert PDFs and images to DICOM
+- ⚙️ **Configuration Management**: Save and share project configurations
 
 ## Architecture
 
 ### Core Services
 
-- **FileHandler**: ZIP extraction and file validation
+- **FileHandler**: ZIP extraction, file validation, and grouping by study/series
 - **DicomProcessor**: DICOM parsing with dcmjs, metadata extraction
-- **Anonymizer**: DICOM anonymization with @umessen/dicom-deidentifier
-- **DicomSender**: DICOMweb STOW-RS sending with dicomweb-client
+- **Anonymizer**: DICOM de-identification with configurable profiles (@umessen/dicom-deidentifier)
+- **DicomSender**: DICOMweb STOW-RS client for sending to PACS
+- **OpfsStorage**: Browser-based file storage using Origin Private File System
+- **SessionPersistence**: Automatic save/restore of session state
+- **ConfigPersistence**: Configuration management and sharing
+- **DownloadService**: Export anonymized files as ZIP
+- **PluginRegistry**: Plugin management system
+
+### Plugins
+
+- **ImageConverter**: Convert JPEG/PNG images to DICOM format
+- **PdfConverter**: Convert PDF documents to DICOM secondary capture
+- **SentNotifier**: Desktop notifications for successful transmissions
+- **SendLogger**: Log all transmitted DICOM files for audit (Example plugin)
 
 ### Tech Stack
 
 - **Frontend**: Vue 3 + TypeScript + Vite
-- **DICOM Processing**: dcmjs
 - **Anonymization**: @umessen/dicom-deidentifier
+- **DICOM Processing**: dcmjs
 - **DICOM Sending**: dicomweb-client
 - **File Handling**: JSZip
-- **DICOM Server**: dcm4chee-arc-light
 
 ## Configuration
 
-### DICOM Server
-
-Default configuration points to local Orthanc:
-- URL: `http://localhost:8080`
-- AE Title: `ORTHANC`
-
-### Anonymization
-
-Default profile: `BasicProfile` with private tag removal enabled.
-
-Available profiles:
-- `basic`: BasicProfile (retain device identity)
-- `clean`: CleanDescOption (remove descriptors)
-- `very-clean`: CleanGraphOption (remove graphics)
+See app.config.json
 
 ## Development Commands
 
@@ -90,26 +97,4 @@ pnpm lint
 
 # Build for production
 pnpm build
-
-# Run tests
-pnpm test:unit
 ```
-
-## Troubleshooting
-
-### Common Issues
-
-1. **Orthanc not starting**: Check `docker-compose logs orthanc` for startup issues
-2. **CORS errors**: Orthanc is configured to allow CORS from localhost:5173
-3. **Upload fails**: Ensure ZIP contains valid DICOM files with proper magic numbers
-
-### Logs
-
-```bash
-# Check Orthanc logs
-docker-compose logs orthanc
-```
-
-## Security Note
-
-⚠️ **Never use real patient data for testing.** This is a development tool - only use anonymized test datasets or synthetic data.
