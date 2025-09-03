@@ -22,6 +22,7 @@ export interface Task {
 export function useFileProcessing(runtime: RuntimeType) {
   const tasks = shallowRef<Map<string, Task>>(new Map())
   const fibers = shallowRef<Map<string, Fiber.RuntimeFiber<DicomFile[], Error>>>(new Map())
+  const readingTickers = new Map<string, () => void>()
 
   const setTask = (taskId: string, patch: Partial<Task>) => {
     const prev = tasks.value.get(taskId)
@@ -41,7 +42,7 @@ export function useFileProcessing(runtime: RuntimeType) {
     tasks.value = new Map(tasks.value)
   }
 
-  const saveAllToOpfs = (files: DicomFile[], onProgress: (i: number) => void) =>
+  const saveAllToOpfs = (files: DicomFile[], onProgress: (i: number, file: DicomFile) => void) =>
     Effect.gen(function* () {
       const opfs = yield* OPFSStorage
       for (let i = 0; i < files.length; i++) {
@@ -51,7 +52,7 @@ export function useFileProcessing(runtime: RuntimeType) {
         if (!exists) {
           return yield* Effect.fail(new Error(`Failed to verify file in storage: ${f.fileName}`))
         }
-        onProgress(i + 1)
+        onProgress(i + 1, f)
       }
       return files
     })
@@ -84,7 +85,7 @@ export function useFileProcessing(runtime: RuntimeType) {
     addTask({
       taskId,
       fileName: file.name,
-      currentStep: 'Reading input…',
+      currentStep: `Reading ${file.name}`,
       progress: 0,
       status: 'running',
       startTime: Date.now()
@@ -93,17 +94,44 @@ export function useFileProcessing(runtime: RuntimeType) {
     const effect = Effect.gen(function* () {
       const fileHandler = yield* FileHandler
       const processor = yield* DicomProcessor
+      let readingInterval: number | null = null
+      let readingProgress = 0
+      const maxReadingProgress = 60
+      const startReadingTicker = () => {
+        if (readingInterval !== null) return
+        readingInterval = setInterval(() => {
+          readingProgress = Math.min(readingProgress + 1, maxReadingProgress)
+          setTask(taskId, { progress: readingProgress, currentStep: `Reading ${file.name}` })
+          if (readingProgress >= maxReadingProgress && readingInterval !== null) {
+            clearInterval(readingInterval)
+            readingInterval = null
+          }
+        }, 200) as unknown as number
+      }
+      const stopReadingTicker = () => {
+        if (readingInterval !== null) {
+          clearInterval(readingInterval)
+          readingInterval = null
+        }
+        readingTickers.delete(taskId)
+      }
+      readingTickers.set(taskId, stopReadingTicker)
 
+      // Start smooth progress during file reading
+      startReadingTicker()
       const processed = yield* fileHandler.processFile(file)
+      // Stop ticker as soon as reading completes
+      stopReadingTicker()
+      // Ensure progress reflects completed reading phase
+      setTask(taskId, { progress: Math.max(readingProgress, maxReadingProgress), currentStep: `Parsing ${processed.length} file(s)…` })
       if (processed.length === 0) {
         setTask(taskId, { status: 'error', error: 'No DICOM files found', progress: 100, currentStep: 'No files', endTime: Date.now() })
         return []
       }
 
-      setTask(taskId, { currentStep: `Parsing ${processed.length} file(s)…`, progress: 10 })
       const parsed = yield* processor.parseFiles(processed, options.parseConcurrency, {
         onProgress: (completed: number, total: number, current?: DicomFile) => {
-          const p = Math.min(10 + Math.round((completed / total) * 60), 70)
+          const p = Math.min(maxReadingProgress + Math.round((completed / total) * 30), 90)
           setTask(taskId, { progress: p, currentStep: `Parsing: ${current?.fileName ?? 'processing…'}` })
         }
       })
@@ -112,10 +140,10 @@ export function useFileProcessing(runtime: RuntimeType) {
         return []
       }
 
-      setTask(taskId, { currentStep: 'Saving to storage…', progress: 70 })
-      const saved = yield* saveAllToOpfs(parsed, (i) => {
-        const p = 70 + Math.round((i / parsed.length) * 30)
-        setTask(taskId, { progress: Math.min(p, 100), currentStep: `Saved ${i}/${parsed.length}` })
+      setTask(taskId, { currentStep: 'Processing files…', progress: 90 })
+      const saved = yield* saveAllToOpfs(parsed, (i, f) => {
+        const p = 90 + Math.round((i / parsed.length) * 10)
+        setTask(taskId, { progress: Math.min(p, 100), currentStep: `Processing: ${f.fileName}` })
       })
 
       options.onAppendFiles?.(saved)
@@ -126,6 +154,8 @@ export function useFileProcessing(runtime: RuntimeType) {
     }).pipe(
       Effect.catchAll((e) =>
         Effect.sync(() => {
+          const stop = readingTickers.get(taskId)
+          if (stop) stop()
           setTask(taskId, {
             status: 'error',
             error: e instanceof Error ? e.message : String(e),
@@ -139,6 +169,8 @@ export function useFileProcessing(runtime: RuntimeType) {
       ),
       Effect.onInterrupt(() =>
         Effect.sync(() => {
+          const stop = readingTickers.get(taskId)
+          if (stop) stop()
           setTask(taskId, {
             status: 'cancelled',
             currentStep: 'Cancelled',

@@ -258,7 +258,6 @@ onUnmounted(() => {
           :current-step="state.currentStep"
           :progress="state.progress"
           :error="state.error"
-          :start-time="state.startTime"
           :is-individual-file="true"
           :show-cancel-button="false"
         />
