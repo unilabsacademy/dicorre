@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest'
 import { Effect, Layer } from 'effect'
 import { ConfigService, ConfigServiceLive } from './index'
 import type { AppConfig, DicomProfileOption } from './schema'
-import { ConfigPersistence } from '@/services/configPersistence'
+import { ConfigPersistence } from './configPersistence'
 
 describe('ConfigService (Effect Service Testing)', () => {
   // Create a test persistence layer that doesn't use localStorage

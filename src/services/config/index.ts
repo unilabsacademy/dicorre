@@ -4,7 +4,7 @@ import { ConfigurationError, type ConfigurationError as ConfigurationErrorType }
 import defaultConfig from '@/../app.config.json'
 import { validateAppConfig } from './schema'
 import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'
-import { ConfigPersistence } from '@/services/configPersistence'
+import { ConfigPersistence } from './configPersistence'
 
 export class ConfigService extends Context.Tag("ConfigService")<
   ConfigService,

@@ -77,7 +77,10 @@ const cardClass = computed(() => {
           v-if="error"
           class="mt-2 py-2"
         >
-          <AlertDescription class="text-xs">
+          <AlertDescription
+            class="text-xs"
+            data-testid="file-processing-progress-error"
+          >
             {{ error }}
           </AlertDescription>
         </Alert>
