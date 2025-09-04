@@ -1,4 +1,6 @@
 import type { DicomFile } from '@/types/dicom'
+import AnonymizationWorker from './anonymizationWorker.ts?worker'
+import SendingWorker from './sendingWorker.ts?worker'
 
 export interface DebugMessage {
   id: string
@@ -64,11 +66,11 @@ export class WorkerManager<T extends BaseJob> {
   private jobQueue: T[] = []
   private maxWorkers: number
   private nextWorkerId = 1
-  private workerScriptUrl: string
+  private workerConstructor: new () => Worker
   private workerType: string
 
-  constructor(workerScriptUrl: string, workerType: string, maxWorkers?: number) {
-    this.workerScriptUrl = workerScriptUrl
+  constructor(workerConstructor: new () => Worker, workerType: string, maxWorkers?: number) {
+    this.workerConstructor = workerConstructor
     this.workerType = workerType
     // Use hardware concurrency or default to 4 workers
     this.maxWorkers = maxWorkers || Math.min(navigator.hardwareConcurrency || 4, 8)
@@ -105,10 +107,7 @@ export class WorkerManager<T extends BaseJob> {
     const workerId = this.nextWorkerId++
     this.logDebug('create', `Creating ${this.workerType} worker #${workerId}`, workerId)
 
-    const worker = new Worker(
-      new URL(this.workerScriptUrl, import.meta.url),
-      { type: 'module' }
-    )
+    const worker = new this.workerConstructor()
 
     const workerTask: WorkerTask<T> = {
       id: workerId,
@@ -301,7 +300,7 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
   constructor(maxWorkers?: number) {
     // Default to half of available concurrency for anonymization workers
     const defaultWorkers = Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2))
-    super('./anonymizationWorker.ts', 'Anonymization', maxWorkers || Math.min(defaultWorkers, 4))
+    super(AnonymizationWorker, 'Anonymization', maxWorkers || Math.min(defaultWorkers, 4))
   }
 
   protected async prepareJobData(job: AnonymizationJob): Promise<any> {
@@ -341,7 +340,7 @@ export class SendingWorkerManager extends WorkerManager<SendingJob> {
   constructor(maxWorkers?: number) {
     // Default to half of available concurrency for sending workers
     const defaultWorkers = Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2))
-    super('./sendingWorker.ts', 'Sending', maxWorkers || Math.min(defaultWorkers, 4))
+    super(SendingWorker, 'Sending', maxWorkers || Math.min(defaultWorkers, 4))
   }
 
   protected async prepareJobData(job: SendingJob): Promise<any> {
