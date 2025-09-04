@@ -23,7 +23,6 @@ import {
   Shield,
   Send,
   Trash2,
-  Settings2,
   Wifi,
   Download,
   Folder,
@@ -31,7 +30,6 @@ import {
   X,
   Plus,
   Pencil,
-  Upload,
   Layers,
   MoreVertical
 } from 'lucide-vue-next'
@@ -39,7 +37,6 @@ import { useProjectSharing } from '@/composables/useProjectSharing'
 import ConfigLoader from '@/components/ConfigLoader.vue'
 import ProjectEditSheet from '@/components/ProjectEditSheet.vue'
 import type { ProjectConfig } from '@/services/config/schema'
-import type { DicomStudy } from '@/types/dicom'
 import { Input } from '@/components/ui/input'
 
 const props = defineProps<{
@@ -57,6 +54,7 @@ const emit = defineEmits<{
   anonymizeSelected: []
   groupSelected: []
   assignPatientId: [patientId: string]
+  openFieldOverrides: []
   sendSelected: []
   downloadSelected: []
   clearAll: []
@@ -134,7 +132,7 @@ const clearDialogDescription = computed(() => {
       <img
         src="/logo.png"
         class="w-14"
-      ></img>
+      />
       <div class="flex items-center gap-2">
         <div class="mr-4 flex gap-2 items-center">
           <Folder class="h-5 w-5 text-primary" />
@@ -273,6 +271,15 @@ const clearDialogDescription = computed(() => {
           >
             <Pencil class="w-4 h-4 mr-2" />
             Edit Patient ID
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            @click="emit('openFieldOverrides')"
+            :disabled="props.selectedStudiesCount === 0"
+            data-testid="edit-fields-menu-item"
+          >
+            <Pencil class="w-4 h-4 mr-2" />
+            Edit Fields
           </DropdownMenuItem>
 
           <DropdownMenuItem

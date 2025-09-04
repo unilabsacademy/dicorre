@@ -1,6 +1,6 @@
 import { ref, computed, onMounted } from 'vue'
 import { Effect, Stream } from 'effect'
-import type { DicomFile, DicomStudy } from '@/types/dicom'
+import type { DicomFile, DicomStudy, DicomFieldOverrides } from '@/types/dicom'
 import type { RuntimeType } from '@/types/effects'
 import { DicomProcessor } from '@/services/dicomProcessor'
 import { ConfigService } from '@/services/config'
@@ -82,6 +82,16 @@ export function useAppState(runtime: RuntimeType) {
     if (!patientId || selectedStudies.value.length === 0) return
     const selectedUids = new Set(selectedStudies.value.map(s => s.studyInstanceUID))
     studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, assignedPatientId: patientId } : s)
+  }
+
+  const applyFieldOverridesToSelected = (fieldOverrides: DicomFieldOverrides): void => {
+    if (!fieldOverrides || Object.keys(fieldOverrides).length === 0 || selectedStudies.value.length === 0) return
+    const selectedUids = new Set(selectedStudies.value.map(s => s.studyInstanceUID))
+    studies.value = studies.value.map(s => 
+      selectedUids.has(s.studyInstanceUID) 
+        ? { ...s, fieldOverrides: { ...s.fieldOverrides, ...fieldOverrides } }
+        : s
+    )
   }
 
   const loadConfig = async () => { /* stream-backed; kept for API compatibility */ }
@@ -760,6 +770,7 @@ export function useAppState(runtime: RuntimeType) {
     anonymizeSelected,
     groupSelectedStudies,
     assignPatientIdToSelected,
+    applyFieldOverridesToSelected,
     testConnection,
     handleSendSelected,
     clearFiles,

@@ -6,7 +6,7 @@ import { useAppState } from '@/composables/useAppState'
 import { AppLayer } from '@/services/shared/layers'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
@@ -15,6 +15,7 @@ import { useProjectSharing } from '@/composables/useProjectSharing'
 import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import AppToolbar from '@/components/AppToolbar.vue'
+import FieldOverrideSheet from '@/components/FieldOverrideSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
@@ -28,22 +29,19 @@ const error = computed(() => {
   if (appState.configError.value) {
     return `Configuration Error: ${appState.configError.value.message}`
   }
+  return undefined
 })
 
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
+const showFieldOverrideSheet = ref(false)
 
 const {
-  isDragOver,
   isGlobalDragOver,
-  handleDrop,
-  handleDragOver,
-  handleDragLeave,
   handleGlobalDragEnter,
   handleGlobalDragLeave,
   handleGlobalDragOver,
-  handleGlobalDrop,
-  handleFileInput
+  handleGlobalDrop
 } = appState.dragAndDrop
 
 const {
@@ -203,6 +201,7 @@ onUnmounted(() => {
         @anonymize-selected="anonymizeSelected"
         @group-selected="appState.groupSelectedStudies()"
         @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
+        @open-field-overrides="showFieldOverrideSheet = true"
         @send-selected="handleSendSelected(appState.selectedStudies.value)"
         @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
         @clear-all="clearFiles"
@@ -281,6 +280,14 @@ onUnmounted(() => {
 
     <!-- Worker Debug Panel -->
     <WorkerDebugPanel />
+
+    <!-- Field Override Sheet -->
+    <FieldOverrideSheet
+      :open="showFieldOverrideSheet"
+      :selected-studies-count="appState.selectedStudiesCount.value"
+      @update:open="showFieldOverrideSheet = $event"
+      @apply-overrides="(overrides) => appState.applyFieldOverridesToSelected(overrides)"
+    />
 
     <!-- Toast Notifications -->
     <Toaster />
