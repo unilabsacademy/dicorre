@@ -191,10 +191,18 @@ export function createRemoveTagsHandler(tagsToRemove: string[] = []) {
 /**
  * Special handler for date jittering
  */
-export function createDateJitterHandler(maxDays: number = 31) {
+export function createDateJitterHandler(maxDays: number = 31, fieldOverrides?: Record<string, string>) {
   return (element: DicomElement, _options: any) => {
     const tagName = element.keyword || element.name || ''
+    const tagNumber = element.tag?.toString() || ''
     const vr = element.vr || element.VR
+
+    // Check if this field has an override - if so, skip jittering
+    if (fieldOverrides) {
+      if ((tagName && fieldOverrides[tagName]) || (tagNumber && fieldOverrides[tagNumber])) {
+        return false // Let the value replacement handler deal with it
+      }
+    }
 
     // Apply jitter to date fields ending with 'Date'
     if (tagName.endsWith('Date') && vr === 'DA') {
@@ -217,15 +225,38 @@ export function createDateJitterHandler(maxDays: number = 31) {
 /**
  * Special handler for value replacements
  */
-export function createValueReplacementHandler(studyId: string, options?: { disablePatientId?: boolean }) {
+export function createValueReplacementHandler(studyId: string, options?: { disablePatientId?: boolean; fieldOverrides?: Record<string, string> }) {
   return (element: DicomElement, _options: any) => {
     const tagName = element.keyword || element.name || ''
     const tagNumber = element.tag?.toString() || ''
     const originalValue = element.value || element.getValue?.()
 
     if (typeof originalValue !== 'string') return false
+    
 
     let newValue: string | null = null
+    
+    // First check if we have a field override for this tag
+    if (options?.fieldOverrides) {
+      // Check by tag name first
+      if (tagName && options.fieldOverrides[tagName]) {
+        newValue = options.fieldOverrides[tagName]
+      } 
+      // Also check by tag number if available
+      else if (tagNumber && options.fieldOverrides[tagNumber]) {
+        newValue = options.fieldOverrides[tagNumber]
+      }
+      
+      // If we found an override, apply it and return
+      if (newValue !== null) {
+        if (element.setValue) {
+          element.setValue(newValue)
+        } else {
+          element.value = newValue
+        }
+        return true // Skip further processing
+      }
+    }
 
     // Match by keyword name or DICOM tag number
     switch (tagName) {
@@ -323,11 +354,12 @@ export function clearValueCache() {
 /**
  * Get all special handlers as an array
  */
-export function getAllSpecialHandlers(jitterDays: number = 31, tagsToRemove: string[] = [], studyId: string = 'default', options?: { disablePatientId?: boolean }) {
-  return [
+export function getAllSpecialHandlers(jitterDays: number = 31, tagsToRemove: string[] = [], studyId: string = 'default', options?: { disablePatientId?: boolean; fieldOverrides?: Record<string, string> }) {
+  const handlers = [
     createRemoveTagsHandler(tagsToRemove),
-    createDateJitterHandler(jitterDays),
-    createValueReplacementHandler(studyId, { disablePatientId: options?.disablePatientId }),
+    createDateJitterHandler(jitterDays, options?.fieldOverrides),
+    createValueReplacementHandler(studyId, { disablePatientId: options?.disablePatientId, fieldOverrides: options?.fieldOverrides }),
     createAddTagsHandler()
   ]
+  return handlers
 }

@@ -1,6 +1,6 @@
 import { ref, computed } from 'vue'
 import { Effect, Stream } from 'effect'
-import type { DicomFile } from '@/types/dicom'
+import type { DicomFile, DicomFieldOverrides } from '@/types/dicom'
 import type { AnonymizationEvent } from '@/types/events'
 import type { AnonymizationProgress } from '@/services/anonymizer'
 import type { RuntimeType } from '@/types/effects'
@@ -16,6 +16,7 @@ export function useAnonymizer(runtime: RuntimeType) {
     studyId: string,
     files: DicomFile[],
     concurrency: number,
+    fieldOverrides?: DicomFieldOverrides,
     patientIdMap?: Record<string, string>
   ): Stream.Stream<AnonymizationEvent, Error> =>
     Stream.async<AnonymizationEvent, Error>((emit) => {
@@ -31,6 +32,7 @@ export function useAnonymizer(runtime: RuntimeType) {
             files,
             anonymizationConfig,
             concurrency,
+            fieldOverrides,
             patientIdMap,
             onProgress: (progressData) => {
               emit.single({

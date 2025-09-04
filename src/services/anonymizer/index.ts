@@ -15,7 +15,7 @@ import {
   type DeidentifyOptions,
   type ProfileOption
 } from '@umessen/dicom-deidentifier'
-import type { DicomFile } from '@/types/dicom'
+import type { DicomFile, DicomFieldOverrides, DicomMetadata } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
 import type { AnonymizationConfig } from '../config/schema'
 import { getAllSpecialHandlers } from './handlers'
@@ -40,8 +40,8 @@ export interface StudyAnonymizationResult {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>) => Effect.Effect<DicomFile, AnonymizerError>
-    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string> }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
+    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, fieldOverrides?: DicomFieldOverrides, patientIdMap?: Record<string, string>) => Effect.Effect<DicomFile, AnonymizerError>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; fieldOverrides?: DicomFieldOverrides; patientIdMap?: Record<string, string> }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
   }
 >() { }
 
@@ -72,7 +72,40 @@ export const AnonymizerLive = Layer.effect(
       return processed
     }
 
-    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>): Effect.Effect<DicomFile, AnonymizerError> =>
+    const getFieldValueFromMetadata = (metadata: DicomMetadata | undefined, fieldName: string): string | undefined => {
+      if (!metadata) return undefined
+      
+      // Map common field names to metadata properties
+      const fieldMap: Record<string, keyof DicomMetadata> = {
+        'Patient ID': 'patientId',
+        'PatientID': 'patientId',
+        "Patient's Name": 'patientName',
+        'PatientName': 'patientName',
+        'Study Date': 'studyDate',
+        'StudyDate': 'studyDate',
+        "Patient's Sex": 'patientSex',
+        'PatientSex': 'patientSex',
+        "Patient's Birth Date": 'patientBirthDate',
+        'PatientBirthDate': 'patientBirthDate',
+        'Accession Number': 'accessionNumber',
+        'AccessionNumber': 'accessionNumber',
+        'Study Description': 'studyDescription',
+        'StudyDescription': 'studyDescription',
+        'Series Description': 'seriesDescription',
+        'SeriesDescription': 'seriesDescription',
+        'Modality': 'modality'
+      }
+      
+      const metadataKey = fieldMap[fieldName]
+      if (metadataKey) {
+        const value = metadata[metadataKey]
+        return value?.toString()
+      }
+      
+      return undefined
+    }
+
+    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, fieldOverrides?: DicomFieldOverrides, patientIdMap?: Record<string, string>): Effect.Effect<DicomFile, AnonymizerError> =>
       Effect.gen(function* () {
         // Check if file has metadata
         if (!file.metadata) {
@@ -92,7 +125,26 @@ export const AnonymizerLive = Layer.effect(
         )
         console.log('Processed replacements result:', processedReplacements)
 
-        // If a patientIdMap is provided and the file has an original patientId, override the Patient ID replacement
+        // Apply field overrides if provided
+        if (fieldOverrides) {
+          for (const [fieldName, value] of Object.entries(fieldOverrides)) {
+            const fieldTag = tag(fieldName)
+            if (typeof value === 'string') {
+              // Direct assignment
+              processedReplacements[fieldTag] = value
+              console.log(`Overriding ${fieldName} (${fieldTag}) with direct value: ${value}`)
+            } else if (typeof value === 'object' && value !== null) {
+              // Mapping mode - use current file's value to look up replacement
+              const currentValue = getFieldValueFromMetadata(file.metadata, fieldName)
+              if (currentValue && value[currentValue]) {
+                processedReplacements[fieldTag] = value[currentValue]
+                console.log(`Overriding ${fieldName} (${fieldTag}) using mapping: ${currentValue} -> ${value[currentValue]}`)
+              }
+            }
+          }
+        }
+
+        // Backward compatibility: If a patientIdMap is provided, apply it
         const originalPatientId = file.metadata?.patientId
         if (patientIdMap && originalPatientId) {
           const assignedId = patientIdMap[originalPatientId]
@@ -150,8 +202,12 @@ export const AnonymizerLive = Layer.effect(
           // For individual files, use the Study Instance UID as the cache key
           const studyId = file.metadata?.studyInstanceUID || 'unknown'
           // If a patientIdMap is provided, disable PatientID generation in handlers to prevent conflicts
-          const disablePatientId = !!patientIdMap
-          const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId, { disablePatientId })
+          const disablePatientId = !!patientIdMap || (fieldOverrides && ('Patient ID' in fieldOverrides || 'PatientID' in fieldOverrides))
+          // Pass the processed replacements to handlers as fieldOverrides
+          const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId, { 
+            disablePatientId,
+            fieldOverrides: processedReplacements
+          })
           deidentifierConfig.specialHandlers = specialHandlers
         }
 
@@ -221,10 +277,10 @@ export const AnonymizerLive = Layer.effect(
       studyId: string,
       files: DicomFile[],
       config: AnonymizationConfig,
-      options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string> } = {}
+      options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; fieldOverrides?: DicomFieldOverrides; patientIdMap?: Record<string, string> } = {}
     ): Effect.Effect<StudyAnonymizationResult, AnonymizerError> =>
       Effect.gen(function* () {
-        const { concurrency = 3, onProgress } = options
+        const { concurrency = 3, onProgress, fieldOverrides } = options
         const patientIdMap = options.patientIdMap
 
         console.log(`[Effect Anonymizer] Starting anonymization of study ${studyId} with ${files.length} files`)
@@ -252,7 +308,7 @@ export const AnonymizerLive = Layer.effect(
             console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
 
             // Anonymize individual file with shared random string
-            const result = yield* anonymizeFile(file, config, sharedRandom, patientIdMap)
+            const result = yield* anonymizeFile(file, config, sharedRandom, fieldOverrides, patientIdMap)
 
             completed++
 

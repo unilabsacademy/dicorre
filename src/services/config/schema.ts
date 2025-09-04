@@ -60,6 +60,22 @@ const ReplacementsSchema = Schema.Record({
   })
 )
 
+// Schema for exposed fields that users can override in the UI
+const ExposedFieldSchema = Schema.Struct({
+  fieldName: Schema.String.pipe(
+    Schema.filter((name) => {
+      // Validate that it's a valid DICOM tag name
+      return isValidTagName(name) || isValidTagHex(name)
+    }, {
+      message: () => "Field name must be a valid DICOM tag name or hex value"
+    })
+  ),
+  displayName: Schema.String,
+  defaultValue: Schema.optional(Schema.String),
+  type: Schema.optional(Schema.Literal("text", "date", "select")),
+  options: Schema.optional(Schema.Array(Schema.String)) // For select type
+})
+
 export const AnonymizationConfigSchema = Schema.Struct({
   removePrivateTags: Schema.Boolean,
   profileOptions: AnonymizationProfileOptionsSchema,
@@ -82,7 +98,8 @@ export const AnonymizationConfigSchema = Schema.Struct({
     Schema.filter((oid) => /^[0-9.]+$/.test(oid), {
       message: () => "Organization root must be a valid OID (digits and dots only)"
     })
-  ))
+  )),
+  exposedFields: Schema.optional(Schema.Array(ExposedFieldSchema))
 })
 
 // Project configuration schema

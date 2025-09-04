@@ -39,7 +39,12 @@ export interface DicomStudy {
   studyDate?: string
   studyDescription?: string
   series: DicomSeries[]
+  // Field overrides for anonymization
+  fieldOverrides?: DicomFieldOverrides
 }
+
+// Type for DICOM field overrides during anonymization
+export type DicomFieldOverrides = Record<string, string | Record<string, string>>
 
 export interface DicomSeries {
   seriesInstanceUID: string

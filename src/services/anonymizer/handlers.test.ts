@@ -395,4 +395,88 @@ describe('anonymizationHandlers', () => {
       expect(element2.value).not.toBe(firstValue)
     })
   })
+
+  describe('Field Override Handling', () => {
+    it('should apply field overrides in value replacement handler', () => {
+      const fieldOverrides = {
+        '00100020': 'TEST_PATIENT_001', // Patient ID
+        '00100040': 'M' // Patient Sex
+      }
+
+      const handler = createValueReplacementHandler('test-study', { 
+        fieldOverrides 
+      })
+
+      // Test Patient ID override
+      const patientIdElement = createMockElement({
+        tag: '00100020',
+        keyword: 'PatientID',
+        value: 'ORIGINAL_ID'
+      })
+
+      const result1 = handler(patientIdElement, {})
+      expect(result1).toBe(true) // Should return true when override applied
+      expect(patientIdElement.value).toBe('TEST_PATIENT_001')
+
+      // Test Patient Sex override
+      const patientSexElement = createMockElement({
+        tag: '00100040',
+        keyword: 'PatientSex',
+        value: 'F'
+      })
+
+      const result2 = handler(patientSexElement, {})
+      expect(result2).toBe(true)
+      expect(patientSexElement.value).toBe('M')
+    })
+
+    it('should skip date jittering for overridden fields', () => {
+      const fieldOverrides = {
+        '00080020': '20240101' // Study Date
+      }
+
+      const handler = createDateJitterHandler(31, fieldOverrides)
+      const element = createMockElement({
+        tag: '00080020',
+        keyword: 'StudyDate',
+        vr: 'DA',
+        value: '20170618'
+      })
+
+      const result = handler(element, {})
+      expect(result).toBe(false) // Should return false to let value handler process it
+      expect(element.value).toBe('20170618') // Should not be modified
+    })
+
+    it('should handle field overrides with both tag names and hex values', () => {
+      const fieldOverrides = {
+        'PatientID': 'BY_NAME',    // By tag name
+        '00100040': 'BY_HEX'      // By hex tag
+      }
+
+      const handler = createValueReplacementHandler('test-study', { 
+        fieldOverrides 
+      })
+
+      // Test override by tag name
+      const element1 = createMockElement({
+        keyword: 'PatientID',
+        value: 'ORIGINAL'
+      })
+
+      const result1 = handler(element1, {})
+      expect(result1).toBe(true)
+      expect(element1.value).toBe('BY_NAME')
+
+      // Test override by hex tag
+      const element2 = createMockElement({
+        tag: '00100040',
+        value: 'ORIGINAL'
+      })
+
+      const result2 = handler(element2, {})
+      expect(result2).toBe(true)
+      expect(element2.value).toBe('BY_HEX')
+    })
+  })
 })

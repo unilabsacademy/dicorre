@@ -15,6 +15,7 @@ interface WorkerMessage {
     files: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>
     anonymizationConfig: AnonymizationConfig
     concurrency?: number
+    fieldOverrides?: Record<string, string | Record<string, string>>
     patientIdMap?: Record<string, string>
   }
 }
@@ -25,7 +26,7 @@ type WorkerResponse =
   | { type: 'error'; studyId: string; data: { message: string; stack?: string } }
 
 // Main worker function
-async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, anonymizationConfig: AnonymizationConfig, concurrency = 3, patientIdMap?: Record<string, string>) {
+async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fileName: string; fileSize: number; opfsFileId: string; metadata?: any }>, anonymizationConfig: AnonymizationConfig, concurrency = 3, fieldOverrides?: Record<string, string | Record<string, string>>, patientIdMap?: Record<string, string>) {
   try {
     await runtime.runPromise(
       Effect.gen(function* () {
@@ -143,7 +144,7 @@ self.addEventListener('message', (event: MessageEvent<WorkerMessage>) => {
   const { type, data } = event.data
 
   if (type === 'anonymize_study') {
-    anonymizeStudy(data.studyId, data.files, data.anonymizationConfig, data.concurrency, data.patientIdMap)
+    anonymizeStudy(data.studyId, data.files, data.anonymizationConfig, data.concurrency, data.fieldOverrides, data.patientIdMap)
   }
 })
 

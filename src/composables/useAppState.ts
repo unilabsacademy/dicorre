@@ -275,7 +275,10 @@ export function useAppState(runtime: RuntimeType) {
       const studyStreamEffects = selectedStudies.value.map(study => {
         const studyFiles = study.series.flatMap(series => series.files)
 
-        // Build patientIdMap based on currently assigned IDs for all studies in memory
+        // Build fieldOverrides based on study's field overrides
+        const fieldOverrides = study.fieldOverrides || {}
+        
+        // Build patientIdMap for backward compatibility
         const patientIdMap: Record<string, string> = {}
         studies.value.forEach(s => {
           const orig = s.patientId || 'Unknown'
@@ -288,6 +291,7 @@ export function useAppState(runtime: RuntimeType) {
           study.studyInstanceUID,
           studyFiles,
           concurrency.value,
+          fieldOverrides,
           patientIdMap
         ).pipe(
           Stream.tap((event) =>

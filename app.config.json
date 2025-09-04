@@ -31,6 +31,39 @@
       "startswith:IssueDate",
       "contains:Trial",
       "startswith:PatientTelephoneNumber"
+    ],
+    "exposedFields": [
+      {
+        "fieldName": "Patient ID",
+        "displayName": "Patient ID",
+        "defaultValue": "PAT{random}"
+      },
+      {
+        "fieldName": "Study Date",
+        "displayName": "Study Date",
+        "type": "date"
+      },
+      {
+        "fieldName": "Patient's Sex",
+        "displayName": "Patient Sex",
+        "type": "select",
+        "options": ["M", "F", "O"]
+      },
+      {
+        "fieldName": "Patient's Birth Date",
+        "displayName": "Patient Birth Date",
+        "type": "date"
+      },
+      {
+        "fieldName": "Patient's Name",
+        "displayName": "Patient Name",
+        "defaultValue": "Anonymous"
+      },
+      {
+        "fieldName": "Accession Number",
+        "displayName": "Accession Number",
+        "defaultValue": "ACA{random}"
+      }
     ]
   },
   "plugins": {

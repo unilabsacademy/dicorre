@@ -269,6 +269,53 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       const ids = result.anonymizedFiles.map(f => f.metadata?.patientId)
       expect(ids.every(id => id === 'PATFIXED123')).toBe(true)
     })
+
+    it('respects field overrides for multiple DICOM fields', async () => {
+      // Load test files
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC'),
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC'),
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      // Define field overrides (excluding Study Date for now due to complex date handling)
+      const fieldOverrides = {
+        'Patient ID': 'TEST_PATIENT_001',
+        "Patient's Sex": 'M',
+        "Patient's Name": 'TEST^PATIENT',
+        'Accession Number': 'ACC123456'
+      }
+
+      const result = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
+
+        return yield* anonymizer.anonymizeStudy(
+          'test-study-overrides',
+          parsedFiles,
+          config,
+          { concurrency: 2, fieldOverrides }
+        )
+      }))
+
+      expect(result.anonymizedFiles.length).toBe(2)
+      
+      // Verify all field overrides were applied
+      result.anonymizedFiles.forEach(file => {
+        expect(file.metadata?.patientId).toBe('TEST_PATIENT_001')
+        expect(file.metadata?.patientSex).toBe('M')
+        // Patient Name is stored as object with Alphabetic component
+        expect(file.metadata?.patientName).toEqual({ Alphabetic: 'TEST^PATIENT' })
+        expect(file.metadata?.accessionNumber).toBe('ACC123456')
+      })
+    })
   })
 
   describe('Error handling', () => {
