@@ -343,7 +343,7 @@ export function useAppState(runtime: RuntimeType) {
                 next[idx] = { ...next[idx], customFields: undefined }
                 studies.value = next
               }
-              rebuildStudyAfterFileChanges(study.studyInstanceUID)
+              rebuildStudyAfterAnonymization(study.studyInstanceUID, anonymizedFiles)
 
               resolve(true)
             },
@@ -577,6 +577,45 @@ export function useAppState(runtime: RuntimeType) {
       )
     } catch (error) {
       console.error('Failed to rebuild study after file changes:', error)
+    }
+  }
+
+  async function rebuildStudyAfterAnonymization(oldStudyId: string, anonymizedFiles: DicomFile[]): Promise<void> {
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          const current = studies.value
+          const existing = current.find(s => s.studyInstanceUID === oldStudyId)
+
+          // Rebuild study structure from the anonymized files (may have a new StudyInstanceUID)
+          const rebuilt = yield* processor.groupFilesByStudy(anonymizedFiles)
+          if (rebuilt.length === 0) {
+            return
+          }
+
+          const newStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
+          const newStudyId = newStudy.studyInstanceUID
+
+          const idxOld = current.findIndex(s => s.studyInstanceUID === oldStudyId)
+          const idxNew = current.findIndex(s => s.studyInstanceUID === newStudyId)
+
+          const next = [...current]
+          if (idxOld !== -1) {
+            next.splice(idxOld, 1)
+          }
+
+          if (idxNew !== -1) {
+            next[idxNew] = newStudy
+          } else {
+            next.push(newStudy)
+          }
+
+          studies.value = next
+        })
+      )
+    } catch (error) {
+      console.error('Failed to rebuild study after anonymization:', error)
     }
   }
 

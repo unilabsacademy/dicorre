@@ -9,8 +9,7 @@
   "anonymization": {
     "profileOptions": [
       "BasicProfile",
-      "RetainLongModifDatesOption",
-      "RetainUIDsOption"
+      "RetainLongModifDatesOption"
     ],
     "removePrivateTags": true,
     "useCustomHandlers": true,
