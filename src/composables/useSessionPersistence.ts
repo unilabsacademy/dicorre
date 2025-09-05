@@ -12,9 +12,7 @@ export function useSessionPersistence(
   const isRestoring = ref(false)
   const restoreProgress = ref(0)
 
-  /**
-   * Persist current session to localStorage + OPFS
-   */
+  // Persist current session to localStorage + OPFS
   async function persist() {
     if (extractedDicomFiles.value.length === 0) return
     await runtime.runPromise(
@@ -29,9 +27,7 @@ export function useSessionPersistence(
   watch(extractedDicomFiles, persist, { deep: true })
   watch(studies, persist, { deep: true })
 
-  /**
-   * Restore previous session (if any)
-   */
+  // Restore previous session (if any)
   async function restore() {
     isRestoring.value = true
     try {
@@ -48,9 +44,7 @@ export function useSessionPersistence(
     }
   }
 
-  /**
-   * Clear persisted session (localStorage + OPFS)
-   */
+  // Clear persisted session (localStorage + OPFS)j
   async function clear() {
     await runtime.runPromise(
       Effect.gen(function* () {

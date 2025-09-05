@@ -12,9 +12,9 @@ import { useSendingProgress } from '@/composables/useSendingProgress'
 import { useFileProcessing } from '@/composables/useFileProcessing'
 import { useDragAndDrop } from '@/composables/useDragAndDrop'
 import { useDicomSender } from '@/composables/useDicomSender'
-import { useAnonymizer } from '@/composables/useAnonymizer'
 import { clearStudyCache } from '@/services/anonymizer/handlers'
 import { toast } from 'vue-sonner'
+import { getAnonymizationWorkerManager } from '@/workers/workerManager'
 
 export function useAppState(runtime: RuntimeType) {
   // Core application state
@@ -39,7 +39,6 @@ export function useAppState(runtime: RuntimeType) {
   const fileProcessing = useFileProcessing(runtime)
   const dragAndDrop = useDragAndDrop()
   const dicomSender = useDicomSender(runtime)
-  const anonymizer = useAnonymizer(runtime)
 
   // Progress and UI state management
   const { setStudyProgress, removeStudyProgress, clearAllProgress } = useAnonymizationProgress()
@@ -260,6 +259,8 @@ export function useAppState(runtime: RuntimeType) {
     await processNewFiles(uploadedFiles.value, isAppReady)
   }
 
+
+
   const anonymizeSelected = async () => {
     if (!config.value) {
       setAppError('Configuration not loaded')
@@ -271,8 +272,16 @@ export function useAppState(runtime: RuntimeType) {
     }
 
     try {
-      // Process all studies concurrently using Effect.all for true parallelism
-      const studyStreamEffects = selectedStudies.value.map(study => {
+      const anonymizationConfig = await runtime.runPromise(
+        Effect.gen(function* () {
+          const cfgService = yield* ConfigService
+          return yield* cfgService.getAnonymizationConfig
+        })
+      )
+
+      const manager = getAnonymizationWorkerManager()
+
+      const promises = selectedStudies.value.map(study => {
         const studyFiles = study.series.flatMap(series => series.files)
 
         // Build patientIdMap based on currently assigned IDs for all studies in memory
@@ -284,124 +293,59 @@ export function useAppState(runtime: RuntimeType) {
           }
         })
 
-        return anonymizer.anonymizeStudyStream(
-          study.studyInstanceUID,
-          studyFiles,
-          concurrency.value,
-          patientIdMap
-        ).pipe(
-          Stream.tap((event) =>
-            Effect.sync(() => {
-              // React to each event in the stream
-              switch (event._tag) {
-                case "AnonymizationStarted":
-                  setStudyProgress(event.studyId, {
-                    isProcessing: true,
-                    progress: 0,
-                    totalFiles: event.totalFiles,
-                    currentFile: undefined
-                  })
-                  break
+        // Initial progress
+        setStudyProgress(study.studyInstanceUID, {
+          isProcessing: true,
+          progress: 0,
+          totalFiles: studyFiles.length,
+          currentFile: undefined
+        })
 
-                case "AnonymizationProgress":
-                  setStudyProgress(event.studyId, {
-                    isProcessing: true,
-                    progress: Math.round((event.completed / event.total) * 100),
-                    totalFiles: event.total,
-                    currentFile: event.currentFile
-                  })
-                  break
-
-                case "FileAnonymized":
-                  // Update the file in our collection
-                  const fileIndex = dicomFiles.value.findIndex(f => f.id === event.file.id)
-                  if (fileIndex !== -1) {
-                    dicomFiles.value[fileIndex] = event.file
-                  }
-                  break
-
-                case "StudyAnonymized":
-                  // Study completed - update files with anonymized versions
-                  event.files.forEach(anonymizedFile => {
-                    const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
-                    if (fileIndex !== -1) {
-                      dicomFiles.value[fileIndex] = anonymizedFile
-                    }
-                  })
-                  removeStudyProgress(event.studyId)
-                  console.log(`Study ${event.studyId} anonymization completed with ${event.files.length} files`)
-
-                  // Update only the affected study to preserve assigned IDs on others
-                  runtime.runPromise(
-                    Effect.gen(function* () {
-                      const processor = yield* DicomProcessor
-                      const current = studies.value
-                      const existing = current.find(s => s.studyInstanceUID === event.studyId)
-                      const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === event.studyId)
-                      const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
-                      if (rebuilt.length > 0) {
-                        const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
-                        const idx = current.findIndex(s => s.studyInstanceUID === event.studyId)
-                        if (idx !== -1) {
-                          const next = [...current]
-                          next[idx] = updatedStudy
-                          studies.value = next
-                        } else {
-                          studies.value = [...current, updatedStudy]
-                        }
-                      }
-                      console.log(`Study ${event.studyId} updated after completion`)
-                    })
-                  ).catch(error => {
-                    console.error('Failed to update study after anonymization:', error)
-                  })
-                  break
-
-                case "AnonymizationError":
-                  console.error(`Anonymization error for study ${event.studyId}:`, event.error)
-                  removeStudyProgress(event.studyId)
-                  break
-              }
-            })
-          ),
-          Stream.runDrain,
-          Effect.catchAll(error =>
-            Effect.sync(() => {
-              console.error(`Error anonymizing study ${study.studyInstanceUID}:`, error)
+        return new Promise<boolean>((resolve) => {
+          manager.anonymizeStudy({
+            studyId: study.studyInstanceUID,
+            files: studyFiles,
+            anonymizationConfig,
+            concurrency: concurrency.value,
+            patientIdMap,
+            onProgress: (p) => {
+              setStudyProgress(study.studyInstanceUID, {
+                isProcessing: true,
+                progress: Math.round((p.completed / p.total) * 100),
+                totalFiles: p.total,
+                currentFile: p.currentFile
+              })
+            },
+            onComplete: (anonymizedFiles) => {
+              anonymizedFiles.forEach(anonymizedFile => {
+                const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
+                if (fileIndex !== -1) {
+                  dicomFiles.value[fileIndex] = anonymizedFile
+                }
+              })
               removeStudyProgress(study.studyInstanceUID)
-              // Don't rethrow to prevent stopping other concurrent studies
-            })
-          )
-        )
+              console.log(`Study ${study.studyInstanceUID} anonymization completed with ${anonymizedFiles.length} files`)
+              rebuildStudyAfterFileChanges(study.studyInstanceUID)
+
+              resolve(true)
+            },
+            onError: (err) => {
+              console.error(`Anonymization error for study ${study.studyInstanceUID}:`, err)
+              removeStudyProgress(study.studyInstanceUID)
+              resolve(false)
+            }
+          })
+        })
       })
 
-      // Track successful and failed studies
-      const failedStudies: string[] = []
-      const successfulStudies: string[] = []
+      const results = await Promise.allSettled(promises)
+      const successfulStudies = results
+        .map((r, idx) => (r.status === 'fulfilled' && r.value === true) ? selectedStudies.value[idx].studyInstanceUID : null)
+        .filter((v): v is string => v !== null)
+      const failedStudies = results
+        .map((r, idx) => (r.status === 'fulfilled' && r.value === false) ? selectedStudies.value[idx].studyInstanceUID : null)
+        .filter((v): v is string => v !== null)
 
-      // Run all study streams concurrently with result tracking
-      await runtime.runPromise(
-        Effect.all(studyStreamEffects.map((effect, index) =>
-          effect.pipe(
-            Effect.map(() => {
-              const currentStudy = selectedStudies.value[index]
-              if (currentStudy) {
-                successfulStudies.push(currentStudy.studyInstanceUID)
-              }
-              return true
-            }),
-            Effect.catchAll(() => {
-              const currentStudy = selectedStudies.value[index]
-              if (currentStudy) {
-                failedStudies.push(currentStudy.studyInstanceUID)
-              }
-              return Effect.succeed(false)
-            })
-          )
-        ), { concurrency: "unbounded" })
-      )
-
-      // Show appropriate success/error message based on results
       if (failedStudies.length === 0) {
         successMessage.value = `Successfully anonymized ${successfulStudies.length} studies`
       } else if (successfulStudies.length === 0) {
@@ -490,23 +434,10 @@ export function useAppState(runtime: RuntimeType) {
                 }
               })
 
-              // Rebuild only the affected study to preserve assigned IDs on others
-              const processor = yield* DicomProcessor
-              const current = studies.value
-              const existing = current.find(s => s.studyInstanceUID === study.studyInstanceUID)
-              const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === study.studyInstanceUID)
-              const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
-              if (rebuilt.length > 0) {
-                const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
-                const idx = current.findIndex(s => s.studyInstanceUID === study.studyInstanceUID)
-                if (idx !== -1) {
-                  const next = [...current]
-                  next[idx] = updatedStudy
-                  studies.value = next
-                } else {
-                  studies.value = [...current, updatedStudy]
-                }
-              }
+              yield* Effect.tryPromise({
+                try: () => rebuildStudyAfterFileChanges(study.studyInstanceUID),
+                catch: (error) => new Error(String(error))
+              })
 
               // afterSend hooks
               const registry = yield* PluginRegistry
@@ -601,6 +532,33 @@ export function useAppState(runtime: RuntimeType) {
     } catch (error) {
       console.error('Error in sending:', error)
       setAppError(error as Error)
+    }
+  }
+
+  async function rebuildStudyAfterFileChanges(studyId: string): Promise<void> {
+    try {
+      await runtime.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          const current = studies.value
+          const existing = current.find(s => s.studyInstanceUID === studyId)
+          const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === studyId)
+          const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
+          if (rebuilt.length > 0) {
+            const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
+            const idx = current.findIndex(s => s.studyInstanceUID === studyId)
+            if (idx !== -1) {
+              const next = [...current]
+              next[idx] = updatedStudy
+              studies.value = next
+            } else {
+              studies.value = [...current, updatedStudy]
+            }
+          }
+        })
+      )
+    } catch (error) {
+      console.error('Failed to rebuild study after file changes:', error)
     }
   }
 
