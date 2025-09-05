@@ -52,22 +52,34 @@ function toggleSection(section: string) {
   }
 }
 
-// Load current config into editor state
-props.runtime.runPromise(
-  Effect.gen(function* () {
-    const svc = yield* ConfigService
-    const cfg = yield* svc.getCurrentConfig
-    editedConfig.value = JSON.parse(JSON.stringify(cfg))
+// Load current config into editor state (on mount and when sheet opens)
+function refreshEditedConfig() {
+  props.runtime.runPromise(
+    Effect.gen(function* () {
+      const svc = yield* ConfigService
+      const cfg = yield* svc.getCurrentConfig
+      editedConfig.value = JSON.parse(JSON.stringify(cfg))
+      syncProjectFieldsFromConfig(editedConfig.value)
+    })
+  ).catch((err) => {
+    console.error('Failed to load current configuration:', err)
+    editedConfig.value = {}
   })
-).catch((err) => {
-  console.error('Failed to load current configuration:', err)
-  editedConfig.value = {}
+}
+
+refreshEditedConfig()
+
+watch(() => props.open, (isOpen) => {
+  if (isOpen) refreshEditedConfig()
 })
 
-// Set project data when opening
-projectName.value = props.currentProject?.name || ''
-const existing = ((props.currentProject as any)?.plugins?.settings?.['sent-notifier']?.params || {}) as Record<string, string>
-params.value = Object.entries(existing).map(([key, value]) => ({ key, value: String(value ?? '') }))
+// Keep simple: treat project as part of config; sync local fields from edited config
+function syncProjectFieldsFromConfig(cfg: any) {
+  const proj = cfg?.project
+  projectName.value = proj?.name || ''
+  const existingParams = ((proj as any)?.plugins?.settings?.['sent-notifier']?.params || {}) as Record<string, string>
+  params.value = Object.entries(existingParams).map(([key, value]) => ({ key, value: String(value ?? '') }))
+}
 
 function toRecord(rows: ParamRow[]): Record<string, string> {
   const out: Record<string, string> = {}
@@ -183,35 +195,36 @@ async function handleSaveConfig() {
       configToSave.dicomServer.auth = null
     }
 
-    // Update config and project through the config service
+    // Project: build from simple fields back into config
+    if (projectName.value.trim()) {
+      const existing = (editedConfig.value as any).project
+      const nextProject = {
+        ...(existing || {}),
+        name: projectName.value.trim(),
+        id: existing?.id ?? crypto.randomUUID(),
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+        plugins: {
+          ...((existing as any)?.plugins),
+          settings: {
+            ...(((existing as any)?.plugins as any)?.settings),
+            ['sent-notifier']: {
+              ...((((existing as any)?.plugins as any)?.settings || {})['sent-notifier']),
+              params: toRecord(params.value)
+            }
+          }
+        }
+      }
+      configToSave.project = nextProject
+    } else {
+      // If no project name, clear project from config
+      if (configToSave.project) delete (configToSave as any).project
+    }
+
+    // Update config (project included) through the config service
     await props.runtime.runPromise(
       Effect.gen(function* () {
         const configService = yield* ConfigService
         yield* configService.loadConfig(configToSave)
-
-        // Persist project name and sent-notifier params if provided
-        if (projectName.value.trim() || params.value.length > 0) {
-          const currentProject = props.currentProject
-          if (currentProject) {
-            const next: ProjectConfig = {
-              ...currentProject,
-              name: projectName.value.trim() || currentProject.name,
-              plugins: {
-                ...currentProject.plugins,
-                settings: {
-                  ...((currentProject.plugins as any)?.settings),
-                  ['sent-notifier']: {
-                    ...(((currentProject.plugins as any)?.settings) || {})['sent-notifier'],
-                    params: toRecord(params.value)
-                  }
-                }
-              }
-            }
-            emit('update-project', next)
-          } else if (projectName.value.trim()) {
-            emit('create-project', projectName.value.trim())
-          }
-        }
       })
     )
 
