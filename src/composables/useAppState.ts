@@ -147,40 +147,6 @@ export function useAppState(runtime: RuntimeType) {
     }
   }
 
-  const handleClearProject = async (): Promise<void> => {
-    try {
-      await runtime.runPromise(
-        Effect.gen(function* () {
-          const configService = yield* ConfigService
-          yield* configService.clearProject
-        })
-      )
-
-      // Stream will update config/currentProject
-      toast.success('Project cleared')
-    } catch (error) {
-      console.error('Failed to clear project:', error)
-      toast.error('Failed to clear project')
-      throw error
-    }
-  }
-
-  const handleUpdateProject = async (project: ProjectConfig): Promise<void> => {
-    try {
-      await runtime.runPromise(
-        Effect.gen(function* () {
-          const configService = yield* ConfigService
-          yield* configService.updateProject(project)
-        })
-      )
-      toast.success(`Project "${project.name}" updated`)
-    } catch (error) {
-      console.error('Failed to update project:', error)
-      toast.error('Failed to update project')
-      throw error
-    }
-  }
-
   const handleLoadConfig = async (configData: unknown): Promise<void> => {
     try {
       const loadedConfig = await runtime.runPromise(
@@ -268,8 +234,6 @@ export function useAppState(runtime: RuntimeType) {
   const processFiles = async (isAppReady: boolean) => {
     await processNewFiles(uploadedFiles.value, isAppReady)
   }
-
-
 
   const anonymizeSelected = async () => {
     if (!config.value) {
@@ -665,11 +629,6 @@ export function useAppState(runtime: RuntimeType) {
     successMessage.value = `Cleared ${selectedStudiesToClear.length} selected ${selectedStudiesToClear.length === 1 ? 'study' : 'studies'}`
   }
 
-  const processZipFile = (file: File, isAppReady: boolean) => {
-    uploadedFiles.value = [file]
-    processFiles(isAppReady)
-  }
-
   onMounted(async () => {
     try {
       config.value = await runtime.runPromise(
@@ -727,8 +686,6 @@ export function useAppState(runtime: RuntimeType) {
     loadProjectState,
     handleConfigReload,
     handleCreateProject,
-    handleClearProject,
-    handleUpdateProject,
     handleLoadConfig,
     processNewFiles,
     addFilesToUploaded,
@@ -741,6 +698,5 @@ export function useAppState(runtime: RuntimeType) {
     handleSendSelected,
     clearFiles,
     clearSelected,
-    processZipFile
   }
 }

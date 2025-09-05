@@ -45,8 +45,6 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   createProject: [name: string]
-  updateProject: [project: ProjectConfig]
-  clearProject: []
   anonymizeSelected: []
   groupSelected: []
   sendSelected: []

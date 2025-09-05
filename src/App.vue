@@ -6,7 +6,7 @@ import { useAppState } from '@/composables/useAppState'
 import { AppLayer } from '@/services/shared/layers'
 import { DataTable, columns } from '@/components/StudyDataTable'
 import { Button } from '@/components/ui/button'
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardContent } from '@/components/ui/card'
 import { Alert, AlertDescription } from '@/components/ui/alert'
 import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
@@ -38,16 +38,11 @@ const showConfigEditSheet = ref(false)
 const showCustomFieldsSheet = ref(false)
 
 const {
-  isDragOver,
   isGlobalDragOver,
-  handleDrop,
-  handleDragOver,
-  handleDragLeave,
   handleGlobalDragEnter,
   handleGlobalDragLeave,
   handleGlobalDragOver,
   handleGlobalDrop,
-  handleFileInput
 } = appState.dragAndDrop
 
 const {
@@ -226,8 +221,6 @@ onUnmounted(() => {
         :is-processing="hasActiveProcessing()"
         :is-downloading="isDownloading"
         @create-project="appState.handleCreateProject"
-        @updateProject="appState.handleUpdateProject"
-        @clear-project="appState.handleClearProject"
         @anonymize-selected="anonymizeSelected"
         @group-selected="appState.groupSelectedStudies()"
         @send-selected="handleSendSelected(appState.selectedStudies.value)"
@@ -320,7 +313,6 @@ onUnmounted(() => {
       @update:open="showConfigEditSheet = $event"
       @config-updated="handleConfigLoaded"
       @create-project="(name) => appState.handleCreateProject(name)"
-      @update-project="(project) => appState.handleUpdateProject(project)"
     />
 
     <!-- Custom Fields Sheet -->

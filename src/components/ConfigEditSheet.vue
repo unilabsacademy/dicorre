@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Checkbox } from '@/components/ui/checkbox'
-import { Settings2, X, Plus, Trash2 } from 'lucide-vue-next'
+import { X, Plus } from 'lucide-vue-next'
 import {
   Sheet,
   SheetContent,
@@ -15,7 +15,7 @@ import {
   SheetTitle,
 } from '@/components/ui/sheet'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
-import { appConfigEditSchema, type FieldSchema, type ConfigEditSchema, shouldShowField } from '@/services/config/editSchema'
+import { appConfigEditSchema, type FieldSchema, type ConfigEditSchema } from '@/services/config/editSchema'
 import type { RuntimeType } from '@/types/effects'
 import { toast } from 'vue-sonner'
 import type { ProjectConfig } from '@/services/config/schema'
@@ -100,8 +100,6 @@ function removeParam(index: number) {
   params.value = params.value.filter((_, i) => i !== index)
 }
 
-// Project changes are persisted together with config in handleSaveConfig
-
 function getFieldValue(path: string): any {
   const parts = path.split('.')
   let value = editedConfig.value
@@ -163,16 +161,6 @@ function updateRecordKey(path: string, oldKey: string | number, newKey: string) 
 function updateRecordValue(path: string, key: string | number, value: string) {
   const current = getFieldValue(path) || {}
   setFieldValue(path, { ...current, [key]: value })
-}
-
-function toggleMultiselectOption(path: string, option: string) {
-  const current = getFieldValue(path) || []
-  const index = current.indexOf(option)
-  if (index === -1) {
-    setFieldValue(path, [...current, option])
-  } else {
-    setFieldValue(path, current.filter((v: string) => v !== option))
-  }
 }
 
 function setMultiselectOption(path: string, option: string, enabled: boolean) {
@@ -244,73 +232,6 @@ async function handleSaveConfig() {
 
 function handleCancel() {
   emit('update:open', false)
-}
-
-// Render different field types
-function renderField(schema: FieldSchema, path: string, level: number = 0): any {
-  const value = getFieldValue(path)
-
-  if (!shouldShowField(path, editedConfig.value)) {
-    return null
-  }
-
-  switch (schema.type) {
-    case 'text':
-      return {
-        component: 'input',
-        value,
-        placeholder: schema.placeholder,
-        pattern: schema.pattern,
-        required: schema.required
-      }
-
-    case 'number':
-      return {
-        component: 'number',
-        value,
-        min: schema.min,
-        max: schema.max,
-        placeholder: schema.placeholder,
-        required: schema.required
-      }
-
-    case 'boolean':
-      return {
-        component: 'checkbox',
-        value
-      }
-
-    case 'select':
-      return {
-        component: 'select',
-        value: value || 'none',
-        options: schema.options
-      }
-
-    case 'multiselect':
-      return {
-        component: 'multiselect',
-        value: value || [],
-        options: schema.options
-      }
-
-    case 'array':
-      return {
-        component: 'array',
-        value: value || [],
-        itemType: schema.itemType
-      }
-
-    case 'record':
-      return {
-        component: 'record',
-        value: value || {},
-        valueType: schema.valueType
-      }
-
-    default:
-      return null
-  }
 }
 </script>
 
