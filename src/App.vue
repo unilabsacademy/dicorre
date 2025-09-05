@@ -126,10 +126,6 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <pre>
-
-  {{ appState.dicomFiles }}
-  </pre>
   <div
     class="min-h-screen bg-background p-6 relative"
     @dragenter="(event) => handleGlobalDragEnter(event)"
