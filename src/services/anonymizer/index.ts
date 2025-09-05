@@ -18,7 +18,7 @@ import {
 import type { DicomFile } from '@/types/dicom'
 import { DicomProcessor } from '../dicomProcessor'
 import type { AnonymizationConfig } from '../config/schema'
-import { getAllSpecialHandlers } from './handlers'
+import { getAllSpecialHandlers, getAllSpecialHandlersWithOverrides } from './handlers'
 import { getDicomReferenceDate, getDicomReferenceTime } from './dicomHelpers'
 import { AnonymizationError, type AnonymizerError } from '@/types/effects'
 import { tag } from '@/utils/dicom-tag-dictionary'
@@ -155,14 +155,16 @@ export const AnonymizerLive = Layer.effect(
           getReferenceTime: getDicomReferenceTime
         }
 
-        // Add custom special handlers if enabled
-        if (config.useCustomHandlers) {
+        // Add custom special handlers
+        if (config.useCustomHandlers || (overrides && Object.keys(overrides).length > 0)) {
           const tagsToRemove = config.tagsToRemove ? [...config.tagsToRemove] : []
           // For individual files, use the Study Instance UID as the cache key
           const studyId = file.metadata?.studyInstanceUID || 'unknown'
           // If a patientIdMap is provided, disable PatientID generation in handlers to prevent conflicts
           const disablePatientId = !!patientIdMap
-          const specialHandlers = getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId, { disablePatientId })
+          const specialHandlers = overrides && Object.keys(overrides).length > 0
+            ? getAllSpecialHandlersWithOverrides(config.dateJitterDays || 31, tagsToRemove, studyId, { disablePatientId }, overrides)
+            : getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId, { disablePatientId })
           deidentifierConfig.specialHandlers = specialHandlers
         }
 

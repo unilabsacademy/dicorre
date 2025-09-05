@@ -331,3 +331,63 @@ export function getAllSpecialHandlers(jitterDays: number = 31, tagsToRemove: str
     createAddTagsHandler()
   ]
 }
+
+/**
+ * Special handler to force-set values for specified overrides
+ * Overrides should use official DICOM attribute names (e.g., "Study Description")
+ */
+export function createOverridesHandler(overrides: Record<string, string>) {
+  // Precompute hex map for fast tag number matching
+  const hexMap = new Map<string, string>()
+  for (const [name, value] of Object.entries(overrides)) {
+    try {
+      const hex = tag(name)
+      hexMap.set(hex, value)
+    } catch {
+      // ignore invalid names
+    }
+  }
+
+  return (element: any, _options: any) => {
+    const tagName = element.keyword || element.name || ''
+    const tagNumber = element.tag?.toString() || ''
+
+    let newValue: string | undefined
+    if (overrides[tagName] !== undefined) {
+      newValue = overrides[tagName]
+    } else if (tagNumber && hexMap.has(tagNumber)) {
+      newValue = hexMap.get(tagNumber)
+    }
+
+    if (newValue !== undefined) {
+      if (element.setValue) {
+        element.setValue(newValue)
+      } else {
+        element.value = newValue
+      }
+      return true // Skip further processing for this element
+    }
+
+    return false
+  }
+}
+
+export function getAllSpecialHandlersWithOverrides(
+  jitterDays: number = 31,
+  tagsToRemove: string[] = [],
+  studyId: string = 'default',
+  options?: { disablePatientId?: boolean },
+  overrides?: Record<string, string>
+) {
+  const handlers = [] as any[]
+  if (overrides && Object.keys(overrides).length > 0) {
+    handlers.push(createOverridesHandler(overrides))
+  }
+  handlers.push(
+    createRemoveTagsHandler(tagsToRemove),
+    createDateJitterHandler(jitterDays),
+    createValueReplacementHandler(studyId, { disablePatientId: options?.disablePatientId }),
+    createAddTagsHandler()
+  )
+  return handlers
+}
