@@ -286,9 +286,10 @@ export class WorkerManager<T extends BaseJob> {
 
 export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> {
   constructor(maxWorkers?: number) {
-    // Default to half of available concurrency for anonymization workers
-    const defaultWorkers = Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2))
-    super(AnonymizationWorker, 'Anonymization', maxWorkers || Math.min(defaultWorkers, 4))
+    // Use all available cores for anonymization workers by default
+    const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 4
+    const defaultWorkers = Math.max(1, cores)
+    super(AnonymizationWorker, 'Anonymization', maxWorkers || defaultWorkers)
   }
 
   protected async prepareJobData(job: AnonymizationJob): Promise<any> {
