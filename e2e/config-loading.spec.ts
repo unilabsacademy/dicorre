@@ -32,12 +32,11 @@ test.describe('Config Loading', () => {
     try {
       // Wait for initial app to load
       await waitForAppReady(page);
-      
-      // Open settings menu and click Load Config
-      await page.getByTestId('dropdown-menu-trigger').click();
-      await page.getByTestId('load-config-menu-item').click();
-      
-      // Now set the file input (it's hidden but clicking the menu item should trigger it)
+
+      // Open settings sheet from toolbar
+      await page.getByTestId('edit-project-button').click();
+
+      // Now set the file input (hidden) from the sheet Load Config button
       const fileInput = page.getByTestId('config-file-input');
       await fileInput.setInputFiles(tempConfigPath);
 
@@ -71,11 +70,10 @@ test.describe('Config Loading', () => {
     try {
       // Wait for initial app to load
       await waitForAppReady(page);
-      
-      // Open settings menu and click Load Config
-      await page.getByTestId('dropdown-menu-trigger').click();
-      await page.getByTestId('load-config-menu-item').click();
-      
+
+      // Open settings sheet from toolbar
+      await page.getByTestId('edit-project-button').click();
+
       // Now set the file input
       const fileInput = page.getByTestId('config-file-input');
       await fileInput.setInputFiles(tempConfigPath);

@@ -20,6 +20,7 @@ import type { RuntimeType } from '@/types/effects'
 import { toast } from 'vue-sonner'
 import type { ProjectConfig } from '@/services/config/schema'
 import { ConfigService } from '@/services/config'
+import ConfigLoader from '@/components/ConfigLoader.vue'
 
 const props = defineProps<{
   open: boolean
@@ -803,14 +804,17 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
         </Card>
       </div>
 
-      <SheetFooter>
-        <Button
-          variant="outline"
-          @click="handleCancel"
-          :disabled="isProcessing"
-        >
-          Cancel
-        </Button>
+      <SheetFooter class="flex sm:justify-between">
+        <div class="flex space-x-2">
+          <Button
+            variant="outline"
+            @click="handleCancel"
+            :disabled="isProcessing"
+          >
+            Cancel
+          </Button>
+          <ConfigLoader @config-loaded="() => { $emit('config-updated'); $emit('update:open', false) }" />
+        </div>
         <Button
           @click="handleSaveConfig"
           :disabled="isProcessing"

@@ -5,7 +5,7 @@ test.describe('Project Management', () => {
   test('should create project, generate shareable URL, and load from URL', async ({ page, context }) => {
     // Grant clipboard permissions
     await context.grantPermissions(['clipboard-read', 'clipboard-write'])
-    
+
     // Navigate to the app
     await page.goto('/')
 
@@ -19,23 +19,23 @@ test.describe('Project Management', () => {
     await page.getByTestId('edit-project-button').click()
 
     // Sheet should appear
-    await expect(page.getByText('Create New Project')).toBeVisible()
+    await expect(page.getByLabel('Project Name')).toBeVisible()
 
     // Fill in project name
     const projectName = 'E2E Test Project'
-    await page.getByTestId('project-name-input').fill(projectName)
+    await page.getByLabel('Project Name').fill(projectName)
 
-    // Wait for button to be enabled and stable after filling name
-    await expect(page.getByTestId('save-project-button')).toBeEnabled()
+    // Save via Save Configuration
+    await expect(page.getByRole('button', { name: 'Save Configuration' })).toBeEnabled()
 
     // Submit the form
-    await page.getByTestId('save-project-button').click()
+    await page.getByRole('button', { name: 'Save Configuration' }).click()
 
     // Should show success notification
-    await expect(page.getByText(`Project "${projectName}" created`)).toBeVisible()
+    await expect(page.locator('[data-sonner-toast][data-type="success"]').first()).toBeVisible({ timeout: 3000 })
 
     // Sheet should close
-    await expect(page.getByText('Create New Project')).toBeHidden()
+    await expect(page.getByLabel('Project Name')).toBeHidden()
 
     // Project should now be active - wait for UI to update
     await expect(page.getByTestId('project-title')).toContainText(projectName, { timeout: 3000 })
@@ -52,12 +52,13 @@ test.describe('Project Management', () => {
     // Get the current URL with project parameter (simulating clipboard content)
     // For testing purposes, we'll create a test URL manually since clipboard access is limited in tests
 
-    // Clear the project first to test URL loading
-    await page.getByTestId('clear-project-button').click()
-
-    // Confirm in the AlertDialog
-    await expect(page.getByText('Are you sure you want to clear the current project')).toBeVisible()
-    await page.getByTestId('confirm-clear-project').click()
+    // Clear the project first to test URL loading: open settings, clear name, save
+    await page.getByTestId('edit-project-button').click()
+    await expect(page.getByLabel('Project Name')).toBeVisible()
+    await page.getByLabel('Project Name').fill('')
+    await page.getByRole('button', { name: 'Save Configuration' }).click()
+    await expect(page.locator('[data-sonner-toast][data-type="success"]').first()).toBeVisible({ timeout: 3000 })
+    await expect(page.getByLabel('Project Name')).toBeHidden()
 
     // Step 4: Create a shareable URL manually and test loading
     // Since we can't easily access clipboard in tests, we'll simulate loading from URL
@@ -110,26 +111,11 @@ test.describe('Project Management', () => {
     // Wait for app to be ready
     await waitForAppReady(page)
 
-    // Click create project button
+    // Open settings and cancel should close it
     await page.getByTestId('edit-project-button').click()
-    await expect(page.getByText('Create New Project')).toBeVisible()
-
-    // Try to create without name - button should be disabled
-    await expect(page.getByTestId('save-project-button')).toBeDisabled()
-
-    // Enter just spaces - should still be disabled
-    await page.getByTestId('project-name-input').fill('   ')
-    await expect(page.getByTestId('save-project-button')).toBeDisabled()
-
-    // Enter valid name - should be enabled
-    await page.getByTestId('project-name-input').fill('Valid Project')
-    await expect(page.getByTestId('save-project-button')).toBeEnabled()
-
-    // Wait for sheet to be stable before clicking cancel
-    await page.waitForTimeout(500)
-
-    // Cancel should work
-    await page.getByTestId('cancel-project-button').click()
-    await expect(page.getByText('Create New Project')).toBeHidden()
+    await expect(page.getByLabel('Project Name')).toBeVisible()
+    await page.getByLabel('Project Name').fill('Valid Project')
+    await page.getByRole('button', { name: 'Cancel' }).click()
+    await expect(page.getByLabel('Project Name')).toBeHidden()
   })
 })
