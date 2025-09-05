@@ -1,4 +1,5 @@
 import type { DicomFile } from '@/types/dicom'
+import AnonymizationWorker from './anonymizationWorker.ts?worker'
 
 export interface DebugMessage {
   id: string
@@ -39,18 +40,7 @@ export interface AnonymizationJob extends BaseJob {
   patientIdMap?: Record<string, string>
 }
 
-// Sending-specific job
-export interface SendingJob extends BaseJob {
-  serverConfig: {
-    url: string
-    headers?: Record<string, string>
-    auth?: {
-      type: 'basic' | 'bearer'
-      credentials: string
-    } | null
-  }
-  onComplete?: (sentFiles: DicomFile[]) => void
-}
+// Sending worker removed; sending is handled in main thread fibers
 
 interface WorkerTask<T extends BaseJob> {
   id: number
@@ -64,11 +54,11 @@ export class WorkerManager<T extends BaseJob> {
   private jobQueue: T[] = []
   private maxWorkers: number
   private nextWorkerId = 1
-  private workerScriptUrl: string
+  private workerConstructor: new () => Worker
   private workerType: string
 
-  constructor(workerScriptUrl: string, workerType: string, maxWorkers?: number) {
-    this.workerScriptUrl = workerScriptUrl
+  constructor(workerConstructor: new () => Worker, workerType: string, maxWorkers?: number) {
+    this.workerConstructor = workerConstructor
     this.workerType = workerType
     // Use hardware concurrency or default to 4 workers
     this.maxWorkers = maxWorkers || Math.min(navigator.hardwareConcurrency || 4, 8)
@@ -105,10 +95,7 @@ export class WorkerManager<T extends BaseJob> {
     const workerId = this.nextWorkerId++
     this.logDebug('create', `Creating ${this.workerType} worker #${workerId}`, workerId)
 
-    const worker = new Worker(
-      new URL(this.workerScriptUrl, import.meta.url),
-      { type: 'module' }
-    )
+    const worker = new this.workerConstructor()
 
     const workerTask: WorkerTask<T> = {
       id: workerId,
@@ -162,8 +149,8 @@ export class WorkerManager<T extends BaseJob> {
       case 'complete':
         this.logDebug('complete', `Completed processing of files`, workerTask.id, studyId)
         // Handle completion based on job type
-        if ('onComplete' in job && typeof job.onComplete === 'function') {
-          job.onComplete(data.anonymizedFiles || data.sentFiles || [])
+        if ('onComplete' in job && typeof (job as any).onComplete === 'function') {
+          ; (job as any).onComplete(data.anonymizedFiles || [])
         }
         this.completeJob(workerTask)
         break
@@ -299,9 +286,10 @@ export class WorkerManager<T extends BaseJob> {
 
 export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> {
   constructor(maxWorkers?: number) {
-    // Default to half of available concurrency for anonymization workers
-    const defaultWorkers = Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2))
-    super('./anonymizationWorker.ts', 'Anonymization', maxWorkers || Math.min(defaultWorkers, 4))
+    // Use all available cores for anonymization workers by default
+    const cores = (typeof navigator !== 'undefined' && navigator.hardwareConcurrency) ? navigator.hardwareConcurrency : 4
+    const defaultWorkers = Math.max(1, cores)
+    super(AnonymizationWorker, 'Anonymization', maxWorkers || defaultWorkers)
   }
 
   protected async prepareJobData(job: AnonymizationJob): Promise<any> {
@@ -337,54 +325,8 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
   }
 }
 
-export class SendingWorkerManager extends WorkerManager<SendingJob> {
-  constructor(maxWorkers?: number) {
-    // Default to half of available concurrency for sending workers
-    const defaultWorkers = Math.max(2, Math.floor((navigator.hardwareConcurrency || 4) / 2))
-    super('./sendingWorker.ts', 'Sending', maxWorkers || Math.min(defaultWorkers, 4))
-  }
-
-  protected async prepareJobData(job: SendingJob): Promise<any> {
-    this.logDebug('message', `Preparing ${job.files.length} files for sending`, undefined, job.studyId)
-
-    // Pass only OPFS file references to worker - no ArrayBuffers
-    // Serialize and deserialize to ensure all data is cloneable
-    const files = job.files.map((file, _index) => {
-      const fileData = {
-        id: file.id,
-        fileName: file.fileName,
-        fileSize: file.fileSize,
-        opfsFileId: file.opfsFileId || file.id, // Use existing opfsFileId or fall back to file.id
-        metadata: file.metadata ? JSON.parse(JSON.stringify(file.metadata)) : undefined
-      }
-      return fileData
-    })
-
-    // Ensure server config is also cloneable
-    const cloneableServerConfig = JSON.parse(JSON.stringify(job.serverConfig))
-
-    return {
-      type: 'send_study',
-      data: {
-        studyId: job.studyId,
-        files,
-        serverConfig: cloneableServerConfig,
-        concurrency: job.concurrency
-      }
-    }
-  }
-
-  /**
-   * Queue a study for sending
-   */
-  public sendStudy(job: SendingJob): void {
-    this.processJob(job)
-  }
-}
-
 // Global worker manager instances
 let globalAnonymizationWorkerManager: AnonymizationWorkerManager | null = null
-let globalSendingWorkerManager: SendingWorkerManager | null = null
 
 export function getAnonymizationWorkerManager(): AnonymizationWorkerManager {
   if (!globalAnonymizationWorkerManager) {
@@ -393,21 +335,10 @@ export function getAnonymizationWorkerManager(): AnonymizationWorkerManager {
   return globalAnonymizationWorkerManager
 }
 
-export function getSendingWorkerManager(): SendingWorkerManager {
-  if (!globalSendingWorkerManager) {
-    globalSendingWorkerManager = new SendingWorkerManager()
-  }
-  return globalSendingWorkerManager
-}
-
 export function destroyWorkerManagers() {
   if (globalAnonymizationWorkerManager) {
     globalAnonymizationWorkerManager.destroy()
     globalAnonymizationWorkerManager = null
-  }
-  if (globalSendingWorkerManager) {
-    globalSendingWorkerManager.destroy()
-    globalSendingWorkerManager = null
   }
 }
 

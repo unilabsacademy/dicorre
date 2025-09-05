@@ -4,7 +4,7 @@
 
 import { Layer } from "effect"
 import { ConfigServiceLive } from '../config'
-import { ConfigPersistenceLocalStorage } from '../configPersistence'
+import { ConfigPersistenceLocalStorage } from '../config/configPersistence'
 import { FileHandlerLive } from '../fileHandler'
 import { OPFSStorageLive } from '../opfsStorage'
 import { PluginRegistryLive } from '../pluginRegistry'

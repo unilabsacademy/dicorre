@@ -154,9 +154,9 @@ test.describe('Image Converter Plugin', () => {
     await uploadFiles(page, testFilePath);
 
     // Wait for error toast to appear
-    const toast = page.locator('[data-sonner-toast]').filter({ hasText: /unsupported|DICOM/i });
-    await expect(toast).toBeVisible({ timeout: 5000 });
-    
+    const error = page.getByTestId('file-processing-progress-error');
+    await expect(error).toBeVisible({ timeout: 5000 });
+
     // Check that no files were processed - files count should be 0 or not visible
     const filesCountBadge = page.getByTestId('files-count-badge');
     const isVisible = await filesCountBadge.isVisible().catch(() => false);

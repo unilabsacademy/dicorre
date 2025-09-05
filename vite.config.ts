@@ -17,11 +17,32 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  build: {
+    // Use esnext to support import.meta.url in production
+    target: 'esnext',
+    // Ensure workers are built as separate chunks
+    rollupOptions: {
+      output: {
+        format: 'es',
+        // Ensure workers get their own chunks
+        manualChunks(id) {
+          if (id.includes('worker')) {
+            return 'worker'
+          }
+        }
+      }
+    }
+  },
   worker: {
     format: 'es',
     plugins: () => [
       // Ensure workers can use the same module resolution
-    ]
+    ],
+    rollupOptions: {
+      output: {
+        entryFileNames: 'assets/[name]-[hash].js'
+      }
+    }
   },
   server: {
     proxy: {

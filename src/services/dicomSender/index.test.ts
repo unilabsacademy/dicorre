@@ -3,7 +3,7 @@ import { Effect, Layer } from 'effect'
 import { DicomSender, DicomSenderLive } from './index'
 import { ConfigServiceLive } from '../config'
 import type { DicomFile } from '@/types/dicom'
-import { ConfigPersistence } from '@/services/configPersistence'
+import { ConfigPersistence } from '@/services/config/configPersistence'
 import type { AppConfig } from '@/services/config/schema'
 
 describe('DicomSender Service (Effect Service Testing)', () => {

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, afterEach } from 'vitest'
 import { Effect } from 'effect'
+import { PluginError } from '@/types/effects'
 import { sendLoggerPlugin } from './index'
 import type { DicomStudy } from '@/types/dicom'
 
@@ -61,7 +62,7 @@ describe('SendLogger Plugin', () => {
     }
 
     it('should log before send', async () => {
-      await Effect.runPromise(sendLoggerPlugin.hooks.beforeSend!(mockStudy))
+      await Effect.runPromise(sendLoggerPlugin.hooks.beforeSend!(mockStudy) as Effect.Effect<void, PluginError, never>)
 
       expect(consoleSpy.log).toHaveBeenCalled()
       expect(consoleSpy.log).toHaveBeenCalledWith(
@@ -70,7 +71,7 @@ describe('SendLogger Plugin', () => {
     })
 
     it('should log after successful send', async () => {
-      await Effect.runPromise(sendLoggerPlugin.hooks.afterSend!(mockStudy))
+      await Effect.runPromise(sendLoggerPlugin.hooks.afterSend!(mockStudy) as Effect.Effect<void, PluginError, never>)
 
       expect(consoleSpy.log).toHaveBeenCalled()
       expect(consoleSpy.log).toHaveBeenCalledWith(
@@ -81,7 +82,7 @@ describe('SendLogger Plugin', () => {
     it.only('should log send errors', async () => {
       const error = new Error('Network connection failed')
 
-      await Effect.runPromise(sendLoggerPlugin.hooks.onSendError!(mockStudy, error))
+      await Effect.runPromise(sendLoggerPlugin.hooks.onSendError!(mockStudy, error) as Effect.Effect<void, PluginError, never>)
 
       expect(consoleSpy.error).toHaveBeenCalled()
       expect(consoleSpy.error).toHaveBeenCalledWith(
