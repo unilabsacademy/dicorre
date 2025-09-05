@@ -10,6 +10,7 @@ import { getAllTagNames } from '@/utils/dicom-tag-dictionary'
 const props = defineProps<{
   open: boolean
   runtime: RuntimeType
+  initialOverrides?: Record<string, string>
 }>()
 
 const emit = defineEmits<{
@@ -59,6 +60,10 @@ function toRecord(): Record<string, string> {
   return out
 }
 
+function fromRecord(rec: Record<string, string>): Row[] {
+  return Object.entries(rec).map(([key, value]) => ({ key, value: String(value) }))
+}
+
 async function handleSave() {
   isProcessing.value = true
   try {
@@ -71,7 +76,7 @@ async function handleSave() {
 
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
-    rows.value = []
+    rows.value = fromRecord(props.initialOverrides ?? {})
   }
 })
 </script>

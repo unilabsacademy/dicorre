@@ -65,6 +65,22 @@ const studiesData = computed(() => {
   return appState.studies.value || []
 })
 
+const initialOverrides = computed<Record<string, string>>(() => {
+  const selected = appState.selectedStudies.value
+  if (selected.length === 0) return {}
+  if (selected.length === 1) return selected[0].customFields ?? {}
+  const maps = selected.map(s => s.customFields ?? {})
+  const keys = new Set(maps.flatMap(m => Object.keys(m)))
+  const common: Record<string, string> = {}
+  keys.forEach(key => {
+    const firstVal = maps[0][key]
+    if (firstVal === undefined) return
+    const allSame = maps.every(m => m[key] !== undefined && String(m[key]) === String(firstVal))
+    if (allSame) common[key] = String(firstVal)
+  })
+  return common
+})
+
 async function processNewFiles(newFiles: File[]) {
   await appState.processNewFiles(newFiles, isAppReady.value)
 }
@@ -304,6 +320,7 @@ onUnmounted(() => {
     <CustomFieldsSheet
       :runtime="runtime"
       :open="showCustomFieldsSheet"
+      :initial-overrides="initialOverrides"
       @update:open="showCustomFieldsSheet = $event"
       @save="(overrides) => appState.setCustomFieldsForSelected(overrides)"
     />
