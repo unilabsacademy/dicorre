@@ -1,7 +1,8 @@
 import { Effect, Context, Layer } from "effect"
 import type { DicomFile } from '@/types/dicom'
 import type { DicomServerConfig } from '@/services/config/schema'
-import { NetworkError, ValidationError, type DicomSenderError } from '@/types/effects'
+import { NetworkError, ValidationError, type DicomSenderError, type StorageErrorType } from '@/types/effects'
+import { OPFSStorage } from '@/services/opfsStorage'
 
 
 export class DicomSender extends Context.Tag("DicomSender")<
@@ -9,6 +10,12 @@ export class DicomSender extends Context.Tag("DicomSender")<
   {
     readonly testConnection: (config: DicomServerConfig) => Effect.Effect<boolean, DicomSenderError>
     readonly sendFile: (file: DicomFile, config: DicomServerConfig) => Effect.Effect<void, DicomSenderError>
+    readonly sendFiles: (
+      files: DicomFile[],
+      config: DicomServerConfig,
+      concurrency?: number,
+      options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+    ) => Effect.Effect<DicomFile[], DicomSenderError | StorageErrorType, OPFSStorage | DicomSender>
   }
 >() { }
 
@@ -128,35 +135,40 @@ export const DicomSenderLive = Layer.succeed(
             cause: error
           })
         })
+      }),
+
+    sendFiles: (
+      files: DicomFile[],
+      config: DicomServerConfig,
+      concurrency = 3,
+      options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+    ): Effect.Effect<DicomFile[], DicomSenderError | StorageErrorType, OPFSStorage | DicomSender> =>
+      Effect.gen(function* () {
+        if (files.length === 0) return []
+
+        const opfs = yield* OPFSStorage
+        const sender = yield* DicomSender
+        let completed = 0
+        const total = files.length
+
+        const sendEffects = files.map((file) =>
+          Effect.gen(function* () {
+            let toSend = file
+            if (!toSend.arrayBuffer || toSend.arrayBuffer.byteLength === 0) {
+              const loaded = yield* opfs.loadFile(toSend.id)
+              toSend = { ...toSend, arrayBuffer: loaded }
+            }
+            yield* sender.sendFile(toSend, config)
+            completed++
+            options?.onProgress?.(completed, total, toSend)
+            return toSend
+          })
+        )
+
+        const results = yield* Effect.all(sendEffects, { concurrency, batching: true })
+        return results
       })
   }
 )
 
-export const sendFiles = (
-  files: DicomFile[],
-  config: DicomServerConfig,
-  concurrency = 3,
-  options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
-): Effect.Effect<DicomFile[], DicomSenderError, DicomSender> =>
-  Effect.gen(function* () {
-    if (files.length === 0) return []
 
-    const sender = yield* DicomSender
-    let completed = 0
-    const total = files.length
-
-    const sendEffects = files.map((file) =>
-      sender.sendFile(file, config).pipe(
-        Effect.tap(() =>
-          Effect.sync(() => {
-            completed++
-            options?.onProgress?.(completed, total, file)
-          })
-        ),
-        Effect.as(file)
-      )
-    )
-
-    const results = yield* Effect.all(sendEffects, { concurrency, batching: true })
-    return results
-  })

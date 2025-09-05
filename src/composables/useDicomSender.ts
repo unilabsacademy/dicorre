@@ -2,10 +2,9 @@ import { ref, shallowRef, computed } from 'vue'
 import { Effect, Fiber } from 'effect'
 import type { DicomFile } from '@/types/dicom'
 import { ConfigService } from '@/services/config'
-import type { DicomServerConfig } from '@/services/config/schema'
 import type { RuntimeType } from '@/types/effects'
 import { DicomSender } from '@/services/dicomSender'
-import { OPFSStorage } from '@/services/opfsStorage'
+import type { OPFSStorage } from '@/services/opfsStorage'
 
 export interface SendingProgress {
   total: number
@@ -34,14 +33,6 @@ export function useDicomSender(runtime?: RuntimeType) {
     progresses.value = new Map(progresses.value)
   }
 
-  const normalizeServerConfig = (cfg: DicomServerConfig): DicomServerConfig => ({
-    url: cfg.url,
-    headers: cfg.headers,
-    timeout: cfg.timeout,
-    auth: cfg.auth,
-    description: cfg.description
-  })
-
   const sendStudyEffect = (
     studyId: string,
     files: DicomFile[],
@@ -62,33 +53,19 @@ export function useDicomSender(runtime?: RuntimeType) {
 
       const configService = yield* ConfigService
       const sender = yield* DicomSender
-      const opfs = yield* OPFSStorage
-      const serverConfig = normalizeServerConfig(yield* configService.getServerConfig)
+      const serverConfig = yield* configService.getServerConfig
 
-      let completed = 0
-      const total = files.length
-
-      const sendEffects = files.map((file) =>
-        Effect.gen(function* () {
-          let toSend = file
-          if (!toSend.arrayBuffer || toSend.arrayBuffer.byteLength === 0) {
-            const loaded = yield* opfs.loadFile(toSend.id)
-            toSend = { ...toSend, arrayBuffer: loaded }
-          }
-          yield* sender.sendFile(toSend, serverConfig)
-          completed++
+      const sent = yield* sender.sendFiles(files, serverConfig, concurrency, {
+        onProgress: (completed, total, currentFile) => {
           setProgress(studyId, {
             total,
             completed,
             percentage: Math.round((completed / total) * 100),
-            currentFile: file.fileName
+            currentFile: currentFile?.fileName
           })
-          options?.onProgress?.(completed, total, file)
-          return toSend
-        })
-      )
-
-      const sent = yield* Effect.all(sendEffects, { concurrency, batching: true })
+          options?.onProgress?.(completed, total, currentFile)
+        }
+      })
 
       loading.value = false
       clearProgress(studyId)
