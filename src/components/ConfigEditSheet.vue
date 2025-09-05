@@ -87,42 +87,7 @@ function removeParam(index: number) {
   params.value = params.value.filter((_, i) => i !== index)
 }
 
-async function handleSaveProject() {
-  if (!projectName.value.trim()) {
-    return
-  }
-
-  isProcessing.value = true
-  try {
-    if (props.currentProject) {
-      const next: ProjectConfig = {
-        ...props.currentProject,
-        name: projectName.value.trim(),
-        plugins: {
-          ...props.currentProject.plugins,
-          settings: {
-            ...((props.currentProject.plugins as any)?.settings),
-            ['sent-notifier']: {
-              ...(((props.currentProject.plugins as any)?.settings) || {})['sent-notifier'],
-              params: toRecord(params.value)
-            }
-          }
-        }
-      }
-      emit('update-project', next)
-    } else {
-      emit('create-project', projectName.value.trim())
-    }
-    toast.success('Project saved successfully')
-  } catch (error) {
-    console.error('Failed to save project:', error)
-    toast.error('Failed to save project', {
-      description: error instanceof Error ? error.message : 'Unknown error'
-    })
-  } finally {
-    isProcessing.value = false
-  }
-}
+// Project changes are persisted together with config in handleSaveConfig
 
 function getFieldValue(path: string): any {
   const parts = path.split('.')
@@ -197,6 +162,16 @@ function toggleMultiselectOption(path: string, option: string) {
   }
 }
 
+function setMultiselectOption(path: string, option: string, enabled: boolean) {
+  const current: string[] = getFieldValue(path) || []
+  const has = current.includes(option)
+  if (enabled && !has) {
+    setFieldValue(path, [...current, option])
+  } else if (!enabled && has) {
+    setFieldValue(path, current.filter((v: string) => v !== option))
+  }
+}
+
 async function handleSaveConfig() {
   isProcessing.value = true
   try {
@@ -208,11 +183,35 @@ async function handleSaveConfig() {
       configToSave.dicomServer.auth = null
     }
 
-    // Update config through the config service
+    // Update config and project through the config service
     await props.runtime.runPromise(
       Effect.gen(function* () {
         const configService = yield* ConfigService
         yield* configService.loadConfig(configToSave)
+
+        // Persist project name and sent-notifier params if provided
+        if (projectName.value.trim() || params.value.length > 0) {
+          const currentProject = props.currentProject
+          if (currentProject) {
+            const next: ProjectConfig = {
+              ...currentProject,
+              name: projectName.value.trim() || currentProject.name,
+              plugins: {
+                ...currentProject.plugins,
+                settings: {
+                  ...((currentProject.plugins as any)?.settings),
+                  ['sent-notifier']: {
+                    ...(((currentProject.plugins as any)?.settings) || {})['sent-notifier'],
+                    params: toRecord(params.value)
+                  }
+                }
+              }
+            }
+            emit('update-project', next)
+          } else if (projectName.value.trim()) {
+            emit('create-project', projectName.value.trim())
+          }
+        }
       })
     )
 
@@ -346,13 +345,6 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                     :disabled="isProcessing"
                     class="flex-1"
                   />
-                  <Button
-                    @click="handleSaveProject"
-                    :disabled="isProcessing || !projectName.trim()"
-                    size="sm"
-                  >
-                    {{ isProcessing ? '...' : (currentProject ? 'Update' : 'Create') }}
-                  </Button>
                 </div>
               </div>
 
@@ -414,8 +406,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
               <div class="space-y-2">
                 <Label>Server URL</Label>
                 <Input
-                  :value="getFieldValue('dicomServer.url')"
-                  @input="setFieldValue('dicomServer.url', ($event.target as HTMLInputElement).value)"
+                  :model-value="getFieldValue('dicomServer.url')"
+                  @update:model-value="(v) => setFieldValue('dicomServer.url', v)"
                   :disabled="isProcessing"
                 />
                 <p class="text-xs text-muted-foreground">Must start with / or http</p>
@@ -426,8 +418,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                 <Label>Timeout (ms)</Label>
                 <Input
                   type="number"
-                  :value="getFieldValue('dicomServer.timeout')"
-                  @input="setFieldValue('dicomServer.timeout', parseInt(($event.target as HTMLInputElement).value) || 30000)"
+                  :model-value="getFieldValue('dicomServer.timeout')"
+                  @update:model-value="(v) => setFieldValue('dicomServer.timeout', typeof v === 'number' ? v : (parseInt(String(v)) || 30000))"
                   min="1000"
                   max="600000"
                   :disabled="isProcessing"
@@ -444,14 +436,14 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                     class="flex gap-2"
                   >
                     <Input
-                      :value="String(key)"
-                      @input="updateRecordKey('dicomServer.headers', String(key), ($event.target as HTMLInputElement).value)"
+                      :model-value="String(key)"
+                      @update:model-value="(v) => updateRecordKey('dicomServer.headers', String(key), String(v))"
                       placeholder="Header name"
                       :disabled="isProcessing"
                     />
                     <Input
-                      :value="String(value)"
-                      @input="updateRecordValue('dicomServer.headers', String(key), ($event.target as HTMLInputElement).value)"
+                      :model-value="String(value)"
+                      @update:model-value="(v) => updateRecordValue('dicomServer.headers', String(key), String(v))"
                       placeholder="Header value"
                       :disabled="isProcessing"
                     />
@@ -498,8 +490,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
               >
                 <Label>Credentials</Label>
                 <Input
-                  :value="getFieldValue('dicomServer.auth.credentials')"
-                  @input="setFieldValue('dicomServer.auth.credentials', ($event.target as HTMLInputElement).value)"
+                  :model-value="getFieldValue('dicomServer.auth.credentials')"
+                  @update:model-value="(v) => setFieldValue('dicomServer.auth.credentials', v)"
                   :placeholder="getFieldValue('dicomServer.auth.type') === 'basic' ? 'username:password' : 'Bearer token'"
                   :disabled="isProcessing"
                 />
@@ -509,8 +501,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
               <div class="space-y-2">
                 <Label>Description</Label>
                 <Input
-                  :value="getFieldValue('dicomServer.description')"
-                  @input="setFieldValue('dicomServer.description', ($event.target as HTMLInputElement).value)"
+                  :model-value="getFieldValue('dicomServer.description')"
+                  @update:model-value="(v) => setFieldValue('dicomServer.description', v)"
                   placeholder="Optional server description"
                   :disabled="isProcessing"
                 />
@@ -540,8 +532,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                     class="flex items-start space-x-2"
                   >
                     <Checkbox
-                      :checked="(getFieldValue('anonymization.profileOptions') || []).includes(option.value)"
-                      @update:checked="toggleMultiselectOption('anonymization.profileOptions', option.value)"
+                      :model-value="(getFieldValue('anonymization.profileOptions') || []).includes(option.value)"
+                      @update:model-value="(v) => setMultiselectOption('anonymization.profileOptions', option.value, !!v)"
                       :disabled="isProcessing"
                     />
                     <Label class="text-sm font-normal cursor-pointer">{{ option.label }}</Label>
@@ -553,8 +545,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
               <div class="space-y-2">
                 <div class="flex items-center space-x-2">
                   <Checkbox
-                    :checked="getFieldValue('anonymization.removePrivateTags')"
-                    @update:checked="setFieldValue('anonymization.removePrivateTags', $event)"
+                    :model-value="getFieldValue('anonymization.removePrivateTags')"
+                    @update:model-value="(v) => setFieldValue('anonymization.removePrivateTags', !!v)"
                     :disabled="isProcessing"
                   />
                   <Label>Remove Private Tags</Label>
@@ -562,8 +554,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
 
                 <div class="flex items-center space-x-2">
                   <Checkbox
-                    :checked="getFieldValue('anonymization.useCustomHandlers')"
-                    @update:checked="setFieldValue('anonymization.useCustomHandlers', $event)"
+                    :model-value="getFieldValue('anonymization.useCustomHandlers')"
+                    @update:model-value="(v) => setFieldValue('anonymization.useCustomHandlers', !!v)"
                     :disabled="isProcessing"
                   />
                   <Label>Use Custom Handlers</Label>
@@ -575,8 +567,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                 <Label>Date Jitter (days)</Label>
                 <Input
                   type="number"
-                  :value="getFieldValue('anonymization.dateJitterDays')"
-                  @input="setFieldValue('anonymization.dateJitterDays', parseInt(($event.target as HTMLInputElement).value) || 0)"
+                  :model-value="getFieldValue('anonymization.dateJitterDays')"
+                  @update:model-value="(v) => setFieldValue('anonymization.dateJitterDays', typeof v === 'number' ? v : (parseInt(String(v)) || 0))"
                   placeholder="31"
                   min="0"
                   max="365"
@@ -588,8 +580,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
               <div class="space-y-2">
                 <Label>Organization Root OID</Label>
                 <Input
-                  :value="getFieldValue('anonymization.organizationRoot')"
-                  @input="setFieldValue('anonymization.organizationRoot', ($event.target as HTMLInputElement).value)"
+                  :model-value="getFieldValue('anonymization.organizationRoot')"
+                  @update:model-value="(v) => setFieldValue('anonymization.organizationRoot', v)"
                   placeholder="1.2.826.0.1.3680043.8.498"
                   :disabled="isProcessing"
                 />
@@ -606,14 +598,14 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                     class="flex gap-2"
                   >
                     <Input
-                      :value="key"
-                      @input="updateRecordKey('anonymization.replacements', String(key), ($event.target as HTMLInputElement).value)"
+                      :model-value="String(key)"
+                      @update:model-value="(v) => updateRecordKey('anonymization.replacements', String(key), String(v))"
                       placeholder="Tag name"
                       :disabled="isProcessing"
                     />
                     <Input
-                      :value="value"
-                      @input="updateRecordValue('anonymization.replacements', String(key), ($event.target as HTMLInputElement).value)"
+                      :model-value="String(value)"
+                      @update:model-value="(v) => updateRecordValue('anonymization.replacements', String(key), String(v))"
                       placeholder="Replacement value"
                       :disabled="isProcessing"
                     />
@@ -649,8 +641,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                     class="flex gap-2"
                   >
                     <Input
-                      :value="tag"
-                      @input="updateArrayItem('anonymization.preserveTags', index, ($event.target as HTMLInputElement).value)"
+                      :model-value="tag"
+                      @update:model-value="(v) => updateArrayItem('anonymization.preserveTags', index, String(v))"
                       placeholder="Tag name or hex"
                       :disabled="isProcessing"
                     />
@@ -685,8 +677,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                     class="flex gap-2"
                   >
                     <Input
-                      :value="tag"
-                      @input="updateArrayItem('anonymization.tagsToRemove', index, ($event.target as HTMLInputElement).value)"
+                      :model-value="tag"
+                      @update:model-value="(v) => updateArrayItem('anonymization.tagsToRemove', index, String(v))"
                       placeholder="Tag pattern"
                       :disabled="isProcessing"
                     />
@@ -736,8 +728,8 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                     class="flex items-center space-x-2"
                   >
                     <Checkbox
-                      :checked="(getFieldValue('plugins.enabled') || []).includes(option.value)"
-                      @update:checked="toggleMultiselectOption('plugins.enabled', option.value)"
+                      :model-value="(getFieldValue('plugins.enabled') || []).includes(option.value)"
+                      @update:model-value="(v) => setMultiselectOption('plugins.enabled', option.value, !!v)"
                       :disabled="isProcessing"
                     />
                     <Label class="text-sm font-normal cursor-pointer">{{ option.label }}</Label>
@@ -761,14 +753,14 @@ function renderField(schema: FieldSchema, path: string, level: number = 0): any 
                       class="flex gap-2"
                     >
                       <Input
-                        :value="String(key)"
-                        @input="updateRecordKey(`plugins.settings.${String(pluginId)}`, String(key), ($event.target as HTMLInputElement).value)"
+                        :model-value="String(key)"
+                        @update:model-value="(v) => updateRecordKey(`plugins.settings.${String(pluginId)}`, String(key), String(v))"
                         placeholder="Key"
                         :disabled="isProcessing"
                       />
                       <Input
-                        :value="String(value)"
-                        @input="updateRecordValue(`plugins.settings.${String(pluginId)}`, String(key), ($event.target as HTMLInputElement).value)"
+                        :model-value="String(value)"
+                        @update:model-value="(v) => updateRecordValue(`plugins.settings.${String(pluginId)}`, String(key), String(v))"
                         placeholder="Value"
                         :disabled="isProcessing"
                       />
