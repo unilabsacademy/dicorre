@@ -36,8 +36,8 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   const originalAccessionNumbers: string[] = [];
   const originalPatientIds: string[] = [];
 
-  const accessionCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
-  const patientIdCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(3)');
+  const accessionCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr [data-testid="cell-accession-number"]');
+  const patientIdCellsBefore = page.locator('[data-testid="studies-data-table"] tbody tr [data-testid="cell-patient-id"]');
 
   const accessionCountBefore = await accessionCellsBefore.count();
   for (let i = 0; i < Math.min(accessionCountBefore, 3); i++) {
@@ -79,7 +79,7 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   expect(studiesCount).toBeGreaterThan(0);
   expect(studiesCount).toBeLessThan(fileCount);
 
-  const accessionCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
+  const accessionCells = page.locator('[data-testid="studies-data-table"] tbody tr [data-testid="cell-accession-number"]');
   const accessionCount = await accessionCells.count();
 
   if (accessionCount > 0) {
@@ -91,13 +91,13 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
     }
   }
 
-  const patientIdCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(3)');
+  const patientIdCells = page.locator('[data-testid="studies-data-table"] tbody tr [data-testid="cell-patient-id"]');
   const patientIdCount = await patientIdCells.count();
 
   const anonymizedAccessionNumbers: string[] = [];
   const anonymizedPatientIds: string[] = [];
 
-  const accessionCellsAfter = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(2)');
+  const accessionCellsAfter = page.locator('[data-testid="studies-data-table"] tbody tr [data-testid="cell-accession-number"]');
   const accessionCountAfter = await accessionCellsAfter.count();
   for (let i = 0; i < Math.min(accessionCountAfter, 3); i++) {
     const accessionText = await accessionCellsAfter.nth(i).textContent();
@@ -127,7 +127,7 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   expect(accessionNumbersChanged).toBe(true);
   expect(patientIdsChanged).toBe(true);
 
-  const anonymizedCells = page.locator('[data-testid="studies-data-table"] tbody tr td:nth-child(10)');
+  const anonymizedCells = page.locator('[data-testid="studies-data-table"] tbody tr [data-testid="cell-anonymized"]');
   const cellCount = await anonymizedCells.count();
 
   if (cellCount > 0) {

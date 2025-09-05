@@ -34,7 +34,6 @@ import {
 } from 'lucide-vue-next'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import type { ProjectConfig } from '@/services/config/schema'
-import { Input } from '@/components/ui/input'
 
 const props = defineProps<{
   currentProject?: ProjectConfig
@@ -50,7 +49,6 @@ const emit = defineEmits<{
   clearProject: []
   anonymizeSelected: []
   groupSelected: []
-  assignPatientId: [patientId: string]
   sendSelected: []
   downloadSelected: []
   clearAll: []
@@ -63,9 +61,6 @@ const emit = defineEmits<{
 }>()
 
 const showClearDialog = ref(false)
-const showEditDialog = ref(false)
-const editPatientId = ref('')
-const showCustomFields = ref(false)
 
 const { copyShareableUrl } = useProjectSharing()
 
@@ -235,15 +230,6 @@ const clearDialogDescription = computed(() => {
           </DropdownMenuItem>
 
           <DropdownMenuItem
-            @click="showEditDialog = true"
-            :disabled="props.selectedStudiesCount === 0"
-            data-testid="edit-patient-id-menu-item"
-          >
-            <Pencil class="w-4 h-4 mr-2" />
-            Edit Patient ID
-          </DropdownMenuItem>
-
-          <DropdownMenuItem
             @click="emit('downloadSelected')"
             :disabled="props.isDownloading || props.selectedStudiesCount === 0"
             data-testid="download-menu-item"
@@ -274,39 +260,6 @@ const clearDialogDescription = computed(() => {
 
         </DropdownMenuContent>
       </DropdownMenu>
-
-      <!-- Edit Assigned Patient ID Dialog -->
-      <AlertDialog
-        :open="showEditDialog"
-        @update:open="showEditDialog = $event"
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Edit Assigned Patient ID</AlertDialogTitle>
-            <AlertDialogDescription>
-              Set the assigned Patient ID for all selected studies.
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <div class="py-2">
-            <Input
-              placeholder="Enter Patient ID"
-              :model-value="editPatientId"
-              @update:model-value="(v) => editPatientId = v as string"
-              data-testid="edit-patient-id-input"
-            />
-          </div>
-          <AlertDialogFooter>
-            <AlertDialogCancel>Cancel</AlertDialogCancel>
-            <AlertDialogAction
-              :disabled="!editPatientId"
-              @click="emit('assignPatientId', editPatientId); editPatientId = ''; showEditDialog = false"
-              data-testid="confirm-assign-patient-id"
-            >
-              Assign
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
 
       <!-- Clear Confirmation Dialog -->
       <AlertDialog

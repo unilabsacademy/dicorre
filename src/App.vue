@@ -81,6 +81,14 @@ const initialOverrides = computed<Record<string, string>>(() => {
   return common
 })
 
+const initialAssignedPatientId = computed<string | undefined>(() => {
+  const selected = appState.selectedStudies.value
+  if (selected.length === 0) return undefined
+  const first = selected[0].assignedPatientId ?? ''
+  const allSame = selected.every(s => (s.assignedPatientId ?? '') === first)
+  return allSame ? first : ''
+})
+
 async function processNewFiles(newFiles: File[]) {
   await appState.processNewFiles(newFiles, isAppReady.value)
 }
@@ -222,7 +230,6 @@ onUnmounted(() => {
         @clear-project="appState.handleClearProject"
         @anonymize-selected="anonymizeSelected"
         @group-selected="appState.groupSelectedStudies()"
-        @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
         @send-selected="handleSendSelected(appState.selectedStudies.value)"
         @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
         @clear-all="clearFiles"
@@ -321,8 +328,10 @@ onUnmounted(() => {
       :runtime="runtime"
       :open="showCustomFieldsSheet"
       :initial-overrides="initialOverrides"
+      :initial-assigned-patient-id="initialAssignedPatientId"
       @update:open="showCustomFieldsSheet = $event"
       @save="(overrides) => appState.setCustomFieldsForSelected(overrides)"
+      @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
     />
 
     <!-- Toast Notifications -->

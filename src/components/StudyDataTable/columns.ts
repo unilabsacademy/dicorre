@@ -52,7 +52,7 @@ export const columns: ColumnDef<DicomStudy>[] = [
     },
     cell: ({ row }) => {
       const accessionNumber = row.getValue('accessionNumber') as string
-      return h('div', { class: 'font-medium' }, accessionNumber || 'Unknown Accession Number')
+      return h('div', { class: 'font-medium', 'data-testid': 'cell-accession-number' }, accessionNumber || 'Unknown Accession Number')
     },
   },
   {
@@ -72,27 +72,7 @@ export const columns: ColumnDef<DicomStudy>[] = [
     },
     cell: ({ row }) => {
       const patientId = row.getValue('patientId') as string
-      return h('div', { class: 'text-muted-foreground' }, patientId || 'Unknown')
-    },
-  },
-  {
-    accessorKey: 'assignedPatientId',
-    header: ({ column }) => {
-      return h(Button, {
-        variant: 'ghost',
-        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
-        onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
-      }, () => [
-        h('span', {}, 'Assigned Patient ID'),
-        column.getIsSorted() ? h(
-          column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
-          { class: 'ml-1 h-3 w-3 opacity-50' }
-        ) : null
-      ])
-    },
-    cell: ({ row }) => {
-      const pid = row.getValue('assignedPatientId') as string
-      return h('div', { class: 'font-medium' }, pid || '-')
+      return h('div', { class: 'text-muted-foreground', 'data-testid': 'cell-patient-id' }, patientId || 'Unknown')
     },
   },
   {
@@ -235,7 +215,8 @@ export const columns: ColumnDef<DicomStudy>[] = [
         studyId: study.studyInstanceUID,
         totalFiles,
         anonymizedFiles,
-        showOnly: 'anonymization'
+        showOnly: 'anonymization',
+        'data-testid': 'cell-anonymized'
       })
     },
   },
@@ -268,7 +249,8 @@ export const columns: ColumnDef<DicomStudy>[] = [
         studyId: study.studyInstanceUID,
         totalFiles,
         sentFiles,
-        showOnly: 'sending'
+        showOnly: 'sending',
+        'data-testid': 'cell-sent'
       })
     },
   },

@@ -11,15 +11,18 @@ const props = defineProps<{
   open: boolean
   runtime: RuntimeType
   initialOverrides?: Record<string, string>
+  initialAssignedPatientId?: string
 }>()
 
 const emit = defineEmits<{
   'update:open': [value: boolean]
   'save': [overrides: Record<string, string>]
+  'assign-patient-id': [patientId: string]
 }>()
 
 type Row = { key: string; value: string }
 const rows = ref<Row[]>([])
+const patientId = ref('')
 const isProcessing = ref(false)
 
 const allTagNames = getAllTagNames()
@@ -67,6 +70,9 @@ function fromRecord(rec: Record<string, string>): Row[] {
 async function handleSave() {
   isProcessing.value = true
   try {
+    if (patientId.value.trim()) {
+      emit('assign-patient-id', patientId.value.trim())
+    }
     emit('save', toRecord())
     emit('update:open', false)
   } finally {
@@ -77,6 +83,7 @@ async function handleSave() {
 watch(() => props.open, (isOpen) => {
   if (isOpen) {
     rows.value = fromRecord(props.initialOverrides ?? {})
+    patientId.value = props.initialAssignedPatientId ?? ''
   }
 })
 </script>
@@ -95,6 +102,15 @@ watch(() => props.open, (isOpen) => {
       </SheetHeader>
 
       <div class="space-y-4 py-4">
+        <div class="space-y-2">
+          <Label>Assigned Patient ID</Label>
+          <Input
+            v-model="patientId"
+            placeholder="Enter Patient ID"
+            data-testid="custom-fields-patient-id-input"
+          />
+        </div>
+
         <div class="space-y-2">
           <Label>Search Fields</Label>
           <Input
