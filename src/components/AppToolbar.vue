@@ -17,7 +17,6 @@ import {
   AlertDialogFooter,
   AlertDialogHeader,
   AlertDialogTitle,
-  AlertDialogTrigger,
 } from '@/components/ui/alert-dialog'
 import {
   Shield,
@@ -28,14 +27,12 @@ import {
   Download,
   Folder,
   Link,
-  X,
   Plus,
   Pencil,
   Layers,
   MoreVertical
 } from 'lucide-vue-next'
 import { useProjectSharing } from '@/composables/useProjectSharing'
-import ConfigLoader from '@/components/ConfigLoader.vue'
 import type { ProjectConfig } from '@/services/config/schema'
 import { Input } from '@/components/ui/input'
 
@@ -64,7 +61,6 @@ const emit = defineEmits<{
   openConfigEditor: []
 }>()
 
-const showClearProjectDialog = ref(false)
 const showClearDialog = ref(false)
 const showEditDialog = ref(false)
 const editPatientId = ref('')
@@ -75,10 +71,7 @@ async function handleCreateProject(name: string) {
   emit('createProject', name)
 }
 
-async function handleClearProject() {
-  emit('clearProject')
-  showClearProjectDialog.value = false
-}
+// clear project removed
 
 async function handleShareProject() {
   await copyShareableUrl()
@@ -146,7 +139,7 @@ const clearDialogDescription = computed(() => {
           size="sm"
           data-testid="edit-project-button"
         >
-          <Pencil class="w-4 h-4" />
+          <Settings2 class="w-4 h-4" />
         </Button>
 
         <Button
@@ -159,41 +152,7 @@ const clearDialogDescription = computed(() => {
           <Link class="h-4 w-4" />
         </Button>
 
-        <AlertDialog
-          :open="showClearProjectDialog"
-          @update:open="showClearProjectDialog = $event"
-        >
-          <AlertDialogTrigger asChild>
-            <Button
-              variant="outline"
-              size="sm"
-              title="Clear project"
-              :disabled="!isProjectMode"
-              data-testid="clear-project-button"
-            >
-              <X class="h-4 w-4" />
-            </Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent>
-            <AlertDialogHeader>
-              <AlertDialogTitle>Clear Project</AlertDialogTitle>
-              <AlertDialogDescription>
-                Are you sure you want to clear the current project and return to default settings?
-                This action cannot be undone.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel>Cancel</AlertDialogCancel>
-              <AlertDialogAction
-                @click="handleClearProject"
-                variant="destructive"
-                data-testid="confirm-clear-project"
-              >
-                Clear Project
-              </AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+
       </div>
     </div>
 
@@ -302,22 +261,6 @@ const clearDialogDescription = computed(() => {
             Test Connection
           </DropdownMenuItem>
 
-          <DropdownMenuSeparator />
-
-          <!-- Edit Config -->
-          <DropdownMenuItem
-            @click="emit('openConfigEditor')"
-            data-testid="edit-config-menu-item"
-          >
-            <Settings2 class="w-4 h-4 mr-2" />
-            Edit Config
-          </DropdownMenuItem>
-
-          <!-- Load Config in dropdown -->
-          <ConfigLoader
-            @config-loaded="emit('configLoaded')"
-            :as-menu-item="true"
-          />
         </DropdownMenuContent>
       </DropdownMenu>
 
