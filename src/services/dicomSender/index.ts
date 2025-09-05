@@ -18,7 +18,7 @@ export class DicomSender extends Context.Tag("DicomSender")<
 export const DicomSenderLive = Layer.succeed(
   DicomSender,
   {
-    testConnection: (config: DicomServerConfig): Effect.Effect<boolean, DicomSenderError> => 
+    testConnection: (config: DicomServerConfig): Effect.Effect<boolean, DicomSenderError> =>
       Effect.gen(function* () {
         const result = yield* Effect.tryPromise({
           try: async () => {
@@ -131,3 +131,32 @@ export const DicomSenderLive = Layer.succeed(
       })
   }
 )
+
+export const sendFiles = (
+  files: DicomFile[],
+  config: DicomServerConfig,
+  concurrency = 3,
+  options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+): Effect.Effect<DicomFile[], DicomSenderError, DicomSender> =>
+  Effect.gen(function* () {
+    if (files.length === 0) return []
+
+    const sender = yield* DicomSender
+    let completed = 0
+    const total = files.length
+
+    const sendEffects = files.map((file) =>
+      sender.sendFile(file, config).pipe(
+        Effect.tap(() =>
+          Effect.sync(() => {
+            completed++
+            options?.onProgress?.(completed, total, file)
+          })
+        ),
+        Effect.as(file)
+      )
+    )
+
+    const results = yield* Effect.all(sendEffects, { concurrency, batching: true })
+    return results
+  })

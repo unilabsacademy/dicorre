@@ -443,15 +443,13 @@ export function useAppState(runtime: RuntimeType) {
     try {
       successMessage.value = ''
 
-      // Filter out any files that are not marked as anonymized
-      const studyStreamEffects = selectedStudiesToSend.map(study => {
+      // Build Effect per study (no streams)
+      const studyEffects = selectedStudiesToSend.map(study => {
         const studyFiles = study.series.flatMap(series => series.files).filter(file => file.anonymized)
 
-        // Call beforeSend hooks
         const callBeforeSendHooks = Effect.gen(function* () {
           const registry = yield* PluginRegistry
           const hookPlugins = yield* registry.getHookPlugins()
-
           for (const plugin of hookPlugins) {
             if (plugin.hooks.beforeSend) {
               yield* plugin.hooks.beforeSend(study).pipe(
@@ -467,144 +465,111 @@ export function useAppState(runtime: RuntimeType) {
           }
         })
 
-        return Stream.fromEffect(callBeforeSendHooks).pipe(
-          Stream.flatMap(() => dicomSender.sendStudyStream(
-            study.studyInstanceUID,
-            studyFiles,
-            concurrency.value
-          )),
-          Stream.tap((event) =>
-            Effect.sync(() => {
-              switch (event._tag) {
-                case "SendingStarted":
-                  setStudySendingProgress(event.studyId, {
-                    isProcessing: true,
-                    progress: 0,
-                    totalFiles: event.totalFiles,
-                    currentFile: undefined
-                  })
-                  break
+        const sendEffect = dicomSender.sendStudyEffect(
+          study.studyInstanceUID,
+          studyFiles,
+          concurrency.value,
+          {
+            onProgress: (completed, total, current) => {
+              setStudySendingProgress(study.studyInstanceUID, {
+                isProcessing: true,
+                progress: Math.round((completed / total) * 100),
+                totalFiles: total,
+                currentFile: current?.fileName
+              })
+            }
+          }
+        ).pipe(
+          Effect.tap((sentFiles) =>
+            Effect.gen(function* () {
+              // Mark files as sent
+              sentFiles.forEach(sentFile => {
+                const fileIndex = dicomFiles.value.findIndex(f => f.id === sentFile.id)
+                if (fileIndex !== -1) {
+                  dicomFiles.value[fileIndex] = { ...dicomFiles.value[fileIndex], sent: true }
+                }
+              })
 
-                case "SendingProgress":
-                  setStudySendingProgress(event.studyId, {
-                    isProcessing: true,
-                    progress: Math.round((event.completed / event.total) * 100),
-                    totalFiles: event.total,
-                    currentFile: event.currentFile
-                  })
-                  break
-
-                case "StudySent":
-                  // Update files with sent status
-                  console.log("StudySent", event)
-                  event.files.forEach(sentFile => {
-                    const fileIndex = dicomFiles.value.findIndex(f => f.id === sentFile.id)
-                    if (fileIndex !== -1) {
-                      dicomFiles.value[fileIndex] = { ...dicomFiles.value[fileIndex], sent: true }
-                    }
-                  })
-
-                  // Update only the affected study to preserve assigned IDs on others
-                  runtime.runPromise(
-                    Effect.gen(function* () {
-                      const processor = yield* DicomProcessor
-                      const current = studies.value
-                      const existing = current.find(s => s.studyInstanceUID === event.studyId)
-                      const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === event.studyId)
-                      const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
-                      if (rebuilt.length > 0) {
-                        const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
-                        const idx = current.findIndex(s => s.studyInstanceUID === event.studyId)
-                        if (idx !== -1) {
-                          const next = [...current]
-                          next[idx] = updatedStudy
-                          studies.value = next
-                        } else {
-                          studies.value = [...current, updatedStudy]
-                        }
-                      }
-                      console.log(`Study ${event.studyId} updated after send completion`)
-
-                      // Call afterSend hooks
-                      const registry = yield* PluginRegistry
-                      const hookPlugins = yield* registry.getHookPlugins()
-                      const sentStudy = studies.value.find(s => s.studyInstanceUID === event.studyId)
-
-                      if (sentStudy) {
-                        for (const plugin of hookPlugins) {
-                          if (plugin.hooks.afterSend) {
-                            yield* plugin.hooks.afterSend(sentStudy).pipe(
-                              Effect.catchAll((error) => {
-                                console.error(`Plugin ${plugin.id} afterSend hook failed:`, error)
-                                const message = (error && (error as any).message) ? String((error as any).message) : String(error)
-                                const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
-                                toast.error(`Plugin ${pluginId} afterSend error`, { description: message })
-                                return Effect.succeed(undefined)
-                              })
-                            )
-                          }
-                        }
-                      }
-                    })
-                  )
-
-                  removeStudySendingProgress(event.studyId)
-                  console.log(`Study ${event.studyId} sent successfully with ${event.files.length} files`)
-
-                  // Clear the anonymization cache for this study to prevent UID conflicts
-                  clearStudyCache(event.studyId)
-                  break
-
-                case "SendingError":
-                  console.error(`Sending error for study ${event.studyId}:`, event.error)
-                  removeStudySendingProgress(event.studyId)
-
-                  // Call onSendError hooks
-                  runtime.runPromise(
-                    Effect.gen(function* () {
-                      const registry = yield* PluginRegistry
-                      const hookPlugins = yield* registry.getHookPlugins()
-                      const errorStudy = studies.value.find(s => s.studyInstanceUID === event.studyId)
-
-                      if (errorStudy) {
-                        for (const plugin of hookPlugins) {
-                          if (plugin.hooks.onSendError) {
-                            yield* plugin.hooks.onSendError(errorStudy, event.error).pipe(
-                              Effect.catchAll((error) => {
-                                console.error(`Plugin ${plugin.id} onSendError hook failed:`, error)
-                                const message = (error && (error as any).message) ? String((error as any).message) : String(error)
-                                const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
-                                toast.error(`Plugin ${pluginId} onSendError error`, { description: message })
-                                return Effect.succeed(undefined)
-                              })
-                            )
-                          }
-                        }
-                      }
-                    })
-                  )
-                  break
+              // Rebuild only the affected study to preserve assigned IDs on others
+              const processor = yield* DicomProcessor
+              const current = studies.value
+              const existing = current.find(s => s.studyInstanceUID === study.studyInstanceUID)
+              const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === study.studyInstanceUID)
+              const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
+              if (rebuilt.length > 0) {
+                const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
+                const idx = current.findIndex(s => s.studyInstanceUID === study.studyInstanceUID)
+                if (idx !== -1) {
+                  const next = [...current]
+                  next[idx] = updatedStudy
+                  studies.value = next
+                } else {
+                  studies.value = [...current, updatedStudy]
+                }
               }
+
+              // afterSend hooks
+              const registry = yield* PluginRegistry
+              const hookPlugins = yield* registry.getHookPlugins()
+              const sentStudy = studies.value.find(s => s.studyInstanceUID === study.studyInstanceUID)
+              if (sentStudy) {
+                for (const plugin of hookPlugins) {
+                  if (plugin.hooks.afterSend) {
+                    yield* plugin.hooks.afterSend(sentStudy).pipe(
+                      Effect.catchAll((error) => {
+                        console.error(`Plugin ${plugin.id} afterSend hook failed:`, error)
+                        const message = (error && (error as any).message) ? String((error as any).message) : String(error)
+                        const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
+                        toast.error(`Plugin ${pluginId} afterSend error`, { description: message })
+                        return Effect.succeed(undefined)
+                      })
+                    )
+                  }
+                }
+              }
+
+              removeStudySendingProgress(study.studyInstanceUID)
+              clearStudyCache(study.studyInstanceUID)
             })
           ),
-          Stream.runDrain,
-          Effect.catchAll(error =>
-            Effect.sync(() => {
-              console.error(`Error sending study ${study.studyInstanceUID}:`, error)
+          Effect.catchAll((err) =>
+            Effect.gen(function* () {
+              console.error(`Error sending study ${study.studyInstanceUID}:`, err)
               removeStudySendingProgress(study.studyInstanceUID)
-              // Don't rethrow to prevent stopping other concurrent studies
+              // onSendError hooks
+              const registry = yield* PluginRegistry
+              const hookPlugins = yield* registry.getHookPlugins()
+              const errorStudy = studies.value.find(s => s.studyInstanceUID === study.studyInstanceUID)
+              if (errorStudy) {
+                for (const plugin of hookPlugins) {
+                  if (plugin.hooks.onSendError) {
+                    yield* plugin.hooks.onSendError(errorStudy, err).pipe(
+                      Effect.catchAll((error) => {
+                        console.error(`Plugin ${plugin.id} onSendError hook failed:`, error)
+                        const message = (error && (error as any).message) ? String((error as any).message) : String(error)
+                        const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
+                        toast.error(`Plugin ${pluginId} onSendError error`, { description: message })
+                        return Effect.succeed(undefined)
+                      })
+                    )
+                  }
+                }
+              }
+              return Effect.succeed(false)
             })
           )
         )
+
+        return Effect.flatMap(callBeforeSendHooks, () => sendEffect)
       })
 
       // Track successful and failed studies
       const failedStudies: string[] = []
       const successfulStudies: string[] = []
 
-      // Run all study streams concurrently with result tracking
+      // Run all study effects concurrently with result tracking
       await runtime.runPromise(
-        Effect.all(studyStreamEffects.map((effect, index) =>
+        Effect.all(studyEffects.map((effect, index) =>
           effect.pipe(
             Effect.map(() => {
               const currentStudy = selectedStudiesToSend[index]

@@ -85,20 +85,28 @@ async function anonymizeStudy(studyId: string, fileRefs: Array<{ id: string; fil
         // Save anonymized files back to OPFS with error recovery
         const saveEffects = result.anonymizedFiles.map(file =>
           Effect.gen(function* () {
-            const anonymizedId = `${file.opfsFileId}_anonymized`
-            console.log(`Saving anonymized file to OPFS: ${anonymizedId}`)
+            // Overwrite original logical id with anonymized bytes
+            const targetId = file.id
+            console.log(`Saving anonymized file to OPFS under original id: ${targetId}`)
 
-            yield* opfs.saveFile(anonymizedId, file.arrayBuffer).pipe(
+            yield* opfs.saveFile(targetId, file.arrayBuffer).pipe(
               Effect.catchAll(error =>
                 Effect.gen(function* () {
-                  yield* Effect.logError(`Failed to save anonymized file ${anonymizedId}: ${error.message}`)
+                  yield* Effect.logError(`Failed to save anonymized file ${targetId}: ${error.message}`)
                   return yield* Effect.fail(new Error(`File saving failed for ${file.fileName}: ${error.message}`))
                 })
               )
             )
 
-            // Update file properties
-            file.opfsFileId = anonymizedId
+            // Delete previous OPFS object if it was different from logical id
+            if (file.opfsFileId && file.opfsFileId !== targetId) {
+              yield* opfs.deleteFile(file.opfsFileId).pipe(
+                Effect.catchAll(() => Effect.succeed(undefined))
+              )
+            }
+
+            // Update file properties to point to canonical id
+            file.opfsFileId = targetId
             file.anonymized = true
             return file
           })

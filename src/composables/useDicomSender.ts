@@ -1,11 +1,11 @@
-import { ref, computed } from 'vue'
-import { Stream, Effect } from 'effect'
+import { ref, shallowRef, computed } from 'vue'
+import { Effect, Fiber } from 'effect'
 import type { DicomFile } from '@/types/dicom'
-import type { SendingEvent } from '@/types/events'
-import { getSendingWorkerManager } from '@/workers/workerManager'
 import { ConfigService } from '@/services/config'
 import type { DicomServerConfig } from '@/services/config/schema'
 import type { RuntimeType } from '@/types/effects'
+import { DicomSender } from '@/services/dicomSender'
+import { OPFSStorage } from '@/services/opfsStorage'
 
 export interface SendingProgress {
   total: number
@@ -19,121 +19,159 @@ export function useDicomSender(runtime?: RuntimeType) {
   const error = ref<Error | null>(null)
   const progress = ref<SendingProgress | null>(null)
 
-  const sendStudyStream = (
+  const fibers = shallowRef<Map<string, Fiber.RuntimeFiber<DicomFile[], Error>>>(new Map())
+  const progresses = shallowRef<Map<string, SendingProgress>>(new Map())
+
+  const setProgress = (studyId: string, patch: Partial<SendingProgress>) => {
+    const prev = progresses.value.get(studyId) ?? { total: 0, completed: 0, percentage: 0 }
+    const next = { ...prev, ...patch }
+    progresses.value.set(studyId, next)
+    progresses.value = new Map(progresses.value)
+  }
+
+  const clearProgress = (studyId: string) => {
+    progresses.value.delete(studyId)
+    progresses.value = new Map(progresses.value)
+  }
+
+  const normalizeServerConfig = (cfg: DicomServerConfig): DicomServerConfig => ({
+    url: cfg.url,
+    headers: cfg.headers,
+    timeout: cfg.timeout,
+    auth: cfg.auth,
+    description: cfg.description
+  })
+
+  const sendStudyEffect = (
     studyId: string,
     files: DicomFile[],
-    concurrency: number
-  ): Stream.Stream<SendingEvent, Error, ConfigService> =>
-    Stream.fromEffect(
-      Effect.gen(function* () {
-        if (!runtime) {
-          return yield* Effect.fail(new Error('Runtime not provided to useDicomSender'))
-        }
+    concurrency: number,
+    options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+  ): Effect.Effect<DicomFile[], Error, ConfigService | DicomSender | OPFSStorage> =>
+    Effect.gen(function* () {
+      if (!runtime) {
+        return yield* Effect.fail(new Error('Runtime not provided to useDicomSender'))
+      }
+      if (files.length === 0) {
+        return []
+      }
 
-        // Get server config from the shared configuration service
-        const configService = yield* ConfigService
-        const serverConfigFromService = yield* configService.getServerConfig
+      loading.value = true
+      error.value = null
+      setProgress(studyId, { total: files.length, completed: 0, percentage: 0, currentFile: undefined })
 
-        // Use the URL as-is from the service (it should be relative for proxying)
-        const serverConfig: DicomServerConfig = {
-          url: serverConfigFromService.url,
-          headers: {
-            'Accept': 'application/dicom+json',
-            'Content-Type': 'application/dicom',
-            ...serverConfigFromService.headers
-          },
-          timeout: serverConfigFromService.timeout,
-          auth: serverConfigFromService.auth,
-          description: serverConfigFromService.description
-        }
+      const configService = yield* ConfigService
+      const sender = yield* DicomSender
+      const opfs = yield* OPFSStorage
+      const serverConfig = normalizeServerConfig(yield* configService.getServerConfig)
 
-        return { serverConfig, studyId, files, concurrency }
-      })
-    ).pipe(
-      Stream.flatMap(({ serverConfig, studyId, files, concurrency }) =>
-        Stream.async<SendingEvent, Error>((emit) => {
-          const workerManager = getSendingWorkerManager()
-          workerManager.sendStudy({
-            studyId,
-            files,
-            serverConfig,
-            concurrency,
-            onProgress: (progressData) => {
-              emit.single({
-                _tag: "SendingProgress",
-                studyId,
-                completed: progressData.completed,
-                total: progressData.total,
-                currentFile: progressData.currentFile
-              })
-            },
-            onComplete: (sentFiles) => {
-              emit.single({
-                _tag: "StudySent",
-                studyId,
-                files: sentFiles
-              })
-              emit.end()
-            },
-            onError: (err) => {
-              emit.single({
-                _tag: "SendingError",
-                studyId,
-                error: err
-              })
-              emit.fail(err)
-            }
+      let completed = 0
+      const total = files.length
+
+      const sendEffects = files.map((file) =>
+        Effect.gen(function* () {
+          let toSend = file
+          if (!toSend.arrayBuffer || toSend.arrayBuffer.byteLength === 0) {
+            const loaded = yield* opfs.loadFile(toSend.id)
+            toSend = { ...toSend, arrayBuffer: loaded }
+          }
+          yield* sender.sendFile(toSend, serverConfig)
+          completed++
+          setProgress(studyId, {
+            total,
+            completed,
+            percentage: Math.round((completed / total) * 100),
+            currentFile: file.fileName
           })
+          options?.onProgress?.(completed, total, file)
+          return toSend
+        })
+      )
 
-          // Emit start event immediately
-          emit.single({
-            _tag: "SendingStarted",
-            studyId,
-            totalFiles: files.length
-          })
+      const sent = yield* Effect.all(sendEffects, { concurrency, batching: true })
+
+      loading.value = false
+      clearProgress(studyId)
+      return sent
+    }).pipe(
+      Effect.catchAll((e) =>
+        Effect.sync(() => {
+          loading.value = false
+          error.value = e instanceof Error ? e : new Error(String(e))
+          clearProgress(studyId)
+          throw error.value
+        })
+      ),
+      Effect.onInterrupt(() =>
+        Effect.sync(() => {
+          loading.value = false
+          error.value = new Error('Sending was cancelled')
+          clearProgress(studyId)
         })
       )
     )
+
+  const sendStudy = (
+    studyId: string,
+    files: DicomFile[],
+    concurrency: number,
+    options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+  ): Promise<DicomFile[]> => {
+    if (!runtime) throw new Error('Runtime not provided to useDicomSender')
+    const effect = sendStudyEffect(studyId, files, concurrency, options)
+    const fiber = runtime.runFork(effect)
+    fibers.value.set(studyId, fiber)
+    fibers.value = new Map(fibers.value)
+    return runtime
+      .runPromise(
+        Fiber.join(fiber).pipe(
+          Effect.catchAll(() => Effect.succeed<DicomFile[]>([]))
+        )
+      )
+      .finally(() => {
+        fibers.value.delete(studyId)
+        fibers.value = new Map(fibers.value)
+      })
+  }
+
+  const cancelStudy = (studyId: string) => {
+    const fiber = fibers.value.get(studyId)
+    if (!fiber) return
+    Effect.runSync(Fiber.interrupt(fiber))
+  }
+
+  const cancelAll = () => {
+    for (const [, fiber] of fibers.value.entries()) {
+      Effect.runSync(Fiber.interrupt(fiber))
+    }
+  }
 
   const reset = () => {
     loading.value = false
     error.value = null
     progress.value = null
+    progresses.value = new Map()
   }
 
-  const testConnection = (): Effect.Effect<void, Error, ConfigService> =>
+  const testConnection = (): Effect.Effect<void, Error, ConfigService | DicomSender> =>
     Effect.gen(function* () {
       if (!runtime) {
         return yield* Effect.fail(new Error('Runtime not provided to useDicomSender'))
       }
-
-      // Get server config from the shared configuration service
       const configService = yield* ConfigService
+      const sender = yield* DicomSender
       const serverConfig = yield* configService.getServerConfig
-
-      // Test connection to the server (use relative URL for proxying)
-      const testUrl = `${serverConfig.url}/studies`
-
-      const response = yield* Effect.tryPromise({
-        try: async () => {
-          const result = await fetch(testUrl, {
-            method: 'GET',
-            headers: { 'Accept': 'application/dicom+json', ...serverConfig.headers }
-          })
-          return result.ok
-        },
-        catch: (error) => new Error(`Failed to connect to DICOM server: ${testUrl} - ${error}`)
-      })
-
-      if (!response) {
-        return yield* Effect.fail(new Error(`DICOM server test failed: ${testUrl}`))
+      const ok = yield* sender.testConnection(serverConfig)
+      if (!ok) {
+        return yield* Effect.fail(new Error(`DICOM server test failed: ${serverConfig.url}/studies`))
       }
-
-      return yield* Effect.succeed(undefined)
+      return undefined
     })
 
-
   const progressPercentage = computed(() => progress.value?.percentage || 0)
+  const getStudyProgress = (studyId: string) => computed(() => progresses.value.get(studyId))
+  const isStudySending = (studyId: string) => Boolean(fibers.value.get(studyId))
+  const hasActiveSending = computed(() => fibers.value.size > 0)
 
   return {
     // UI state
@@ -141,9 +179,17 @@ export function useDicomSender(runtime?: RuntimeType) {
     error,
     progress,
     progressPercentage,
-    // Stream-based sending
-    sendStudyStream,
-    // Effect-based methods
+
+    // Progress accessors
+    getStudyProgress,
+    isStudySending,
+    hasActiveSending,
+
+    // Operations
+    sendStudyEffect,
+    sendStudy,
+    cancelStudy,
+    cancelAll,
     testConnection,
     reset
   }
