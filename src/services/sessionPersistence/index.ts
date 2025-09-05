@@ -9,6 +9,7 @@ interface PersistedSession {
     studyInstanceUID: string
     patientId?: string
     assignedPatientId?: string
+    customFields?: Record<string, string>
   }>
 }
 
@@ -56,7 +57,8 @@ export const SessionPersistenceLive = Layer.scoped(
           studies: (studies ?? []).map((s) => ({
             studyInstanceUID: s.studyInstanceUID,
             patientId: s.patientId,
-            assignedPatientId: (s as any).assignedPatientId
+            assignedPatientId: (s as any).assignedPatientId,
+            customFields: (s as any).customFields
           }))
         }
         try {
@@ -130,7 +132,13 @@ export const SessionPersistenceLive = Layer.scoped(
 
         // Merge persisted assignedPatientId back into rebuilt studies
         const map = new Map(persisted.studies.map(s => [s.studyInstanceUID, s.assignedPatientId]))
-        const merged = studies.map(s => ({ ...s, assignedPatientId: map.get(s.studyInstanceUID) || (s as any).assignedPatientId }))
+        const assignedMap = new Map(persisted.studies.map(s => [s.studyInstanceUID, s.assignedPatientId]))
+        const customMap = new Map(persisted.studies.map(s => [s.studyInstanceUID, s.customFields]))
+        const merged = studies.map(s => ({
+          ...s,
+          assignedPatientId: assignedMap.get(s.studyInstanceUID) || (s as any).assignedPatientId,
+          customFields: customMap.get(s.studyInstanceUID) || (s as any).customFields
+        }))
 
         return { files: restored, studies: merged }
       })

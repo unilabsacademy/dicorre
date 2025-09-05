@@ -40,8 +40,8 @@ export interface StudyAnonymizationResult {
 export class Anonymizer extends Context.Tag("Anonymizer")<
   Anonymizer,
   {
-    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>) => Effect.Effect<DicomFile, AnonymizerError>
-    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string> }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
+    readonly anonymizeFile: (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>, overrides?: Record<string, string>) => Effect.Effect<DicomFile, AnonymizerError>
+    readonly anonymizeStudy: (studyId: string, files: DicomFile[], config: AnonymizationConfig, options?: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string>; overrides?: Record<string, string> }) => Effect.Effect<StudyAnonymizationResult, AnonymizerError>
   }
 >() { }
 
@@ -72,7 +72,7 @@ export const AnonymizerLive = Layer.effect(
       return processed
     }
 
-    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>): Effect.Effect<DicomFile, AnonymizerError> =>
+    const anonymizeFile = (file: DicomFile, config: AnonymizationConfig, sharedRandom?: string, patientIdMap?: Record<string, string>, overrides?: Record<string, string>): Effect.Effect<DicomFile, AnonymizerError> =>
       Effect.gen(function* () {
         // Check if file has metadata
         if (!file.metadata) {
@@ -99,6 +99,13 @@ export const AnonymizerLive = Layer.effect(
           if (assignedId) {
             processedReplacements[tag('Patient ID')] = assignedId
             console.log(`Overriding Patient ID replacement using mapping for ${file.fileName}: ${originalPatientId} -> ${assignedId}`)
+          }
+        }
+
+        // Apply per-study overrides last (highest precedence). Values used as-is (no {random} processing).
+        if (overrides) {
+          for (const [key, value] of Object.entries(overrides)) {
+            processedReplacements[tag(key)] = value
           }
         }
 
@@ -132,6 +139,10 @@ export const AnonymizerLive = Layer.effect(
           }
         })
 
+        // Keep only configured preserveTags; do not force-keep overrides so they can be replaced
+        const configuredKeep = (config.preserveTags ? [...config.preserveTags] : []).map((k) => tag(k))
+        const keep = Array.from(new Set([...(configuredKeep || [])]))
+
         // Configure deidentifier options
         const deidentifierConfig: DeidentifyOptions = {
           profileOptions,
@@ -139,7 +150,7 @@ export const AnonymizerLive = Layer.effect(
             default: processedReplacements.default || 'REMOVED',
             lookup: processedReplacements
           },
-          keep: config.preserveTags ? [...config.preserveTags] : undefined,
+          keep: keep.length > 0 ? keep : undefined,
           getReferenceDate: getDicomReferenceDate,
           getReferenceTime: getDicomReferenceTime
         }
@@ -221,7 +232,7 @@ export const AnonymizerLive = Layer.effect(
       studyId: string,
       files: DicomFile[],
       config: AnonymizationConfig,
-      options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string> } = {}
+      options: { concurrency?: number; onProgress?: (progress: AnonymizationProgress) => void; patientIdMap?: Record<string, string>; overrides?: Record<string, string> } = {}
     ): Effect.Effect<StudyAnonymizationResult, AnonymizerError> =>
       Effect.gen(function* () {
         const { concurrency = 3, onProgress } = options
@@ -252,7 +263,7 @@ export const AnonymizerLive = Layer.effect(
             console.log(`[Effect Anonymizer] Starting file ${index + 1}/${total}: ${file.fileName}`)
 
             // Anonymize individual file with shared random string
-            const result = yield* anonymizeFile(file, config, sharedRandom, patientIdMap)
+            const result = yield* anonymizeFile(file, config, sharedRandom, patientIdMap, options.overrides)
 
             completed++
 

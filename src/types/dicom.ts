@@ -38,6 +38,7 @@ export interface DicomStudy {
   assignedPatientId?: string
   studyDate?: string
   studyDescription?: string
+  customFields?: Record<string, string>
   series: DicomSeries[]
 }
 

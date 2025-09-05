@@ -83,6 +83,16 @@ export function useAppState(runtime: RuntimeType) {
     studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, assignedPatientId: patientId } : s)
   }
 
+  const setCustomFieldsForSelected = (overrides: Record<string, string>): void => {
+    const selectedUids = new Set(selectedStudies.value.map(s => s.studyInstanceUID))
+    const normalized: Record<string, string> = {}
+    for (const [k, v] of Object.entries(overrides)) {
+      if (!k.trim()) continue
+      normalized[k] = String(v)
+    }
+    studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, customFields: normalized } : s)
+  }
+
   const loadConfig = async () => { /* stream-backed; kept for API compatibility */ }
 
   const loadServerUrl = async () => { /* replaced by stream; keep for API compatibility */ }
@@ -308,6 +318,7 @@ export function useAppState(runtime: RuntimeType) {
             anonymizationConfig,
             concurrency: concurrency.value,
             patientIdMap,
+            overrides: study.customFields,
             onProgress: (p) => {
               setStudyProgress(study.studyInstanceUID, {
                 isProcessing: true,
@@ -325,6 +336,13 @@ export function useAppState(runtime: RuntimeType) {
               })
               removeStudyProgress(study.studyInstanceUID)
               console.log(`Study ${study.studyInstanceUID} anonymization completed with ${anonymizedFiles.length} files`)
+              // Clear overrides for this study after anonymization as they are incorporated
+              const idx = studies.value.findIndex(s => s.studyInstanceUID === study.studyInstanceUID)
+              if (idx !== -1) {
+                const next = [...studies.value]
+                next[idx] = { ...next[idx], customFields: undefined }
+                studies.value = next
+              }
               rebuildStudyAfterFileChanges(study.studyInstanceUID)
 
               resolve(true)
@@ -679,6 +697,7 @@ export function useAppState(runtime: RuntimeType) {
     anonymizeSelected,
     groupSelectedStudies,
     assignPatientIdToSelected,
+    setCustomFieldsForSelected,
     testConnection,
     handleSendSelected,
     clearFiles,

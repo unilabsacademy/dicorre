@@ -59,11 +59,13 @@ const emit = defineEmits<{
   configLoaded: []
   addFiles: [files: File[]]
   openConfigEditor: []
+  openCustomFieldsEditor: []
 }>()
 
 const showClearDialog = ref(false)
 const showEditDialog = ref(false)
 const editPatientId = ref('')
+const showCustomFields = ref(false)
 
 const { copyShareableUrl } = useProjectSharing()
 
@@ -221,6 +223,15 @@ const clearDialogDescription = computed(() => {
           >
             <Layers class="w-4 h-4 mr-2" />
             Group Studies
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            @click="emit('openCustomFieldsEditor')"
+            :disabled="props.selectedStudiesCount === 0"
+            data-testid="custom-fields-menu-item"
+          >
+            <Pencil class="w-4 h-4 mr-2" />
+            Edit Custom Fields
           </DropdownMenuItem>
 
           <DropdownMenuItem

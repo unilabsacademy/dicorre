@@ -38,6 +38,7 @@ export interface AnonymizationJob extends BaseJob {
   anonymizationConfig: any // AnonymizationConfig from schema
   onComplete?: (anonymizedFiles: DicomFile[]) => void
   patientIdMap?: Record<string, string>
+  overrides?: Record<string, string>
 }
 
 // Sending worker removed; sending is handled in main thread fibers
@@ -315,7 +316,8 @@ export class AnonymizationWorkerManager extends WorkerManager<AnonymizationJob> 
         files,
         anonymizationConfig: job.anonymizationConfig,
         concurrency: job.concurrency,
-        patientIdMap: job.patientIdMap
+        patientIdMap: job.patientIdMap ? JSON.parse(JSON.stringify(job.patientIdMap)) : undefined,
+        overrides: job.overrides ? JSON.parse(JSON.stringify(job.overrides)) : undefined
       }
     }
   }

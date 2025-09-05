@@ -16,6 +16,7 @@ import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import AppToolbar from '@/components/AppToolbar.vue'
 import ConfigEditSheet from '@/components/ConfigEditSheet.vue'
+import CustomFieldsSheet from '@/components/CustomFieldsSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
@@ -34,6 +35,7 @@ const error = computed(() => {
 const isRestoring = ref(false)
 const restoreProgress = ref(0)
 const showConfigEditSheet = ref(false)
+const showCustomFieldsSheet = ref(false)
 
 const {
   isDragOver,
@@ -213,6 +215,7 @@ onUnmounted(() => {
         @config-loaded="handleConfigLoaded"
         @add-files="(files) => { addFilesToUploaded(files); processNewFiles(files) }"
         @open-config-editor="showConfigEditSheet = true"
+        @open-custom-fields-editor="showCustomFieldsSheet = true"
       />
 
       <!-- File Processing Progress -->
@@ -295,6 +298,14 @@ onUnmounted(() => {
       @config-updated="handleConfigLoaded"
       @create-project="(name) => appState.handleCreateProject(name)"
       @update-project="(project) => appState.handleUpdateProject(project)"
+    />
+
+    <!-- Custom Fields Sheet -->
+    <CustomFieldsSheet
+      :runtime="runtime"
+      :open="showCustomFieldsSheet"
+      @update:open="showCustomFieldsSheet = $event"
+      @save="(overrides) => appState.setCustomFieldsForSelected(overrides)"
     />
 
     <!-- Toast Notifications -->

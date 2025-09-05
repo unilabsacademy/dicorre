@@ -6,6 +6,9 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArrowUp, ArrowDown } from 'lucide-vue-next'
 import StudyProgressIndicator from '@/components/StudyProgressIndicator.vue'
+import { h as createElement } from 'vue'
+import { Badge as UiBadge } from '@/components/ui/badge'
+import { Pencil } from 'lucide-vue-next'
 
 export const columns: ColumnDef<DicomStudy>[] = [
   {
@@ -22,6 +25,21 @@ export const columns: ColumnDef<DicomStudy>[] = [
     }),
     enableSorting: false,
     enableHiding: false,
+  },
+  {
+    id: 'customFields',
+    header: () => h('span', {}, 'Overrides'),
+    cell: ({ row }) => {
+      const study = row.original
+      const hasOverrides = study.customFields && Object.keys(study.customFields).length > 0
+      return hasOverrides
+        ? h(Badge, { variant: 'secondary', class: 'flex items-center gap-1' }, () => [
+          h(Pencil, { class: 'w-3 h-3' }),
+          'Custom'
+        ])
+        : h('span', { class: 'text-muted-foreground' }, '-')
+    },
+    enableSorting: false,
   },
   {
     accessorKey: 'accessionNumber',

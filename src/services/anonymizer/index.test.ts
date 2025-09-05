@@ -175,6 +175,81 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
   })
 
   describe('Study anonymization', () => {
+    it('applies per-study overrides to specific DICOM tags', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      const result = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
+
+        const overrides = {
+          "Patient's Birth Date": '19900101',
+          "Patient's Sex": 'M'
+        }
+
+        return yield* anonymizer.anonymizeStudy(
+          'test-study-overrides',
+          parsedFiles,
+          config,
+          { concurrency: 1, overrides }
+        )
+      }))
+
+      expect(result.anonymizedFiles.length).toBe(1)
+      const meta = result.anonymizedFiles[0].metadata
+      expect(meta).toBeDefined()
+      if (meta) {
+        expect(meta.patientBirthDate).toBe('19900101')
+        expect(meta.patientSex).toBe('M')
+      }
+    })
+
+    it('applies per-study override to Study Description', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      const result = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const configService = yield* ConfigService
+        const config = yield* configService.getAnonymizationConfig
+
+        const overrides = {
+          'Study Description': 'CUSTOM_DESC'
+        }
+
+        return yield* anonymizer.anonymizeStudy(
+          'test-study-description-override',
+          parsedFiles,
+          config,
+          { concurrency: 1, overrides }
+        )
+      }))
+
+      expect(result.anonymizedFiles.length).toBe(1)
+      const meta = result.anonymizedFiles[0].metadata
+      expect(meta).toBeDefined()
+      if (meta) {
+        expect(meta.studyDescription).toBe('CUSTOM_DESC')
+      }
+    })
     it('should handle empty file list', async () => {
       const result = await runTest(Effect.gen(function* () {
         const anonymizer = yield* Anonymizer
