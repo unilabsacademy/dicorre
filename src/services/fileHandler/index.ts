@@ -265,7 +265,10 @@ export const FileHandlerLive = Layer.effect(
           // Create complete metadata for file conversion - all required fields
           const defaultMetadata = createDefaultConversionMetadata(file)
 
-          return yield* plugin.convertToDicom(file, defaultMetadata)
+          // Fetch plugin-specific settings if available
+          const pluginSettings = yield* registry.getPluginSettings(plugin.id).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+
+          return yield* plugin.convertToDicom(file, defaultMetadata, pluginSettings as any)
             .pipe(
               Effect.mapError((error) => new FileHandlerError({
                 message: `Plugin ${plugin.id} failed to convert ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
@@ -279,7 +282,7 @@ export const FileHandlerLive = Layer.effect(
         // Get supported extensions dynamically
         const supportedExtensions = yield* registry.getSupportedExtensions()
           .pipe(Effect.catchAll(() => Effect.succeed(['.zip', '.dcm', '.dicom'])))
-        
+
         const extensionsList = supportedExtensions.join(', ')
         return yield* Effect.fail(new FileHandlerError({
           message: `File ${file.name} has unsupported format. Only DICOM files (.dcm), ZIP archives, and supported formats (${extensionsList}) are accepted`,

@@ -18,6 +18,7 @@ export class PluginRegistry extends Context.Tag("PluginRegistry")<
     readonly enablePlugin: (pluginId: string) => Effect.Effect<void, PluginErrorType>
     readonly disablePlugin: (pluginId: string) => Effect.Effect<void, PluginErrorType>
     readonly loadPluginConfig: (config: PluginConfig) => Effect.Effect<void, PluginErrorType>
+    readonly getPluginSettings: (pluginId: string) => Effect.Effect<Record<string, any> | undefined, never>
   }
 >() { }
 
@@ -177,6 +178,9 @@ export const PluginRegistryLive = Layer.succeed(
         console.log(`Loaded plugin config: ${config.enabled.length} plugins enabled`)
       })
 
+    const getPluginSettings = (pluginId: string): Effect.Effect<Record<string, any> | undefined, never> =>
+      Effect.sync(() => pluginConfig.settings?.[pluginId])
+
     return {
       registerPlugin,
       unregisterPlugin,
@@ -189,7 +193,8 @@ export const PluginRegistryLive = Layer.succeed(
       getSupportedMimeTypes,
       enablePlugin,
       disablePlugin,
-      loadPluginConfig
+      loadPluginConfig,
+      getPluginSettings
     } as const
   })()
 )

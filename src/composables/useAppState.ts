@@ -659,8 +659,18 @@ export function useAppState(runtime: RuntimeType) {
     runtime.runFork(
       Effect.gen(function* () {
         const svc = yield* ConfigService
+        const registry = yield* PluginRegistry
         return yield* Stream.runForEach(svc.configChanges, (cfg) =>
-          Effect.sync(() => { config.value = cfg })
+          Effect.gen(function* () {
+            // Update reactive config
+            yield* Effect.sync(() => { config.value = cfg })
+            // Apply plugin config dynamically (enabled list + settings)
+            if ((cfg as any).plugins) {
+              yield* registry.loadPluginConfig((cfg as any).plugins)
+            }
+          }).pipe(
+            Effect.catchAll((err) => Effect.sync(() => console.error('Failed to apply plugin config from live update:', err)))
+          )
         )
       })
     )
