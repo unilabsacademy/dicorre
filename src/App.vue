@@ -12,6 +12,7 @@ import { Progress } from '@/components/ui/progress'
 import { useSessionPersistence } from '@/composables/useSessionPersistence'
 import { useDownload } from '@/composables/useDownload'
 import { useProjectSharing } from '@/composables/useProjectSharing'
+import { useTableState } from '@/composables/useTableState'
 import FileProcessingProgress from '@/components/FileProcessingProgress.vue'
 import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import AppToolbar from '@/components/AppToolbar.vue'
@@ -146,6 +147,12 @@ onUnmounted(() => {
   runtime.dispose()
   appState.clearAppError()
 })
+
+function openCustomFieldsForStudy(row: DicomStudy): void {
+  const { rowSelection } = useTableState()
+  rowSelection.value = { [row.studyInstanceUID]: true }
+  showCustomFieldsSheet.value = true
+}
 </script>
 
 <template>
@@ -288,6 +295,7 @@ onUnmounted(() => {
         v-else
         :columns="columns"
         :data="studiesData"
+        :open-custom-fields-for-study="openCustomFieldsForStudy"
         data-testid="studies-data-table"
       />
 

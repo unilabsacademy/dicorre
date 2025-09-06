@@ -25,12 +25,23 @@ export const columns: ColumnDef<DicomStudy>[] = [
     enableHiding: false,
   },
   {
-    id: 'customFieldsIcon',
+    id: 'customFieldsAction',
     header: () => null,
-    cell: ({ row }) => {
+    cell: ({ row, table }) => {
       const study = row.original
-      const hasOverrides = study.customFields && Object.keys(study.customFields).length > 0
-      return hasOverrides ? h(Pencil, { class: 'w-4 h-4 ml-2 text-muted-foreground' }) : null
+      const hasOverrides = !!(study.customFields && Object.keys(study.customFields).length > 0)
+      return h(Button as any, {
+        variant: hasOverrides ? 'default' : 'ghost',
+        size: 'icon-sm',
+        onClick: () => {
+          // delegate to table meta callback if present
+          const open = (table.options.meta as any)?.openCustomFieldsForStudy
+          if (open) open(study)
+        },
+        'data-testid': 'row-custom-fields-button'
+      }, () => [
+        h(Pencil, { class: 'w-4 h-4' })
+      ])
     },
     enableSorting: false,
     enableHiding: false,
