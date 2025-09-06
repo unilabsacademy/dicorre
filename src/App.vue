@@ -54,6 +54,12 @@ const {
   cancelAll
 } = appState.fileProcessing
 
+// Extract removeTask separately to use in template
+const removeTask = (taskId: string) => {
+  appState.fileProcessing.tasks.value.delete(taskId)
+  appState.fileProcessing.tasks.value = new Map(appState.fileProcessing.tasks.value)
+}
+
 const isAppReady = computed(() => {
   return !appState.configLoading.value && !appState.configError.value && appState.config.value !== null
 })
@@ -286,6 +292,7 @@ function handleCustomFieldsUpdateOpen(next: boolean): void {
           :current-step="state.currentStep"
           :progress="state.progress"
           :error="state.error"
+          @close="removeTask(state.taskId)"
         />
       </div>
 

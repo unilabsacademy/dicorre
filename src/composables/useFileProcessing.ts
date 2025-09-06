@@ -77,7 +77,7 @@ export function useFileProcessing(runtime: RuntimeType) {
         endTime: Date.now(),
         error: 'Configuration not loaded'
       })
-      setTimeout(() => removeTask(id), 5000)
+      // Keep error tasks visible until user closes them
       return id
     }
 
@@ -163,7 +163,7 @@ export function useFileProcessing(runtime: RuntimeType) {
             currentStep: 'Failed',
             endTime: Date.now()
           })
-          setTimeout(() => removeTask(taskId), 5000)
+          // Keep error tasks visible until user closes them
           return []
         })
       ),

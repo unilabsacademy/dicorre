@@ -15,6 +15,10 @@ interface Props {
 
 const props = defineProps<Props>()
 
+const emit = defineEmits<{
+  close: []
+}>()
+
 const progressText = computed(() => {
   if (props.error) {
     return 'Failed'
@@ -61,6 +65,17 @@ const cardClass = computed(() => {
             <div class="flex items-center gap-1 text-xs text-muted-foreground">
               <span>{{ progressText }}</span>
             </div>
+            <button
+              v-if="error"
+              @click="emit('close')"
+              class="ml-2 text-muted-foreground hover:text-foreground transition-colors"
+              aria-label="Close error"
+            >
+              <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                <line x1="18" y1="6" x2="6" y2="18"></line>
+                <line x1="6" y1="6" x2="18" y2="18"></line>
+              </svg>
+            </button>
           </div>
         </div>
 
