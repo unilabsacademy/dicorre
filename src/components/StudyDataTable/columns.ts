@@ -7,6 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowUp, ArrowDown } from 'lucide-vue-next'
 import StudyProgressIndicator from '@/components/StudyProgressIndicator.vue'
 import { Pencil } from 'lucide-vue-next'
+import StudyLogPopover from '@/components/StudyLogPopover.vue'
 
 export const columns: ColumnDef<DicomStudy>[] = [
   {
@@ -21,6 +22,16 @@ export const columns: ColumnDef<DicomStudy>[] = [
       'onUpdate:modelValue': (value: boolean | 'indeterminate') => row.toggleSelected(!!value),
       'ariaLabel': 'Select row',
     }),
+    enableSorting: false,
+    enableHiding: false,
+  },
+  {
+    id: 'log',
+    header: () => null,
+    cell: ({ row }) => {
+      const study = row.original
+      return h(StudyLogPopover as any, { studyId: study.id })
+    },
     enableSorting: false,
     enableHiding: false,
   },

@@ -15,6 +15,7 @@ import { useDicomSender } from '@/composables/useDicomSender'
 import { clearStudyCache } from '@/services/anonymizer/handlers'
 import { toast } from 'vue-sonner'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'
+import { StudyLogger } from '@/services/studyLogger'
 
 export function useAppState(runtime: RuntimeType) {
   // Core application state
@@ -188,6 +189,12 @@ export function useAppState(runtime: RuntimeType) {
               const cfgService = yield* ConfigService
               const cfg = yield* cfgService.getAnonymizationConfig
               const grouped = yield* processor.groupFilesByStudy(nextFiles)
+              // Log parse results per study
+              const logger = yield* StudyLogger
+              for (const s of grouped) {
+                const filesCount = s.series.reduce((sum, ser) => sum + ser.files.length, 0)
+                yield* logger.append(s.id, { ts: Date.now(), level: 'info', message: `Parsed ${filesCount} file(s)` })
+              }
               const withAssigned = yield* processor.assignPatientIds(grouped, cfg)
               const merged = withAssigned.map(s => {
                 const prev = previousById.get(s.id)
@@ -307,6 +314,12 @@ export function useAppState(runtime: RuntimeType) {
               })
             },
             onComplete: (anonymizedFiles) => {
+              runtime.runPromise(
+                Effect.gen(function* () {
+                  const logger = yield* StudyLogger
+                  yield* logger.append(study.id, { ts: Date.now(), level: 'info', message: `Anonymized ${anonymizedFiles.length} file(s)` })
+                })
+              ).catch(() => { })
               anonymizedFiles.forEach(anonymizedFile => {
                 const fileIndex = dicomFiles.value.findIndex(f => f.id === anonymizedFile.id)
                 if (fileIndex !== -1) {
@@ -327,6 +340,12 @@ export function useAppState(runtime: RuntimeType) {
               resolve(true)
             },
             onError: (err) => {
+              runtime.runPromise(
+                Effect.gen(function* () {
+                  const logger = yield* StudyLogger
+                  yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Anonymization error`, details: String(err) })
+                })
+              ).catch(() => { })
               console.error(`Anonymization error for study ${study.studyInstanceUID}:`, err)
               removeStudyProgress(study.studyInstanceUID)
               resolve(false)
@@ -404,6 +423,8 @@ export function useAppState(runtime: RuntimeType) {
               )
             }
           }
+          const logger = yield* StudyLogger
+          yield* logger.append(study.id, { ts: Date.now(), level: 'info', message: `Sending started (${studyFiles.length} file(s))` })
         })
 
         const sendEffect = dicomSender.sendStudyEffect(
@@ -436,6 +457,9 @@ export function useAppState(runtime: RuntimeType) {
                 catch: (error) => new Error(String(error))
               })
 
+              const logger = yield* StudyLogger
+              yield* logger.append(study.id, { ts: Date.now(), level: 'info', message: `Sent ${sentFiles.length} file(s)` })
+
               // afterSend hooks
               const registry = yield* PluginRegistry
               const hookPlugins = yield* registry.getHookPlugins()
@@ -464,6 +488,8 @@ export function useAppState(runtime: RuntimeType) {
             Effect.gen(function* () {
               console.error(`Error sending study ${study.studyInstanceUID}:`, err)
               removeStudySendingProgress(study.studyInstanceUID)
+              const logger = yield* StudyLogger
+              yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Send error`, details: String(err) })
               // onSendError hooks
               const registry = yield* PluginRegistry
               const hookPlugins = yield* registry.getHookPlugins()

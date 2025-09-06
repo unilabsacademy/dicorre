@@ -40,7 +40,7 @@ const table = useVueTable({
     return props.columns
   },
   meta: {
-    openCustomFieldsForStudy: (row: TData) => props.openCustomFieldsForStudy?.(row)
+    openCustomFieldsForStudy: (row: TData) => props.openCustomFieldsForStudy?.(row),
   },
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),
