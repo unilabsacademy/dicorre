@@ -1,4 +1,5 @@
-import { Context, Layer, Effect } from "effect"
+import { Context, Layer, Effect, SubscriptionRef, Stream } from "effect"
+import { StudyLoggerPersistence } from "./persistence"
 
 export type LogLevel = 'info' | 'warn' | 'error'
 
@@ -17,40 +18,78 @@ export class StudyLogger extends Context.Tag("StudyLogger")<
     readonly getStatus: (studyId: string) => Effect.Effect<{ hasError: boolean }, never>
     readonly clear: (studyId: string) => Effect.Effect<void, never>
     readonly clearAll: Effect.Effect<void, never>
+    readonly getAllLogs: Effect.Effect<Map<string, StudyLogEntry[]>, never>
+    readonly logsChanges: Stream.Stream<Map<string, StudyLogEntry[]>>
   }
 >() { }
 
-export const StudyLoggerLive = Layer.succeed(
+export const StudyLoggerLive = Layer.scoped(
   StudyLogger,
-  (() => {
-    const logs = new Map<string, StudyLogEntry[]>()
+  Effect.gen(function* () {
+    const ref = yield* SubscriptionRef.make(new Map<string, StudyLogEntry[]>())
+    const persistence = yield* StudyLoggerPersistence
+
+    // On init, attempt to load persisted logs
+    const persisted = yield* persistence.load
+    if (persisted) {
+      yield* SubscriptionRef.set(ref, persisted)
+    }
 
     const append = (studyId: string, entry: StudyLogEntry) =>
-      Effect.sync(() => {
-        const arr = logs.get(studyId) ?? []
-        arr.push(entry)
-        logs.set(studyId, arr)
+      Effect.gen(function* () {
+        yield* SubscriptionRef.update(ref, (logs) => {
+          const newLogs = new Map(logs)
+          const arr = newLogs.get(studyId) ?? []
+          arr.push(entry)
+          newLogs.set(studyId, arr)
+          return newLogs
+        })
+        // Persist after update
+        const updated = yield* SubscriptionRef.get(ref)
+        yield* persistence.save(updated)
       })
 
     const get = (studyId: string) =>
-      Effect.sync(() => logs.get(studyId) ?? [])
+      Effect.map(
+        SubscriptionRef.get(ref),
+        (logs) => logs.get(studyId) ?? []
+      )
 
     const getStatus = (studyId: string) =>
-      Effect.sync(() => ({ hasError: (logs.get(studyId) ?? []).some(e => e.level === 'error') }))
+      Effect.map(
+        SubscriptionRef.get(ref),
+        (logs) => ({ hasError: (logs.get(studyId) ?? []).some(e => e.level === 'error') })
+      )
 
     const clear = (studyId: string) =>
-      Effect.sync(() => { logs.delete(studyId) })
+      Effect.gen(function* () {
+        yield* SubscriptionRef.update(ref, (logs) => {
+          const newLogs = new Map(logs)
+          newLogs.delete(studyId)
+          return newLogs
+        })
+        // Persist after update
+        const updated = yield* SubscriptionRef.get(ref)
+        yield* persistence.save(updated)
+      })
 
-    const clearAll = Effect.sync(() => { logs.clear() })
+    const clearAll = Effect.gen(function* () {
+      yield* SubscriptionRef.set(ref, new Map())
+      yield* persistence.clear
+    })
+
+    const getAllLogs = SubscriptionRef.get(ref)
 
     return {
       append,
       get,
       getStatus,
       clear,
-      clearAll
+      clearAll,
+      getAllLogs,
+      logsChanges: ref.changes
     } as const
-  })()
+  })
 )
 
 

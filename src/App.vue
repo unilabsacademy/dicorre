@@ -20,6 +20,7 @@ import ConfigEditSheet from '@/components/ConfigEditSheet.vue'
 import CustomFieldsSheet from '@/components/CustomFieldsSheet.vue'
 import StudyLogSheet from '@/components/StudyLogSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
+import { useDropdownSheetTransition } from '@/utils/dropdownSheetTransition'
 import 'vue-sonner/style.css'
 
 const runtime = ManagedRuntime.make(AppLayer)
@@ -40,8 +41,10 @@ const showConfigEditSheet = ref(false)
 const showCustomFieldsSheet = ref(false)
 const showLogSheet = ref(false)
 const logStudyId = ref<string | undefined>(undefined)
-const suppressLogSheetClose = ref(false)
-const suppressCustomFieldsClose = ref(false)
+
+// Setup dropdown-to-sheet transitions
+const customFieldsTransition = useDropdownSheetTransition()
+const logSheetTransition = useDropdownSheetTransition()
 
 const {
   isGlobalDragOver,
@@ -162,29 +165,32 @@ onUnmounted(() => {
 function openCustomFieldsForStudy(row: DicomStudy): void {
   const { rowSelection } = useTableState()
   rowSelection.value = { [row.studyInstanceUID]: true }
-  showCustomFieldsSheet.value = true
+  customFieldsTransition.openWithTransition(() => {
+    showCustomFieldsSheet.value = true
+  })
 }
 
 function openLogForStudy(row: DicomStudy): void {
-  suppressLogSheetClose.value = true
-  setTimeout(() => { suppressLogSheetClose.value = false }, 200)
-  setTimeout(() => {
+  logSheetTransition.openWithTransition(() => {
     logStudyId.value = row.id
     showLogSheet.value = true
-  }, 0)
+  })
 }
 
 function openCustomFieldsFromToolbar(): void {
-  // Defer opening until after the dropdown menu finishes its close cycle
-  // to avoid the initial click being treated as an outside click on the sheet.
-  suppressCustomFieldsClose.value = true
-  setTimeout(() => { suppressCustomFieldsClose.value = false }, 200)
-  setTimeout(() => { showCustomFieldsSheet.value = true }, 0)
+  customFieldsTransition.openWithTransition(() => {
+    showCustomFieldsSheet.value = true
+  })
 }
 
 function handleCustomFieldsUpdateOpen(next: boolean): void {
-  if (!next && suppressCustomFieldsClose.value) return
+  if (!next && customFieldsTransition.suppressClose.value) return
   showCustomFieldsSheet.value = next
+}
+
+function handleLogSheetUpdateOpen(next: boolean): void {
+  if (!next && logSheetTransition.suppressClose.value) return
+  showLogSheet.value = next
 }
 </script>
 
@@ -372,7 +378,7 @@ function handleCustomFieldsUpdateOpen(next: boolean): void {
     <StudyLogSheet
       :open="showLogSheet"
       :study-id="logStudyId"
-      @update:open="(v) => { if (!(v === false && suppressLogSheetClose)) showLogSheet = v }"
+      @update:open="handleLogSheetUpdateOpen"
     />
 
     <!-- Toast Notifications -->

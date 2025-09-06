@@ -14,6 +14,7 @@ import { DicomSenderLive } from '../dicomSender'
 import { DownloadServiceLive } from '../downloadService'
 import { SessionPersistenceLive } from '../sessionPersistence'
 import { StudyLoggerLive } from '../studyLogger'
+import { StudyLoggerPersistenceLocalStorage } from '../studyLogger/persistence'
 
 /**
  * Base services with no dependencies
@@ -23,7 +24,7 @@ export const BaseServicesLayer = Layer.mergeAll(
   PluginRegistryLive,
   OPFSStorageLive,
   SessionPersistenceLive,
-  StudyLoggerLive
+  StudyLoggerLive.pipe(Layer.provide(StudyLoggerPersistenceLocalStorage))
 )
 
 /**
@@ -58,7 +59,7 @@ export const AppLayer = Layer.mergeAll(
   AnonymizerLive.pipe(Layer.provide(DicomProcessorLive)),
   DicomSenderLive,
   DownloadServiceLive.pipe(Layer.provide(OPFSStorageLive)),
-  StudyLoggerLive
+  StudyLoggerLive.pipe(Layer.provide(StudyLoggerPersistenceLocalStorage))
 ).pipe(
   Layer.provideMerge(Layer.mergeAll(
     FileHandlerLive.pipe(Layer.provide(PluginRegistryLive))
