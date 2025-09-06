@@ -220,6 +220,7 @@ export const appConfigEditSchema: ConfigEditSchema = {
       options: [
         { value: 'image-converter', label: 'Image Converter' },
         { value: 'pdf-converter', label: 'PDF Converter' },
+        { value: 'video-converter', label: 'Video Converter' },
         { value: 'send-logger', label: 'Send Logger' },
         { value: 'sent-notifier', label: 'Sent Notifier' }
       ]

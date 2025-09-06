@@ -36,6 +36,7 @@
     "enabled": [
       "image-converter",
       "pdf-converter",
+      "video-converter",
       "send-logger",
       "sent-notifier"
     ],
@@ -47,6 +48,15 @@
       "pdf-converter": {
         "defaultModality": "DOC",
         "defaultSeriesDescription": "PDF Conversion"
+      },
+      "video-converter": {
+        "samplingStrategy": "interval",
+        "intervalMs": 1000,
+        "uniqueHammingThreshold": 10,
+        "maxFrames": 500,
+        "outputMaxWidth": 1920,
+        "outputMaxHeight": 1080,
+        "seriesDescription": "Video Conversion"
       },
       "send-logger": {
         "logLevel": "detailed"

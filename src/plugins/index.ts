@@ -2,6 +2,7 @@ import { Effect } from "effect"
 import { PluginRegistry } from '@/services/pluginRegistry'
 import { imageConverterPlugin } from './imageConverter'
 import { pdfConverterPlugin } from './pdfConverter'
+import { videoConverterPlugin } from './videoConverter'
 import { sendLoggerPlugin } from './sendLogger'
 import { sentNotifierPlugin } from './sentNotifier'
 import type { PluginConfig } from '@/types/plugins'
@@ -24,6 +25,7 @@ export const loadPlugins = (config?: PluginConfig) =>
     const plugins = [
       imageConverterPlugin,
       pdfConverterPlugin,
+      videoConverterPlugin,
       sendLoggerPlugin,
       sentNotifierPlugin
     ]

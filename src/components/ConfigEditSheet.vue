@@ -671,7 +671,6 @@ function handleCancel() {
                   </div>
                 </div>
               </div>
-
               <!-- Plugin Settings -->
               <div class="space-y-3">
                 <Label>Plugin Settings</Label>
