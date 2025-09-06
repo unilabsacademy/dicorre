@@ -31,6 +31,7 @@ export interface DicomMetadata {
 }
 
 export interface DicomStudy {
+  id: string
   accessionNumber?: string
   studyInstanceUID: string
   patientName?: string

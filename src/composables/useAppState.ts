@@ -181,7 +181,7 @@ export function useAppState(runtime: RuntimeType) {
         onAppendFiles: (files: DicomFile[]) => {
           const nextFiles = [...dicomFiles.value, ...files]
           dicomFiles.value = nextFiles
-          const previousByUid = new Map(studies.value.map(s => [s.studyInstanceUID, s]))
+          const previousById = new Map(studies.value.map(s => [s.id, s]))
           runtime.runPromise(
             Effect.gen(function* () {
               const processor = yield* DicomProcessor
@@ -190,7 +190,7 @@ export function useAppState(runtime: RuntimeType) {
               const grouped = yield* processor.groupFilesByStudy(nextFiles)
               const withAssigned = yield* processor.assignPatientIds(grouped, cfg)
               const merged = withAssigned.map(s => {
-                const prev = previousByUid.get(s.studyInstanceUID)
+                const prev = previousById.get(s.id)
                 return prev
                   ? { ...s, assignedPatientId: prev.assignedPatientId ?? s.assignedPatientId, customFields: prev.customFields ?? s.customFields }
                   : s
@@ -204,9 +204,9 @@ export function useAppState(runtime: RuntimeType) {
               Effect.gen(function* () {
                 const processor = yield* DicomProcessor
                 const groupedOnly = yield* processor.groupFilesByStudy(nextFiles)
-                const previousByUid = new Map(studies.value.map(s => [s.studyInstanceUID, s]))
+                const previousById = new Map(studies.value.map(s => [s.id, s]))
                 const merged = groupedOnly.map(s => {
-                  const prev = previousByUid.get(s.studyInstanceUID)
+                  const prev = previousById.get(s.id)
                   return prev
                     ? { ...s, assignedPatientId: prev.assignedPatientId ?? s.assignedPatientId, customFields: prev.customFields ?? s.customFields }
                     : s
@@ -538,12 +538,12 @@ export function useAppState(runtime: RuntimeType) {
         Effect.gen(function* () {
           const processor = yield* DicomProcessor
           const current = studies.value
-          const existing = current.find(s => s.studyInstanceUID === studyId)
           const filesForStudy = dicomFiles.value.filter(f => f.metadata?.studyInstanceUID === studyId)
           const rebuilt = yield* processor.groupFilesByStudy(filesForStudy)
           if (rebuilt.length > 0) {
-            const updatedStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
-            const idx = current.findIndex(s => s.studyInstanceUID === studyId)
+            const maybeExisting = current.find(s => s.id === rebuilt[0].id)
+            const updatedStudy = { ...rebuilt[0], assignedPatientId: maybeExisting?.assignedPatientId }
+            const idx = current.findIndex(s => s.id === updatedStudy.id)
             if (idx !== -1) {
               const next = [...current]
               next[idx] = updatedStudy
@@ -565,7 +565,6 @@ export function useAppState(runtime: RuntimeType) {
         Effect.gen(function* () {
           const processor = yield* DicomProcessor
           const current = studies.value
-          const existing = current.find(s => s.studyInstanceUID === oldStudyId)
 
           // Rebuild study structure from the anonymized files (may have a new StudyInstanceUID)
           const rebuilt = yield* processor.groupFilesByStudy(anonymizedFiles)
@@ -573,24 +572,17 @@ export function useAppState(runtime: RuntimeType) {
             return
           }
 
-          const newStudy = { ...rebuilt[0], assignedPatientId: existing?.assignedPatientId }
-          const newStudyId = newStudy.studyInstanceUID
+          const maybeExisting = current.find(s => s.id === rebuilt[0].id)
+          const newStudy = { ...rebuilt[0], assignedPatientId: maybeExisting?.assignedPatientId }
 
-          const idxOld = current.findIndex(s => s.studyInstanceUID === oldStudyId)
-          const idxNew = current.findIndex(s => s.studyInstanceUID === newStudyId)
-
-          const next = [...current]
-          if (idxOld !== -1) {
-            next.splice(idxOld, 1)
-          }
-
-          if (idxNew !== -1) {
-            next[idxNew] = newStudy
+          const idxById = current.findIndex(s => s.id === newStudy.id)
+          if (idxById !== -1) {
+            const next = [...current]
+            next[idxById] = newStudy
+            studies.value = next
           } else {
-            next.push(newStudy)
+            studies.value = [...current, newStudy]
           }
-
-          studies.value = next
         })
       )
     } catch (error) {

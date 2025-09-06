@@ -167,6 +167,7 @@ export const DicomProcessorLive = Layer.succeed(
 
           if (!studyMap.has(studyKey)) {
             studyMap.set(studyKey, {
+              id: '', // assigned after files are collected
               accessionNumber: accessionNumber || '',
               studyInstanceUID: studyInstanceUID || '',
               patientName: patientName || 'Unknown',
@@ -191,6 +192,12 @@ export const DicomProcessorLive = Layer.succeed(
           }
 
           series.files.push(file)
+        }
+
+        // Assign deterministic stable id per study based on smallest file id
+        for (const study of studyMap.values()) {
+          const allIds = study.series.flatMap(s => s.files.map(f => f.id)).sort()
+          study.id = allIds[0] || ''
         }
 
         // Convert map to array and sort
