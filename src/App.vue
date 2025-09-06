@@ -37,6 +37,7 @@ const isRestoring = ref(false)
 const restoreProgress = ref(0)
 const showConfigEditSheet = ref(false)
 const showCustomFieldsSheet = ref(false)
+const suppressCustomFieldsClose = ref(false)
 
 const {
   isGlobalDragOver,
@@ -153,6 +154,19 @@ function openCustomFieldsForStudy(row: DicomStudy): void {
   rowSelection.value = { [row.studyInstanceUID]: true }
   showCustomFieldsSheet.value = true
 }
+
+function openCustomFieldsFromToolbar(): void {
+  // Defer opening until after the dropdown menu finishes its close cycle
+  // to avoid the initial click being treated as an outside click on the sheet.
+  suppressCustomFieldsClose.value = true
+  setTimeout(() => { suppressCustomFieldsClose.value = false }, 200)
+  setTimeout(() => { showCustomFieldsSheet.value = true }, 0)
+}
+
+function handleCustomFieldsUpdateOpen(next: boolean): void {
+  if (!next && suppressCustomFieldsClose.value) return
+  showCustomFieldsSheet.value = next
+}
 </script>
 
 <template>
@@ -238,7 +252,7 @@ function openCustomFieldsForStudy(row: DicomStudy): void {
         @config-loaded="handleConfigLoaded"
         @add-files="(files) => { addFilesToUploaded(files); processNewFiles(files) }"
         @open-config-editor="showConfigEditSheet = true"
-        @open-custom-fields-editor="showCustomFieldsSheet = true"
+        @open-custom-fields-editor="openCustomFieldsFromToolbar"
       />
 
       <!-- File Processing Progress -->
@@ -329,7 +343,7 @@ function openCustomFieldsForStudy(row: DicomStudy): void {
       :open="showCustomFieldsSheet"
       :initial-overrides="initialOverrides"
       :initial-assigned-patient-id="initialAssignedPatientId"
-      @update:open="showCustomFieldsSheet = $event"
+      @update:open="handleCustomFieldsUpdateOpen"
       @save="(overrides) => appState.setCustomFieldsForSelected(overrides)"
       @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
     />

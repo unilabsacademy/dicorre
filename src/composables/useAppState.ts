@@ -181,6 +181,7 @@ export function useAppState(runtime: RuntimeType) {
         onAppendFiles: (files: DicomFile[]) => {
           const nextFiles = [...dicomFiles.value, ...files]
           dicomFiles.value = nextFiles
+          const previousByUid = new Map(studies.value.map(s => [s.studyInstanceUID, s]))
           runtime.runPromise(
             Effect.gen(function* () {
               const processor = yield* DicomProcessor
@@ -188,7 +189,13 @@ export function useAppState(runtime: RuntimeType) {
               const cfg = yield* cfgService.getAnonymizationConfig
               const grouped = yield* processor.groupFilesByStudy(nextFiles)
               const withAssigned = yield* processor.assignPatientIds(grouped, cfg)
-              studies.value = withAssigned
+              const merged = withAssigned.map(s => {
+                const prev = previousByUid.get(s.studyInstanceUID)
+                return prev
+                  ? { ...s, assignedPatientId: prev.assignedPatientId ?? s.assignedPatientId, customFields: prev.customFields ?? s.customFields }
+                  : s
+              })
+              studies.value = merged
             })
           ).catch(err => {
             console.error('Failed to group/assign patient IDs:', err)
@@ -196,7 +203,15 @@ export function useAppState(runtime: RuntimeType) {
             runtime.runPromise(
               Effect.gen(function* () {
                 const processor = yield* DicomProcessor
-                studies.value = yield* processor.groupFilesByStudy(nextFiles)
+                const groupedOnly = yield* processor.groupFilesByStudy(nextFiles)
+                const previousByUid = new Map(studies.value.map(s => [s.studyInstanceUID, s]))
+                const merged = groupedOnly.map(s => {
+                  const prev = previousByUid.get(s.studyInstanceUID)
+                  return prev
+                    ? { ...s, assignedPatientId: prev.assignedPatientId ?? s.assignedPatientId, customFields: prev.customFields ?? s.customFields }
+                    : s
+                })
+                studies.value = merged
               })
             ).catch(() => { })
           })

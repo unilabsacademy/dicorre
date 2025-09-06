@@ -188,7 +188,7 @@ async function handleSaveConfig() {
     if (projectName.value.trim()) {
       const existing = (editedConfig.value as any).project
       const nextProject = {
-        ...(existing || {}),
+        ...existing,
         name: projectName.value.trim(),
         id: existing?.id ?? crypto.randomUUID(),
         createdAt: existing?.createdAt ?? new Date().toISOString(),

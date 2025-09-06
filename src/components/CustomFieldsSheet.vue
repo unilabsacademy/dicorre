@@ -89,7 +89,10 @@ watch(() => props.open, (isOpen) => {
 </script>
 
 <template>
-  <Sheet :open="open">
+  <Sheet
+    :open="open"
+    @update:open="$emit('update:open', $event)"
+  >
     <SheetContent
       side="left"
       class="w-[520px] sm:max-w-[520px] overflow-y-auto"
