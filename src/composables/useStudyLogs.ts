@@ -12,8 +12,9 @@ export function useStudyLogs(runtimeArg?: RuntimeType) {
       const logger = yield* StudyLogger
       return yield* logger.get(studyId)
     }))
-    cache.value.set(studyId, entries)
-    cache.value = new Map(cache.value)
+    const newCache = new Map(cache.value)
+    newCache.set(studyId, entries)
+    cache.value = newCache
   }
 
   const logsFor = (studyId: string) => computed(() => cache.value.get(studyId) ?? [])

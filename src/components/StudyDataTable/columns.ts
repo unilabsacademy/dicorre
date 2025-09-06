@@ -6,7 +6,6 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { ArrowUp, ArrowDown } from 'lucide-vue-next'
 import StudyProgressIndicator from '@/components/StudyProgressIndicator.vue'
-import { Pencil } from 'lucide-vue-next'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 export const columns: ColumnDef<DicomStudy>[] = [
@@ -33,7 +32,11 @@ export const columns: ColumnDef<DicomStudy>[] = [
       return h(DropdownMenu as any, {}, {
         default: () => [
           h(DropdownMenuTrigger as any, { asChild: true }, () => [
-            h(Button as any, { variant: 'ghost', size: 'icon-sm' }, () => '⋯')
+            h(Button as any, { 
+              variant: 'ghost', 
+              size: 'icon-sm',
+              'data-testid': `actions-menu-${study.id}`
+            }, () => '⋯')
           ]),
           h(DropdownMenuContent as any, { align: 'end' }, () => [
             h(DropdownMenuItem as any, {
@@ -46,7 +49,8 @@ export const columns: ColumnDef<DicomStudy>[] = [
               onClick: () => {
                 const openLog = (table.options.meta as any)?.openLogForStudy
                 if (openLog) openLog(study)
-              }
+              },
+              'data-testid': `view-log-${study.id}`
             }, () => 'View log')
           ])
         ]

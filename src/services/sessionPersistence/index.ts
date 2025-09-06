@@ -131,7 +131,6 @@ export const SessionPersistenceLive = Layer.scoped(
         )
 
         // Merge persisted assignedPatientId back into rebuilt studies
-        const map = new Map(persisted.studies.map(s => [s.studyInstanceUID, s.assignedPatientId]))
         const assignedMap = new Map(persisted.studies.map(s => [s.studyInstanceUID, s.assignedPatientId]))
         const customMap = new Map(persisted.studies.map(s => [s.studyInstanceUID, s.customFields]))
         const merged = studies.map(s => ({

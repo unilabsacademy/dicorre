@@ -141,7 +141,7 @@ export const AnonymizerLive = Layer.effect(
 
         // Keep only configured preserveTags; do not force-keep overrides so they can be replaced
         const configuredKeep = (config.preserveTags ? [...config.preserveTags] : []).map((k) => tag(k))
-        const keep = Array.from(new Set([...(configuredKeep || [])]))
+        const keep = Array.from(new Set((configuredKeep || [])))
 
         // Configure deidentifier options
         const deidentifierConfig: DeidentifyOptions = {

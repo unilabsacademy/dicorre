@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, computed } from 'vue'
+import { onMounted, computed, watch, nextTick } from 'vue'
 import { useStudyLogs } from '@/composables/useStudyLogs'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription } from '@/components/ui/sheet'
 
@@ -9,7 +9,29 @@ const emit = defineEmits<{ 'update:open': [boolean] }>()
 const { getLogs, logsFor } = useStudyLogs()
 const entries = computed(() => props.studyId ? logsFor(props.studyId).value : [])
 
-onMounted(() => { if (props.studyId) getLogs(props.studyId) })
+const loadLogs = (studyId: string) => {
+  getLogs(studyId)
+}
+
+onMounted(() => { 
+  if (props.studyId) {
+    loadLogs(props.studyId)
+  }
+})
+
+// Watch for studyId changes (when sheet is opened with different study)
+watch(() => props.studyId, (newStudyId, oldStudyId) => {
+  if (newStudyId && newStudyId !== oldStudyId) {
+    nextTick(() => loadLogs(newStudyId))
+  }
+}, { immediate: false })
+
+// Also watch for when the sheet opens
+watch(() => props.open, (newOpen) => {
+  if (newOpen && props.studyId) {
+    nextTick(() => loadLogs(props.studyId!))
+  }
+})
 
 function formatTs(ts: number) {
   const d = new Date(ts)
@@ -25,6 +47,7 @@ function formatTs(ts: number) {
     <SheetContent
       side="right"
       class="w-[480px]"
+      data-testid="study-log-sheet"
     >
       <SheetHeader>
         <SheetTitle>Study Log</SheetTitle>
@@ -37,11 +60,13 @@ function formatTs(ts: number) {
         <div
           v-if="entries.length === 0"
           class="text-sm text-muted-foreground"
+          data-testid="log-no-entries"
         >No entries</div>
         <div
           v-for="(e, idx) in entries"
           :key="idx"
           class="text-xs"
+          :data-testid="`log-entry-${e.level}`"
         >
           <div>
             <span class="font-mono text-[10px] opacity-60">{{ formatTs(e.ts) }}</span>
