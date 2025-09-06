@@ -18,6 +18,7 @@ import WorkerDebugPanel from '@/components/WorkerDebugPanel.vue'
 import AppToolbar from '@/components/AppToolbar.vue'
 import ConfigEditSheet from '@/components/ConfigEditSheet.vue'
 import CustomFieldsSheet from '@/components/CustomFieldsSheet.vue'
+import StudyLogSheet from '@/components/StudyLogSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
 import 'vue-sonner/style.css'
 
@@ -37,6 +38,9 @@ const isRestoring = ref(false)
 const restoreProgress = ref(0)
 const showConfigEditSheet = ref(false)
 const showCustomFieldsSheet = ref(false)
+const showLogSheet = ref(false)
+const logStudyId = ref<string | undefined>(undefined)
+const suppressLogSheetClose = ref(false)
 const suppressCustomFieldsClose = ref(false)
 
 const {
@@ -159,6 +163,15 @@ function openCustomFieldsForStudy(row: DicomStudy): void {
   const { rowSelection } = useTableState()
   rowSelection.value = { [row.studyInstanceUID]: true }
   showCustomFieldsSheet.value = true
+}
+
+function openLogForStudy(row: DicomStudy): void {
+  suppressLogSheetClose.value = true
+  setTimeout(() => { suppressLogSheetClose.value = false }, 200)
+  setTimeout(() => {
+    logStudyId.value = row.id
+    showLogSheet.value = true
+  }, 0)
 }
 
 function openCustomFieldsFromToolbar(): void {
@@ -317,6 +330,7 @@ function handleCustomFieldsUpdateOpen(next: boolean): void {
         :columns="columns"
         :data="studiesData"
         :open-custom-fields-for-study="openCustomFieldsForStudy"
+        :open-log-for-study="openLogForStudy"
         data-testid="studies-data-table"
       />
 
@@ -353,6 +367,12 @@ function handleCustomFieldsUpdateOpen(next: boolean): void {
       @update:open="handleCustomFieldsUpdateOpen"
       @save="(overrides) => appState.setCustomFieldsForSelected(overrides)"
       @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
+    />
+
+    <StudyLogSheet
+      :open="showLogSheet"
+      :study-id="logStudyId"
+      @update:open="(v) => { if (!(v === false && suppressLogSheetClose)) showLogSheet = v }"
     />
 
     <!-- Toast Notifications -->

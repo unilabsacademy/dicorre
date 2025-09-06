@@ -7,7 +7,7 @@ import { Button } from '@/components/ui/button'
 import { ArrowUp, ArrowDown } from 'lucide-vue-next'
 import StudyProgressIndicator from '@/components/StudyProgressIndicator.vue'
 import { Pencil } from 'lucide-vue-next'
-import StudyLogPopover from '@/components/StudyLogPopover.vue'
+import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 export const columns: ColumnDef<DicomStudy>[] = [
   {
@@ -26,33 +26,31 @@ export const columns: ColumnDef<DicomStudy>[] = [
     enableHiding: false,
   },
   {
-    id: 'log',
-    header: () => null,
-    cell: ({ row }) => {
-      const study = row.original
-      return h(StudyLogPopover as any, { studyId: study.id })
-    },
-    enableSorting: false,
-    enableHiding: false,
-  },
-  {
-    id: 'customFieldsAction',
+    id: 'actions',
     header: () => null,
     cell: ({ row, table }) => {
       const study = row.original
-      const hasOverrides = !!(study.customFields && Object.keys(study.customFields).length > 0)
-      return h(Button as any, {
-        variant: hasOverrides ? 'default' : 'ghost',
-        size: 'icon-sm',
-        onClick: () => {
-          // delegate to table meta callback if present
-          const open = (table.options.meta as any)?.openCustomFieldsForStudy
-          if (open) open(study)
-        },
-        'data-testid': 'row-custom-fields-button'
-      }, () => [
-        h(Pencil, { class: 'w-4 h-4' })
-      ])
+      return h(DropdownMenu as any, {}, {
+        default: () => [
+          h(DropdownMenuTrigger as any, { asChild: true }, () => [
+            h(Button as any, { variant: 'ghost', size: 'icon-sm' }, () => '⋯')
+          ]),
+          h(DropdownMenuContent as any, { align: 'end' }, () => [
+            h(DropdownMenuItem as any, {
+              onClick: () => {
+                const open = (table.options.meta as any)?.openCustomFieldsForStudy
+                if (open) open(study)
+              }
+            }, () => 'Edit custom fields'),
+            h(DropdownMenuItem as any, {
+              onClick: () => {
+                const openLog = (table.options.meta as any)?.openLogForStudy
+                if (openLog) openLog(study)
+              }
+            }, () => 'View log')
+          ])
+        ]
+      })
     },
     enableSorting: false,
     enableHiding: false,
