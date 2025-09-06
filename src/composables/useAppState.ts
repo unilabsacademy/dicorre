@@ -16,6 +16,7 @@ import { clearStudyCache } from '@/services/anonymizer/handlers'
 import { toast } from 'vue-sonner'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'
 import { StudyLogger } from '@/services/studyLogger'
+import { serializeError } from '@/services/studyLogger/errorUtils'
 
 export function useAppState(runtime: RuntimeType) {
   // Core application state
@@ -60,6 +61,7 @@ export function useAppState(runtime: RuntimeType) {
   const clearAppError = () => {
     appError.value = null
   }
+
   const groupSelectedStudies = async (): Promise<void> => {
     const selected = selectedStudies.value
     if (selected.length < 2) return
@@ -277,7 +279,10 @@ export function useAppState(runtime: RuntimeType) {
 
       const manager = getAnonymizationWorkerManager()
 
-      const promises = selectedStudies.value.map(study => {
+      // Snapshot selection to avoid index drift if studies/selection change during processing
+      const selectedSnapshot = selectedStudies.value.slice()
+
+      const promises = selectedSnapshot.map(study => {
         const studyFiles = study.series.flatMap(series => series.files)
 
         // Build patientIdMap based on currently assigned IDs for all studies in memory
@@ -343,7 +348,7 @@ export function useAppState(runtime: RuntimeType) {
               runtime.runPromise(
                 Effect.gen(function* () {
                   const logger = yield* StudyLogger
-                  yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Anonymization error`, details: String(err) })
+                  yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Anonymization error`, details: serializeError(err) })
                 })
               ).catch(() => { })
               console.error(`Anonymization error for study ${study.studyInstanceUID}:`, err)
@@ -356,10 +361,10 @@ export function useAppState(runtime: RuntimeType) {
 
       const results = await Promise.allSettled(promises)
       const successfulStudies = results
-        .map((r, idx) => (r.status === 'fulfilled' && r.value === true) ? selectedStudies.value[idx].studyInstanceUID : null)
+        .map((r, idx) => (r.status === 'fulfilled' && r.value === true) ? selectedSnapshot[idx]?.studyInstanceUID ?? null : null)
         .filter((v): v is string => v !== null)
       const failedStudies = results
-        .map((r, idx) => (r.status === 'fulfilled' && r.value === false) ? selectedStudies.value[idx].studyInstanceUID : null)
+        .map((r, idx) => (r.status === 'fulfilled' && r.value === false) ? selectedSnapshot[idx]?.studyInstanceUID ?? null : null)
         .filter((v): v is string => v !== null)
 
       if (failedStudies.length === 0) {
@@ -367,7 +372,7 @@ export function useAppState(runtime: RuntimeType) {
       } else if (successfulStudies.length === 0) {
         setAppError(new Error(`Failed to anonymize all ${failedStudies.length} studies`))
       } else {
-        successMessage.value = `Anonymized ${successfulStudies.length} of ${selectedStudies.value.length} studies. ${failedStudies.length} failed.`
+        successMessage.value = `Anonymized ${successfulStudies.length} of ${selectedSnapshot.length} studies. ${failedStudies.length} failed.`
       }
 
       clearSelection()
@@ -418,7 +423,11 @@ export function useAppState(runtime: RuntimeType) {
                   const message = (error && (error as any).message) ? String((error as any).message) : String(error)
                   const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
                   toast.error(`Plugin ${pluginId} beforeSend error`, { description: message })
-                  return Effect.succeed(undefined)
+                  return Effect.gen(function* () {
+                    const logger = yield* StudyLogger
+                    yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Plugin ${pluginId} beforeSend error`, details: serializeError(error) })
+                    return undefined
+                  })
                 })
               )
             }
@@ -473,7 +482,11 @@ export function useAppState(runtime: RuntimeType) {
                         const message = (error && (error as any).message) ? String((error as any).message) : String(error)
                         const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
                         toast.error(`Plugin ${pluginId} afterSend error`, { description: message })
-                        return Effect.succeed(undefined)
+                        return Effect.gen(function* () {
+                          const logger = yield* StudyLogger
+                          yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Plugin ${pluginId} afterSend error`, details: serializeError(error) })
+                          return undefined
+                        })
                       })
                     )
                   }
@@ -489,7 +502,7 @@ export function useAppState(runtime: RuntimeType) {
               console.error(`Error sending study ${study.studyInstanceUID}:`, err)
               removeStudySendingProgress(study.studyInstanceUID)
               const logger = yield* StudyLogger
-              yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Send error`, details: String(err) })
+              yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `Send error`, details: serializeError(err) })
               // onSendError hooks
               const registry = yield* PluginRegistry
               const hookPlugins = yield* registry.getHookPlugins()
@@ -503,7 +516,11 @@ export function useAppState(runtime: RuntimeType) {
                         const message = (error && (error as any).message) ? String((error as any).message) : String(error)
                         const pluginId = (error && (error as any).pluginId) ? String((error as any).pluginId) : plugin.id
                         toast.error(`Plugin ${pluginId} onSendError error`, { description: message })
-                        return Effect.succeed(undefined)
+                        return Effect.gen(function* () {
+                          const logger2 = yield* StudyLogger
+                          yield* logger2.append(study.id, { ts: Date.now(), level: 'error', message: `Plugin ${pluginId} onSendError error`, details: serializeError(error) })
+                          return undefined
+                        })
                       })
                     )
                   }

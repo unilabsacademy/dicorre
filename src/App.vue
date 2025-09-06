@@ -375,6 +375,7 @@ function handleLogSheetUpdateOpen(next: boolean): void {
       @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
     />
 
+    <!-- Study Log Sheet -->
     <StudyLogSheet
       :open="showLogSheet"
       :study-id="logStudyId"
