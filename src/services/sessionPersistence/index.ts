@@ -105,18 +105,16 @@ export const SessionPersistenceLive = Layer.scoped(
         const restored: DicomFile[] = []
         for (let idx = 0; idx < persisted.files.length; idx++) {
           const meta = persisted.files[idx]
-          const arrayBuffer = yield* Effect.catchAll(
-            storage.loadFile(meta.id),
-            () => Effect.succeed(new ArrayBuffer(0))
-          )
+          // Do not load bytes into memory; OPFS is the source of truth
           restored.push({
             id: meta.id,
             fileName: meta.fileName,
             fileSize: meta.fileSize,
-            arrayBuffer,
+            arrayBuffer: new ArrayBuffer(0),
             metadata: meta.metadata,
             anonymized: meta.anonymized,
-            sent: meta.sent
+            sent: meta.sent,
+            opfsFileId: meta.id
           })
           if (onProgress) {
             try {

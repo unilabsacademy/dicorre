@@ -17,6 +17,7 @@ import { toast } from 'vue-sonner'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'
 import { StudyLogger } from '@/services/studyLogger'
 import { serializeError } from '@/services/studyLogger/errorUtils'
+import { OPFSStorage } from '@/services/opfsStorage'
 
 export function useAppState(runtime: RuntimeType) {
   // Core application state
@@ -657,7 +658,13 @@ export function useAppState(runtime: RuntimeType) {
     // Remove files associated with selected studies
     dicomFiles.value = dicomFiles.value.filter(file => {
       if (file.metadata?.studyInstanceUID && studyIdsToClear.has(file.metadata.studyInstanceUID)) {
-        // Clear metadata for files being removed
+        // Best-effort: delete OPFS file to avoid lingering PII
+        runtime.runPromise(
+          Effect.gen(function* () {
+            const storage = yield* OPFSStorage
+            yield* storage.deleteFile(file.id).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+          })
+        ).catch(() => { })
         if (file.metadata) file.metadata = undefined
         return false
       }

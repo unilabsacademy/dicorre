@@ -52,6 +52,9 @@ export function useFileProcessing(runtime: RuntimeType) {
         if (!exists) {
           return yield* Effect.fail(new Error(`Failed to verify file in storage: ${f.fileName}`))
         }
+        // Enforce OPFS as source of truth in memory
+        f.opfsFileId = f.id
+        f.arrayBuffer = new ArrayBuffer(0)
         onProgress(i + 1, f)
       }
       return files

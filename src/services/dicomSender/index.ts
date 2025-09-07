@@ -146,6 +146,15 @@ export const DicomSenderLive = Layer.succeed(
       Effect.gen(function* () {
         if (files.length === 0) return []
 
+        // Enforce anonymized-only at the sender layer as defense in depth
+        const nonAnonymized = files.filter((f) => !f.anonymized)
+        if (nonAnonymized.length > 0) {
+          return yield* Effect.fail(new ValidationError({
+            message: `Attempted to send ${nonAnonymized.length} non-anonymized file(s)`,
+            fileName: nonAnonymized[0].fileName
+          }))
+        }
+
         const opfs = yield* OPFSStorage
         const sender = yield* DicomSender
         let completed = 0
@@ -153,11 +162,9 @@ export const DicomSenderLive = Layer.succeed(
 
         const sendEffects = files.map((file) =>
           Effect.gen(function* () {
-            let toSend = file
-            if (!toSend.arrayBuffer || toSend.arrayBuffer.byteLength === 0) {
-              const loaded = yield* opfs.loadFile(toSend.id)
-              toSend = { ...toSend, arrayBuffer: loaded }
-            }
+            // Always reload from OPFS to ensure sending canonical anonymized bytes
+            const loaded = yield* opfs.loadFile(file.id)
+            const toSend = { ...file, arrayBuffer: loaded }
             yield* sender.sendFile(toSend, config)
             completed++
             options?.onProgress?.(completed, total, toSend)
