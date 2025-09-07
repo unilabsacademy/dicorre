@@ -22,6 +22,16 @@ import StudyLogSheet from '@/components/StudyLogSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useDropdownSheetTransition } from '@/utils/dropdownSheetTransition'
 import 'vue-sonner/style.css'
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from '@/components/ui/alert-dialog'
 
 const runtime = ManagedRuntime.make(AppLayer)
 provide('appRuntime', runtime)
@@ -41,6 +51,8 @@ const showConfigEditSheet = ref(false)
 const showCustomFieldsSheet = ref(false)
 const showLogSheet = ref(false)
 const logStudyId = ref<string | undefined>(undefined)
+const showSendWarningDialog = ref(false)
+const pendingSendStudies = ref<DicomStudy[] | null>(null)
 
 // Setup dropdown-to-sheet transitions
 const customFieldsTransition = useDropdownSheetTransition()
@@ -117,6 +129,27 @@ async function testConnection() {
 
 async function handleSendSelected(selectedStudiesToSend: DicomStudy[]) {
   await appState.handleSendSelected(selectedStudiesToSend)
+}
+
+function attemptSendSelected() {
+  const selected = appState.selectedStudies.value
+  if (selected.length === 0) return
+  const hasNonAnonymized = selected.some(s =>
+    s.series.some(ser => ser.files.some(f => !f.anonymized))
+  )
+  if (hasNonAnonymized) {
+    pendingSendStudies.value = selected
+    showSendWarningDialog.value = true
+    return
+  }
+  handleSendSelected(selected)
+}
+
+function confirmSendAfterWarning() {
+  const toSend = pendingSendStudies.value ?? []
+  showSendWarningDialog.value = false
+  pendingSendStudies.value = null
+  if (toSend.length > 0) handleSendSelected(toSend)
 }
 
 function clearFiles() {
@@ -269,7 +302,7 @@ function handleLogSheetUpdateOpen(next: boolean): void {
         @create-project="appState.handleCreateProject"
         @anonymize-selected="anonymizeSelected"
         @group-selected="appState.groupSelectedStudies()"
-        @send-selected="handleSendSelected(appState.selectedStudies.value)"
+        @send-selected="attemptSendSelected()"
         @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
         @clear-all="clearFiles"
         @clear-selected="clearSelectedFiles"
@@ -384,5 +417,31 @@ function handleLogSheetUpdateOpen(next: boolean): void {
 
     <!-- Toast Notifications -->
     <Toaster />
+
+    <!-- Send Warning Dialog -->
+    <AlertDialog
+      :open="showSendWarningDialog"
+      @update:open="showSendWarningDialog = $event"
+    >
+      <AlertDialogContent>
+        <AlertDialogHeader>
+          <AlertDialogTitle>Some selected studies are not anonymized</AlertDialogTitle>
+          <AlertDialogDescription>
+            Only anonymized files will be sent. Non-anonymized files will be skipped and logged in the study log. Do you
+            want to continue?
+          </AlertDialogDescription>
+        </AlertDialogHeader>
+        <AlertDialogFooter>
+          <AlertDialogCancel>Cancel</AlertDialogCancel>
+          <AlertDialogAction
+            variant="default"
+            @click="confirmSendAfterWarning"
+            data-testid="confirm-send-non-anonymized"
+          >
+            Send anonymized only
+          </AlertDialogAction>
+        </AlertDialogFooter>
+      </AlertDialogContent>
+    </AlertDialog>
   </div>
 </template>
