@@ -14,7 +14,10 @@ export class DicomSender extends Context.Tag("DicomSender")<
       files: DicomFile[],
       config: DicomServerConfig,
       concurrency?: number,
-      options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+      options?: {
+        onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void
+        onSkip?: (file: DicomFile, reason: string) => void
+      }
     ) => Effect.Effect<DicomFile[], DicomSenderError | StorageErrorType, OPFSStorage | DicomSender>
   }
 >() { }
@@ -141,26 +144,35 @@ export const DicomSenderLive = Layer.succeed(
       files: DicomFile[],
       config: DicomServerConfig,
       concurrency = 3,
-      options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+      options?: {
+        onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void
+        onSkip?: (file: DicomFile, reason: string) => void
+      }
     ): Effect.Effect<DicomFile[], DicomSenderError | StorageErrorType, OPFSStorage | DicomSender> =>
       Effect.gen(function* () {
         if (files.length === 0) return []
 
-        // Enforce anonymized-only at the sender layer as defense in depth
+        // Skip non-anonymized files with callback, and fail only if none remain
+        const filesToSend = files.filter((f) => f.anonymized)
         const nonAnonymized = files.filter((f) => !f.anonymized)
         if (nonAnonymized.length > 0) {
+          for (const f of nonAnonymized) {
+            try { options?.onSkip?.(f, 'not anonymized') } catch { }
+          }
+        }
+        if (filesToSend.length === 0) {
           return yield* Effect.fail(new ValidationError({
-            message: `Attempted to send ${nonAnonymized.length} non-anonymized file(s)`,
-            fileName: nonAnonymized[0].fileName
+            message: 'No anonymized files to send',
+            fileName: nonAnonymized[0]?.fileName
           }))
         }
 
         const opfs = yield* OPFSStorage
         const sender = yield* DicomSender
         let completed = 0
-        const total = files.length
+        const total = filesToSend.length
 
-        const sendEffects = files.map((file) =>
+        const sendEffects = filesToSend.map((file) =>
           Effect.gen(function* () {
             // Always reload from OPFS to ensure sending canonical anonymized bytes
             const loaded = yield* opfs.loadFile(file.id)

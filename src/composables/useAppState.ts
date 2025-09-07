@@ -411,11 +411,27 @@ export function useAppState(runtime: RuntimeType) {
 
       // Build Effect per study (no streams)
       const studyEffects = selectedStudiesToSend.map(study => {
-        const studyFiles = study.series.flatMap(series => series.files).filter(file => file.anonymized)
+        const allFiles = study.series.flatMap(series => series.files)
+        const studyFiles = allFiles.filter(file => file.anonymized)
+        const nonAnonymizedFiles = allFiles.filter(file => !file.anonymized)
 
         const callBeforeSendHooks = Effect.gen(function* () {
           const registry = yield* PluginRegistry
           const hookPlugins = yield* registry.getHookPlugins()
+          // Log per-file skips for non-anonymized files
+          if (nonAnonymizedFiles.length > 0) {
+            const logger = yield* StudyLogger
+            for (const f of nonAnonymizedFiles) {
+              yield* logger.append(study.id, { ts: Date.now(), level: 'warn', message: `Skipped file not anonymized`, details: { fileName: f.fileName, id: f.id } })
+            }
+          }
+
+          // If nothing to send, record error and short-circuit hooks
+          if (studyFiles.length === 0) {
+            const logger = yield* StudyLogger
+            yield* logger.append(study.id, { ts: Date.now(), level: 'error', message: `No anonymized files to send; aborted` })
+            return undefined
+          }
           for (const plugin of hookPlugins) {
             if (plugin.hooks.beforeSend) {
               yield* plugin.hooks.beforeSend(study).pipe(
@@ -449,6 +465,14 @@ export function useAppState(runtime: RuntimeType) {
                 totalFiles: total,
                 currentFile: current?.fileName
               })
+            },
+            onSkip: (file, reason) => {
+              return runtime.runPromise(
+                Effect.gen(function* () {
+                  const logger = yield* StudyLogger
+                  yield* logger.append(study.id, { ts: Date.now(), level: 'warn', message: `Skipped file ${reason}`, details: { fileName: file.fileName, id: file.id } })
+                })
+              )
             }
           }
         ).pipe(
@@ -532,7 +556,12 @@ export function useAppState(runtime: RuntimeType) {
           )
         )
 
-        return Effect.flatMap(callBeforeSendHooks, () => sendEffect)
+        // If no anonymized files, make this effect fail to mark study as failed in tracking
+        const guardedEffect = studyFiles.length === 0
+          ? Effect.fail(new Error('No anonymized files to send'))
+          : sendEffect
+
+        return Effect.flatMap(callBeforeSendHooks, () => guardedEffect)
       })
 
       // Track successful and failed studies

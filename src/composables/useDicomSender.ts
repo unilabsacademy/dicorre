@@ -37,7 +37,7 @@ export function useDicomSender(runtime?: RuntimeType) {
     studyId: string,
     files: DicomFile[],
     concurrency: number,
-    options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void }
+    options?: { onProgress?: (completed: number, total: number, currentFile?: DicomFile) => void, onSkip?: (file: DicomFile, reason: string) => void }
   ): Effect.Effect<DicomFile[], Error, ConfigService | DicomSender | OPFSStorage> =>
     Effect.gen(function* () {
       if (!runtime) {
@@ -64,6 +64,11 @@ export function useDicomSender(runtime?: RuntimeType) {
             currentFile: currentFile?.fileName
           })
           options?.onProgress?.(completed, total, currentFile)
+        },
+        onSkip: (file, reason) => {
+          // Keep simple local progress state untouched; higher-level logging handled in useAppState
+          console.warn(`Skipping file for study ${studyId}: ${file.fileName} (${reason})`)
+          options?.onSkip?.(file, reason)
         }
       })
 
