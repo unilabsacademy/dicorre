@@ -98,8 +98,30 @@ export const SessionPersistenceLive = Layer.scoped(
     const restore = (onProgress?: (progress: number) => void): Effect.Effect<{ files: DicomFile[]; studies: DicomStudy[] }, never> =>
       Effect.gen(function* () {
         const persisted = yield* readPersisted
+
+        // Defensive OPFS GC before rebuilding any state
+        const opfsIds = yield* Effect.catchAll(
+          storage.listFiles,
+          () => Effect.succeed([] as string[])
+        )
         if (!persisted.files || persisted.files.length === 0) {
+          // No session references remain: purge all OPFS files
+          if (opfsIds.length > 0) {
+            const deleteAll = opfsIds.map((id) =>
+              storage.deleteFile(id).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+            )
+            yield* Effect.all(deleteAll, { concurrency: 5, batching: true })
+          }
           return { files: [], studies: [] }
+        } else if (opfsIds.length > 0) {
+          const persistedIds = new Set(persisted.files.map((m) => m.id))
+          const toDelete = opfsIds.filter((id) => !persistedIds.has(id))
+          if (toDelete.length > 0) {
+            const deleteDangling = toDelete.map((id) =>
+              storage.deleteFile(id).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+            )
+            yield* Effect.all(deleteDangling, { concurrency: 5, batching: true })
+          }
         }
 
         const restored: DicomFile[] = []
