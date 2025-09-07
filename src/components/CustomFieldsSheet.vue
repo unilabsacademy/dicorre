@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref, watch } from 'vue'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import { Label } from '@/components/ui/label'
 import type { RuntimeType } from '@/types/effects'
 import { getAllTagNames } from '@/utils/dicom-tag-dictionary'
+import { Combobox, ComboboxTrigger, ComboboxList, ComboboxItem, ComboboxAnchor, ComboboxInput, ComboboxViewport } from '@/components/ui/combobox'
 
 const props = defineProps<{
   open: boolean
@@ -26,12 +26,6 @@ const patientId = ref('')
 const isProcessing = ref(false)
 
 const allTagNames = getAllTagNames()
-const search = ref('')
-const filtered = computed(() => {
-  const t = search.value.trim().toLowerCase()
-  if (!t) return allTagNames
-  return allTagNames.filter(n => n.toLowerCase().includes(t))
-})
 
 function addRow() {
   rows.value = [...rows.value, { key: '', value: '' }]
@@ -105,42 +99,56 @@ watch(() => props.open, (isOpen) => {
       </SheetHeader>
 
       <div class="space-y-4 py-4">
-        <div class="space-y-2">
-          <Label>Assigned Patient ID</Label>
-          <Input
-            v-model="patientId"
-            placeholder="Enter Patient ID"
-            data-testid="custom-fields-patient-id-input"
-          />
-        </div>
-
-        <div class="space-y-2">
-          <Label>Search Fields</Label>
-          <Input
-            v-model="search"
-            placeholder="Search DICOM fields..."
-          />
-        </div>
-
         <div class="space-y-3">
+          <div class="grid grid-cols-12 gap-2 items-center">
+            <div class="col-span-6">
+              <div
+                class="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm select-none"
+              >
+                Patient ID
+              </div>
+            </div>
+            <div class="col-span-5">
+              <Input
+                v-model="patientId"
+                placeholder="Enter Patient ID"
+                data-testid="custom-fields-patient-id-input"
+                disabled
+              />
+            </div>
+            <div class="col-span-1"></div>
+          </div>
+
           <div
             v-for="(row, idx) in rows"
             :key="idx"
             class="grid grid-cols-12 gap-2 items-center"
           >
             <div class="col-span-6">
-              <select
-                class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
-                :value="row.key"
-                @change="setKey(idx, ($event.target as HTMLSelectElement).value)"
+              <Combobox
+                :model-value="row.key"
+                @update:model-value="(v) => setKey(idx, String(v))"
               >
-                <option value="">Select Field</option>
-                <option
-                  v-for="name in filtered"
-                  :key="name"
-                  :value="name"
-                >{{ name }}</option>
-              </select>
+                <ComboboxAnchor class="w-full">
+                  <ComboboxTrigger
+                    class="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  >
+                    {{ row.key || 'Select Field' }}
+                  </ComboboxTrigger>
+                </ComboboxAnchor>
+                <ComboboxList class="w-[320px]">
+                  <ComboboxInput placeholder="Search DICOM fields..." />
+                  <ComboboxViewport>
+                    <ComboboxItem
+                      v-for="name in allTagNames"
+                      :key="name"
+                      :value="name"
+                    >
+                      {{ name }}
+                    </ComboboxItem>
+                  </ComboboxViewport>
+                </ComboboxList>
+              </Combobox>
             </div>
             <div class="col-span-5">
               <Input
