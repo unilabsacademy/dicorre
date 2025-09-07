@@ -113,7 +113,6 @@ watch(() => props.open, (isOpen) => {
                 v-model="patientId"
                 placeholder="Enter Patient ID"
                 data-testid="custom-fields-patient-id-input"
-                disabled
               />
             </div>
             <div class="col-span-1"></div>
@@ -136,7 +135,10 @@ watch(() => props.open, (isOpen) => {
                     {{ row.key || 'Select Field' }}
                   </ComboboxTrigger>
                 </ComboboxAnchor>
-                <ComboboxList class="w-[320px]">
+                <ComboboxList
+                  class="w-[320px]"
+                  align="start"
+                >
                   <ComboboxInput placeholder="Search DICOM fields..." />
                   <ComboboxViewport>
                     <ComboboxItem
