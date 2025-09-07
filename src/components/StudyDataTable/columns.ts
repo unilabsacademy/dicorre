@@ -32,8 +32,8 @@ export const columns: ColumnDef<DicomStudy>[] = [
       return h(DropdownMenu as any, {}, {
         default: () => [
           h(DropdownMenuTrigger as any, { asChild: true }, () => [
-            h(Button as any, { 
-              variant: 'ghost', 
+            h(Button as any, {
+              variant: 'ghost',
               size: 'icon-sm',
               'data-testid': `actions-menu-${study.id}`
             }, () => '⋯')
@@ -64,19 +64,19 @@ export const columns: ColumnDef<DicomStudy>[] = [
     header: ({ column }) => {
       return h(Button, {
         variant: 'ghost',
-        class: '-mx-2 px-2 h-auto font-normal hover:bg-transparent flex items-center',
+        class: '-mx-2 px-0 h-auto font-normal hover:bg-transparent flex items-center',
         onClick: () => column.toggleSorting(column.getIsSorted() === 'asc'),
       }, () => [
         h('span', {}, 'Accession Number'),
         column.getIsSorted() ? h(
           column.getIsSorted() === 'asc' ? ArrowUp : ArrowDown,
-          { class: 'ml-1 h-3 w-3 opacity-50' }
+          { class: 'px-0 ml-1 h-3 w-3 opacity-50' }
         ) : null
       ])
     },
     cell: ({ row }) => {
       const accessionNumber = row.getValue('accessionNumber') as string
-      return h('div', { class: 'font-medium', 'data-testid': 'cell-accession-number' }, accessionNumber || 'Unknown Accession Number')
+      return h('div', { class: 'font-medium -ml-2', 'data-testid': 'cell-accession-number' }, accessionNumber || 'Unknown Accession Number')
     },
   },
   {

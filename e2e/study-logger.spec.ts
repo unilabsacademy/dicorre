@@ -55,12 +55,6 @@ test.describe('Study Logger - Final Tests', () => {
     // Verify it's an info level log
     const infoLogs = page.locator('[data-testid="log-entry-info"]');
     await expect(infoLogs).toHaveCount(1);
-
-    console.log('✅ StudyLogger test passed:');
-    console.log('  - Logs are properly stored during file parsing');
-    console.log('  - Logs are correctly retrieved and displayed in the UI');
-    console.log('  - Log sheet shows correct study ID');
-    console.log('  - Parse log message format is correct');
   });
 
   test('study logger shows empty state when no logs exist', async ({ page }) => {
@@ -94,10 +88,6 @@ test.describe('Study Logger - Final Tests', () => {
     
     // We should have either the no entries message OR actual log entries
     expect(hasNoEntries || logCount > 0).toBeTruthy();
-
-    console.log('✅ StudyLogger empty state test passed:');
-    console.log('  - UI properly handles cases with no log entries');
-    console.log('  - Log sheet opens correctly even when no logs exist');
   });
 
   test('study logger handles multiple files correctly', async ({ page }) => {
@@ -153,10 +143,5 @@ test.describe('Study Logger - Final Tests', () => {
     logEntries = page.locator('[data-testid^="log-entry-"]');
     const secondStudyLogCount = await logEntries.count();
     expect(secondStudyLogCount).toBeGreaterThan(0);
-
-    console.log('✅ StudyLogger multiple studies test passed:');
-    console.log(`  - First study has ${firstStudyLogCount} log entries`);
-    console.log(`  - Second study has ${secondStudyLogCount} log entries`);
-    console.log('  - Each study maintains separate logs correctly');
   });
 });
