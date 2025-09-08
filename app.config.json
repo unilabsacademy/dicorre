@@ -63,7 +63,9 @@
         "logLevel": "detailed"
       },
       "sent-notifier": {
-        "url": "https://example.org/api/sent"
+        "url": "https://example.org/api/sent",
+        "authHeaderName": "x-api-key",
+        "authHeaderValue": "YOUR_KEY"
       }
     }
   }
