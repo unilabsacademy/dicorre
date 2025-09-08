@@ -140,7 +140,11 @@ const PluginsConfigSchema = Schema.Struct({
   })
 )
 
+export const CURRENT_CONFIG_VERSION = 1 as const
+
 export const AppConfigSchema = Schema.Struct({
+  // Version is optional to allow loading legacy configs; migration will enforce current version.
+  version: Schema.optional(Schema.Number),
   dicomServer: DicomServerConfigSchema,
   anonymization: AnonymizationConfigSchema,
   project: Schema.optional(ProjectConfigSchema),

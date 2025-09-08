@@ -2,6 +2,8 @@ import { describe, it, expect } from 'vitest'
 import { Effect, Layer } from 'effect'
 import { ConfigService, ConfigServiceLive } from './index'
 import type { AppConfig, DicomProfileOption } from './schema'
+import { CURRENT_CONFIG_VERSION } from './schema'
+import { migrateConfig } from './migrations'
 import { ConfigPersistence } from './configPersistence'
 
 describe('ConfigService (Effect Service Testing)', () => {
@@ -113,6 +115,54 @@ describe('ConfigService (Effect Service Testing)', () => {
       expect(config.profileOptions).toBeDefined()
       expect(Array.isArray(config.profileOptions)).toBe(true)
       expect(config.profileOptions.length).toBeGreaterThan(0)
+    })
+  })
+
+  describe('Migrations', () => {
+    it('migrates legacy persisted config without version and fills defaults', () => {
+      const legacy = {
+        dicomServer: {
+          url: '/api/test'
+        },
+        anonymization: {
+          profileOptions: ['BasicProfile'],
+          removePrivateTags: true
+        }
+      }
+      const migrated = migrateConfig(legacy, { source: 'persisted' })
+      expect(migrated.version).toBe(CURRENT_CONFIG_VERSION)
+      expect(migrated.dicomServer.timeout).toBeDefined()
+      expect(Array.isArray(migrated.anonymization.profileOptions)).toBe(true)
+    })
+
+    it('preserves user overrides over defaults during persisted migration', () => {
+      const legacy = {
+        dicomServer: {
+          url: 'http://custom',
+          timeout: 1234
+        },
+        anonymization: {
+          profileOptions: ['BasicProfile'],
+          removePrivateTags: false
+        },
+        plugins: {
+          enabled: ['image-converter']
+        }
+      }
+      const migrated = migrateConfig(legacy, { source: 'persisted' })
+      expect(migrated.version).toBe(CURRENT_CONFIG_VERSION)
+      expect(migrated.dicomServer.url).toBe('http://custom')
+      expect(migrated.dicomServer.timeout).toBe(1234)
+      expect(migrated.anonymization.removePrivateTags).toBe(false)
+      expect(migrated.plugins?.enabled).toContain('image-converter')
+    })
+
+    it('rejects invalid uploaded config without filling defaults', () => {
+      const invalidUploaded = {
+        dicomServer: { timeout: 30000 },
+        anonymization: { profile: 'basic', removePrivateTags: true }
+      }
+      expect(() => migrateConfig(invalidUploaded, { source: 'uploaded' })).toThrow()
     })
   })
 

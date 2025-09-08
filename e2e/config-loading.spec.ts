@@ -10,6 +10,7 @@ test.describe('Config Loading', () => {
 
   test('loads valid config file', async ({ page }) => {
     const validConfig = {
+      // Simulate legacy file without version; migration should fill and persist version
       dicomServer: {
         url: "/api/orthanc/dicom-web",
         headers: {},
@@ -51,6 +52,26 @@ test.describe('Config Loading', () => {
       }
     }
   });
+
+  test('migrates legacy persisted config on startup', async ({ page }) => {
+    // Inject a legacy config into localStorage before app code runs
+    await page.addInitScript(() => {
+      const legacy = {
+        dicomServer: { url: '/api/test', timeout: 1234, auth: null },
+        anonymization: { profileOptions: ['BasicProfile'], removePrivateTags: true }
+      }
+      localStorage.setItem('app-config', JSON.stringify(legacy))
+    })
+
+    await page.goto('/')
+    await waitForAppReady(page)
+
+    // Open settings to ensure app didn't crash and config is applied
+    await page.getByTestId('edit-project-button').click()
+
+    // After migration, toolbar should still be visible (app working)
+    await expect(page.getByTestId('app-toolbar')).toBeVisible()
+  })
 
   test('shows error for invalid config', async ({ page }) => {
     // Create an invalid config (missing required url field)

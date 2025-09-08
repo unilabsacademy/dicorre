@@ -2,9 +2,10 @@ import { Effect, Context, Layer, SubscriptionRef, Stream } from "effect"
 import type { AppConfig, DicomServerConfig, AnonymizationConfig, DicomProfileOption, ProjectConfig } from './schema'
 import { ConfigurationError, type ConfigurationError as ConfigurationErrorType } from '@/types/effects'
 import defaultConfig from '@/../app.config.json'
-import { validateAppConfig } from './schema'
+import { validateAppConfig, CURRENT_CONFIG_VERSION, type AppConfig as AppConfigType } from './schema'
 import { tagNameToHex, isValidTagName } from '@/utils/dicom-tag-dictionary'
 import { ConfigPersistence } from './configPersistence'
+import { migrateConfig } from './migrations'
 
 export class ConfigService extends Context.Tag("ConfigService")<
   ConfigService,
@@ -28,10 +29,22 @@ export const ConfigServiceLive = Layer.scoped(
     const ref = yield* SubscriptionRef.make(defaultConfig as AppConfig)
     const persistence = yield* ConfigPersistence
 
-    // On init, attempt to load persisted config; fall back to default
+    // On init, attempt to load persisted config; migrate or fall back to default
     const persisted = yield* persistence.load
     if (persisted) {
-      yield* SubscriptionRef.set(ref, persisted)
+      try {
+        const migrated = migrateConfig(persisted, { source: 'persisted' })
+        yield* SubscriptionRef.set(ref, migrated)
+        yield* persistence.save(migrated)
+      } catch {
+        const fallback = { ...(defaultConfig as AppConfigType), version: CURRENT_CONFIG_VERSION }
+        yield* SubscriptionRef.set(ref, fallback)
+        yield* persistence.save(fallback)
+      }
+    } else {
+      const fallback = { ...(defaultConfig as AppConfigType), version: CURRENT_CONFIG_VERSION }
+      yield* SubscriptionRef.set(ref, fallback)
+      yield* persistence.save(fallback)
     }
 
     const validateConfig = (configToValidate: unknown): Effect.Effect<AppConfig, ConfigurationErrorType> =>
@@ -81,10 +94,19 @@ export const ConfigServiceLive = Layer.scoped(
     })
 
     const loadConfig = (configData: unknown): Effect.Effect<void, ConfigurationErrorType> => Effect.gen(function* () {
-      const validatedConfig = yield* validateConfig(configData)
-      yield* SubscriptionRef.set(ref, validatedConfig)
-      yield* persistence.save(validatedConfig)
-      console.log('Configuration loaded successfully:', validatedConfig)
+      try {
+        const migrated = migrateConfig(configData, { source: 'uploaded' })
+        yield* SubscriptionRef.set(ref, migrated)
+        yield* persistence.save(migrated)
+        console.log('Configuration loaded successfully:', migrated)
+      } catch (e) {
+        const error = e as Error
+        throw new ConfigurationError({
+          message: `Configuration migration/validation failed: ${error.message}`,
+          setting: 'config',
+          value: configData
+        })
+      }
     })
 
     const getCurrentConfig: Effect.Effect<AppConfig, never> =

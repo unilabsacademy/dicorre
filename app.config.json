@@ -1,4 +1,5 @@
 {
+  "version": 1,
   "dicomServer": {
     "url": "/api/orthanc/dicom-web",
     "headers": {},
