@@ -99,7 +99,8 @@ export const TestPluginRegistryLayer = Layer.succeed(
     getSupportedMimeTypes: () => Effect.succeed(['application/zip']),
     enablePlugin: () => Effect.succeed(undefined),
     disablePlugin: () => Effect.succeed(undefined),
-    loadPluginConfig: () => Effect.succeed(undefined)
+    loadPluginConfig: () => Effect.succeed(undefined),
+    getPluginSettings: () => Effect.succeed(undefined)
   })
 )
 
