@@ -26,6 +26,23 @@ export class SentNotifierPlugin implements HookPlugin {
         const params: Record<string, unknown> =
           ((project as any)?.plugins?.settings?.['sent-notifier']?.params as Record<string, unknown>) || {}
 
+        const computedHeaders: Record<string, string> = { 'Content-Type': 'application/json' }
+
+        const authHeaderName: string | undefined = pluginSettings.authHeaderName || pluginSettings.apiKeyHeader
+        const authHeaderValue: string | undefined = pluginSettings.authHeaderValue || pluginSettings.apiKey
+        if (authHeaderName && authHeaderValue) {
+          computedHeaders[String(authHeaderName)] = String(authHeaderValue)
+        }
+
+        const extraHeaders = pluginSettings.headers
+        if (extraHeaders && typeof extraHeaders === 'object') {
+          for (const [k, v] of Object.entries(extraHeaders as Record<string, unknown>)) {
+            if (k && v != null) {
+              computedHeaders[String(k)] = String(v)
+            }
+          }
+        }
+
         const payload = {
           studyInstanceUID: study.studyInstanceUID,
           accessionNumber: study.accessionNumber,
@@ -37,7 +54,7 @@ export class SentNotifierPlugin implements HookPlugin {
             console.log("[SENT-NOTIFIER]: Trying to send", payload)
             const resp = await fetch(url, {
               method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
+              headers: computedHeaders,
               body: JSON.stringify(payload)
             })
             if (!resp.ok) {
