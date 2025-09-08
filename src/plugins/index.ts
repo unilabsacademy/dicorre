@@ -41,8 +41,10 @@ export const loadPlugins = (config?: PluginConfig) =>
 
     // Get registered plugins for confirmation
     const registeredPlugins = yield* registry.getAllPlugins()
-    console.log(`Successfully loaded ${registeredPlugins.length} plugins:`,
-      registeredPlugins.map(p => `${p.name} (${p.id})`).join(', ')
+    const enabledPlugins = registeredPlugins.filter(p => p.enabled === true)
+    console.log(
+      `Registered ${registeredPlugins.length} plugins; enabled ${enabledPlugins.length}:`,
+      enabledPlugins.map(p => `${p.name} (${p.id})`).join(', ')
     )
 
     return registeredPlugins

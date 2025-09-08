@@ -46,6 +46,9 @@ export const PluginRegistryLive = Layer.succeed(
           enabledPlugins.add(plugin.id)
           plugin.enabled = true
           console.log(`Plugin ${plugin.id} auto-enabled from config`)
+        } else {
+          // Explicitly mark as disabled so filters don't treat undefined as enabled
+          plugin.enabled = false
         }
       })
 
@@ -72,13 +75,13 @@ export const PluginRegistryLive = Layer.succeed(
     const getFileFormatPlugins = (): Effect.Effect<FileFormatPlugin[], never> =>
       Effect.sync(() => {
         const pluginArray = Array.from(plugins.values())
-        return pluginArray.filter(isFileFormatPlugin).filter(p => p.enabled !== false)
+        return pluginArray.filter(isFileFormatPlugin).filter(p => p.enabled === true)
       })
 
     const getHookPlugins = (): Effect.Effect<HookPlugin[], never> =>
       Effect.sync(() => {
         const pluginArray = Array.from(plugins.values())
-        return pluginArray.filter(isHookPlugin).filter(p => p.enabled !== false)
+        return pluginArray.filter(isHookPlugin).filter(p => p.enabled === true)
       })
 
     const getPluginForFile = (file: File): Effect.Effect<FileFormatPlugin | undefined, PluginErrorType> =>
