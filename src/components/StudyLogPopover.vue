@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { onMounted, computed, ref } from 'vue'
 import { Button } from '@/components/ui/button'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { Card, CardContent } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { useStudyLogs } from '@/composables/useStudyLogs'
@@ -23,14 +24,19 @@ function formatTs(ts: number) {
 
 <template>
   <div class="relative inline-block">
-    <Button
-      variant="ghost"
-      size="icon-sm"
-      :class="hasError ? 'text-red-600' : 'text-muted-foreground'"
-      @click.stop="open = !open"
-    >
-      📘
-    </Button>
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          :class="hasError ? 'text-red-600' : 'text-muted-foreground'"
+          @click.stop="open = !open"
+        >
+          📘
+        </Button>
+      </TooltipTrigger>
+      <TooltipContent>Toggle study log</TooltipContent>
+    </Tooltip>
     <div
       v-if="open"
       class="absolute z-50 mt-2 right-0 w-96 shadow-lg border bg-background rounded-md p-2"

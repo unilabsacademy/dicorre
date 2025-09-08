@@ -22,6 +22,7 @@ import StudyLogSheet from '@/components/StudyLogSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useDropdownSheetTransition } from '@/utils/dropdownSheetTransition'
 import 'vue-sonner/style.css'
+import { TooltipProvider } from '@/components/ui/tooltip'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -228,220 +229,223 @@ function handleLogSheetUpdateOpen(next: boolean): void {
 </script>
 
 <template>
-  <div
-    class="min-h-screen bg-background p-6 relative"
-    @dragenter="(event) => handleGlobalDragEnter(event)"
-    @dragleave="(event) => handleGlobalDragLeave(event)"
-    @dragover="(event) => handleGlobalDragOver(event)"
-    @drop="(event) => handleGlobalDrop(event, { onFilesAdded: addFilesToUploaded, onProcessFiles: processNewFiles })"
-  >
-    <!-- Global Drag Overlay -->
+  <TooltipProvider>
     <div
-      v-if="isGlobalDragOver"
-      class="fixed inset-0 z-50 bg-primary/10 backdrop-blur-sm flex items-center justify-center"
-      data-testid="global-drag-overlay"
+      class="min-h-screen bg-background p-6 relative"
+      @dragenter="(event) => handleGlobalDragEnter(event)"
+      @dragleave="(event) => handleGlobalDragLeave(event)"
+      @dragover="(event) => handleGlobalDragOver(event)"
+      @drop="(event) => handleGlobalDrop(event, { onFilesAdded: addFilesToUploaded, onProcessFiles: processNewFiles })"
     >
-      <div class="bg-background border-2 border-dashed border-primary rounded-lg p-12 text-center">
-        <div class="text-6xl text-primary mb-4">📁</div>
-        <p class="text-2xl font-semibold text-primary">Drop files to upload</p>
-        <p class="text-muted-foreground mt-2">Release to add DICOM files</p>
-      </div>
-    </div>
-
-    <div class="mx-auto max-w-7xl space-y-2">
-      <!-- Error Display -->
-      <Alert
-        v-if="error"
-        :variant="error?.includes('browser') ? 'default' : 'destructive'"
-      >
-        <AlertDescription>
-          {{ error }}
-          <Button
-            v-if="!error?.includes('browser')"
-            variant="ghost"
-            size="sm"
-            @click="error ? (error = undefined) : appState.clearAppError()"
-            class="ml-2 h-auto p-1"
-          >
-            ×
-          </Button>
-          <div
-            v-if="error?.includes('browser')"
-            class="mt-2 text-sm"
-          >
-            <p>This application requires modern browser features for optimal performance.</p>
-            <p>Supported browsers: Chrome 86+, Edge 86+, Safari 15.2+, Firefox 111+</p>
-          </div>
-        </AlertDescription>
-      </Alert>
-
-      <!-- Configuration Loading State -->
-      <Card v-if="appState.configLoading.value">
-        <CardContent class="flex items-center justify-center py-8">
-          <div class="text-center space-y-4 w-full max-w-md">
-            <p class="text-muted-foreground">
-              Loading configuration...
-            </p>
-            <Progress
-              :model-value="50"
-              class="w-full"
-            />
-          </div>
-        </CardContent>
-      </Card>
-
-
-      <!-- Consolidated Toolbar -->
-      <AppToolbar
-        v-if="isAppReady"
-        :current-project="appState.currentProject.value"
-        :is-project-mode="appState.isProjectMode.value"
-        :selected-studies-count="appState.selectedStudiesCount.value"
-        :is-processing="hasActiveProcessing()"
-        :is-downloading="isDownloading"
-        @create-project="appState.handleCreateProject"
-        @anonymize-selected="anonymizeSelected"
-        @group-selected="appState.groupSelectedStudies()"
-        @send-selected="attemptSendSelected()"
-        @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
-        @clear-all="clearFiles"
-        @clear-selected="clearSelectedFiles"
-        @test-connection="testConnection"
-        @config-loaded="handleConfigLoaded"
-        @add-files="(files) => { addFilesToUploaded(files); processNewFiles(files) }"
-        @open-config-editor="showConfigEditSheet = true"
-        @open-custom-fields-editor="openCustomFieldsFromToolbar"
-      />
-
-      <!-- File Processing Progress -->
-      <!-- Individual file processing progress indicators -->
+      <!-- Global Drag Overlay -->
       <div
-        v-if="getAllTasks().length > 0"
-        class="space-y-2"
+        v-if="isGlobalDragOver"
+        class="fixed inset-0 z-50 bg-primary/10 backdrop-blur-sm flex items-center justify-center"
+        data-testid="global-drag-overlay"
       >
-        <div
-          v-if="getRunningTasks().length > 0"
-          class="flex items-center justify-between mb-2"
+        <div class="bg-background border-2 border-dashed border-primary rounded-lg p-12 text-center">
+          <div class="text-6xl text-primary mb-4">📁</div>
+          <p class="text-2xl font-semibold text-primary">Drop files to upload</p>
+          <p class="text-muted-foreground mt-2">Release to add DICOM files</p>
+        </div>
+      </div>
+
+      <div class="mx-auto max-w-7xl space-y-2">
+        <!-- Error Display -->
+        <Alert
+          v-if="error"
+          :variant="error?.includes('browser') ? 'default' : 'destructive'"
         >
-          <div class="text-sm font-medium text-muted-foreground">
-            Processing {{ getRunningTasks().length }} file{{ getRunningTasks().length !== 1
-              ? 's' : '' }} concurrently
-          </div>
-          <Button
-            variant="outline"
-            size="sm"
-            class="h-7 px-3 text-xs"
-            @click="cancelAll"
+          <AlertDescription>
+            {{ error }}
+            <Button
+              v-if="!error?.includes('browser')"
+              variant="ghost"
+              size="sm"
+              @click="error ? (error = undefined) : appState.clearAppError()"
+              class="ml-2 h-auto p-1"
+            >
+              ×
+            </Button>
+            <div
+              v-if="error?.includes('browser')"
+              class="mt-2 text-sm"
+            >
+              <p>This application requires modern browser features for optimal performance.</p>
+              <p>Supported browsers: Chrome 86+, Edge 86+, Safari 15.2+, Firefox 111+</p>
+            </div>
+          </AlertDescription>
+        </Alert>
+
+        <!-- Configuration Loading State -->
+        <Card v-if="appState.configLoading.value">
+          <CardContent class="flex items-center justify-center py-8">
+            <div class="text-center space-y-4 w-full max-w-md">
+              <p class="text-muted-foreground">
+                Loading configuration...
+              </p>
+              <Progress
+                :model-value="50"
+                class="w-full"
+              />
+            </div>
+          </CardContent>
+        </Card>
+
+
+        <!-- Consolidated Toolbar -->
+        <AppToolbar
+          v-if="isAppReady"
+          :current-project="appState.currentProject.value"
+          :is-project-mode="appState.isProjectMode.value"
+          :selected-studies-count="appState.selectedStudiesCount.value"
+          :is-processing="hasActiveProcessing()"
+          :is-downloading="isDownloading"
+          @create-project="appState.handleCreateProject"
+          @anonymize-selected="anonymizeSelected"
+          @group-selected="appState.groupSelectedStudies()"
+          @send-selected="attemptSendSelected()"
+          @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
+          @clear-all="clearFiles"
+          @clear-selected="clearSelectedFiles"
+          @test-connection="testConnection"
+          @config-loaded="handleConfigLoaded"
+          @add-files="(files) => { addFilesToUploaded(files); processNewFiles(files) }"
+          @open-config-editor="showConfigEditSheet = true"
+          @open-custom-fields-editor="openCustomFieldsFromToolbar"
+        />
+
+        <!-- File Processing Progress -->
+        <!-- Individual file processing progress indicators -->
+        <div
+          v-if="getAllTasks().length > 0"
+          class="space-y-2"
+        >
+          <div
+            v-if="getRunningTasks().length > 0"
+            class="flex items-center justify-between mb-2"
           >
-            Cancel All
-          </Button>
+            <div class="text-sm font-medium text-muted-foreground">
+              Processing {{ getRunningTasks().length }} file{{ getRunningTasks().length !== 1
+                ? 's' : '' }} concurrently
+            </div>
+            <Button
+              variant="outline"
+              size="sm"
+              class="h-7 px-3 text-xs"
+              @click="cancelAll"
+            >
+              Cancel All
+            </Button>
+          </div>
+
+          <FileProcessingProgress
+            v-for="state in getAllTasks()"
+            :key="state.taskId"
+            :file-name="state.fileName"
+            :current-step="state.currentStep"
+            :progress="state.progress"
+            :error="state.error"
+            @close="removeTask(state.taskId)"
+          />
         </div>
 
-        <FileProcessingProgress
-          v-for="state in getAllTasks()"
-          :key="state.taskId"
-          :file-name="state.fileName"
-          :current-step="state.currentStep"
-          :progress="state.progress"
-          :error="state.error"
-          @close="removeTask(state.taskId)"
+
+        <!-- Studies Data Table or Session Restore Loading State -->
+        <Card v-if="isRestoring">
+          <CardContent class="flex items-center justify-center py-8">
+            <div class="text-center space-y-4 w-full max-w-md">
+              <p class="text-muted-foreground">
+                {{ isRestoring ? 'Restoring previous session...' : 'Processing files...' }}
+              </p>
+              <Progress
+                v-if="isRestoring && restoreProgress > 0"
+                :model-value="restoreProgress"
+                class="w-full"
+              />
+            </div>
+          </CardContent>
+        </Card>
+        <DataTable
+          v-else
+          :columns="columns"
+          :data="studiesData"
+          :open-custom-fields-for-study="openCustomFieldsForStudy"
+          :open-log-for-study="openLogForStudy"
+          data-testid="studies-data-table"
         />
+
+        <!-- File counts for testing (small text at bottom) -->
+        <div
+          v-if="appState.dicomFiles.value.length > 0 || appState.anonymizedFilesCount.value > 0"
+          class="text-xs text-muted-foreground mt-4 flex gap-4"
+        >
+          <span data-testid="files-count-badge">Files: {{ appState.dicomFiles.value.length }}</span>
+          <span data-testid="anonymized-count-badge">Anonymized: {{ appState.anonymizedFilesCount.value }}</span>
+        </div>
       </div>
 
+      <!-- Worker Debug Panel -->
+      <WorkerDebugPanel />
 
-      <!-- Studies Data Table or Session Restore Loading State -->
-      <Card v-if="isRestoring">
-        <CardContent class="flex items-center justify-center py-8">
-          <div class="text-center space-y-4 w-full max-w-md">
-            <p class="text-muted-foreground">
-              {{ isRestoring ? 'Restoring previous session...' : 'Processing files...' }}
-            </p>
-            <Progress
-              v-if="isRestoring && restoreProgress > 0"
-              :model-value="restoreProgress"
-              class="w-full"
-            />
-          </div>
-        </CardContent>
-      </Card>
-      <DataTable
-        v-else
-        :columns="columns"
-        :data="studiesData"
-        :open-custom-fields-for-study="openCustomFieldsForStudy"
-        :open-log-for-study="openLogForStudy"
-        data-testid="studies-data-table"
+      <!-- Config Edit Sheet (App-level) -->
+      <ConfigEditSheet
+        :runtime="runtime"
+        :current-project="appState.currentProject.value"
+        :is-project-mode="appState.isProjectMode.value"
+        :open="showConfigEditSheet"
+        @update:open="showConfigEditSheet = $event"
+        @config-updated="handleConfigLoaded"
+        @create-project="(name) => appState.handleCreateProject(name)"
       />
 
-      <!-- File counts for testing (small text at bottom) -->
-      <div
-        v-if="appState.dicomFiles.value.length > 0 || appState.anonymizedFilesCount.value > 0"
-        class="text-xs text-muted-foreground mt-4 flex gap-4"
+      <!-- Custom Fields Sheet -->
+      <CustomFieldsSheet
+        :runtime="runtime"
+        :open="showCustomFieldsSheet"
+        :initial-overrides="initialOverrides"
+        :initial-assigned-patient-id="initialAssignedPatientId"
+        @update:open="handleCustomFieldsUpdateOpen"
+        @save="(overrides) => appState.setCustomFieldsForSelected(overrides)"
+        @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
+      />
+
+      <!-- Study Log Sheet -->
+      <StudyLogSheet
+        :open="showLogSheet"
+        :study-id="logStudyId"
+        @update:open="handleLogSheetUpdateOpen"
+      />
+
+      <!-- Toast Notifications -->
+      <Toaster />
+
+      <!-- Send Warning Dialog -->
+      <AlertDialog
+        :open="showSendWarningDialog"
+        @update:open="showSendWarningDialog = $event"
       >
-        <span data-testid="files-count-badge">Files: {{ appState.dicomFiles.value.length }}</span>
-        <span data-testid="anonymized-count-badge">Anonymized: {{ appState.anonymizedFilesCount.value }}</span>
-      </div>
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Some selected studies are not anonymized</AlertDialogTitle>
+            <AlertDialogDescription>
+              Only anonymized files will be sent. Non-anonymized files will be skipped and logged in the study log. Do
+              you
+              want to continue?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="default"
+              @click="confirmSendAfterWarning"
+              data-testid="confirm-send-non-anonymized"
+            >
+              Send anonymized only
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
     </div>
-
-    <!-- Worker Debug Panel -->
-    <WorkerDebugPanel />
-
-    <!-- Config Edit Sheet (App-level) -->
-    <ConfigEditSheet
-      :runtime="runtime"
-      :current-project="appState.currentProject.value"
-      :is-project-mode="appState.isProjectMode.value"
-      :open="showConfigEditSheet"
-      @update:open="showConfigEditSheet = $event"
-      @config-updated="handleConfigLoaded"
-      @create-project="(name) => appState.handleCreateProject(name)"
-    />
-
-    <!-- Custom Fields Sheet -->
-    <CustomFieldsSheet
-      :runtime="runtime"
-      :open="showCustomFieldsSheet"
-      :initial-overrides="initialOverrides"
-      :initial-assigned-patient-id="initialAssignedPatientId"
-      @update:open="handleCustomFieldsUpdateOpen"
-      @save="(overrides) => appState.setCustomFieldsForSelected(overrides)"
-      @assign-patient-id="(pid) => appState.assignPatientIdToSelected(pid)"
-    />
-
-    <!-- Study Log Sheet -->
-    <StudyLogSheet
-      :open="showLogSheet"
-      :study-id="logStudyId"
-      @update:open="handleLogSheetUpdateOpen"
-    />
-
-    <!-- Toast Notifications -->
-    <Toaster />
-
-    <!-- Send Warning Dialog -->
-    <AlertDialog
-      :open="showSendWarningDialog"
-      @update:open="showSendWarningDialog = $event"
-    >
-      <AlertDialogContent>
-        <AlertDialogHeader>
-          <AlertDialogTitle>Some selected studies are not anonymized</AlertDialogTitle>
-          <AlertDialogDescription>
-            Only anonymized files will be sent. Non-anonymized files will be skipped and logged in the study log. Do you
-            want to continue?
-          </AlertDialogDescription>
-        </AlertDialogHeader>
-        <AlertDialogFooter>
-          <AlertDialogCancel>Cancel</AlertDialogCancel>
-          <AlertDialogAction
-            variant="default"
-            @click="confirmSendAfterWarning"
-            data-testid="confirm-send-non-anonymized"
-          >
-            Send anonymized only
-          </AlertDialogAction>
-        </AlertDialogFooter>
-      </AlertDialogContent>
-    </AlertDialog>
-  </div>
+  </TooltipProvider>
 </template>

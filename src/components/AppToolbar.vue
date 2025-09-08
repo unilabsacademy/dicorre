@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
 import {
   Shield,
   Send,
@@ -128,24 +129,34 @@ const clearDialogDescription = computed(() => {
           </span>
         </div>
 
-        <Button
-          @click="emit('openConfigEditor')"
-          variant="outline"
-          size="sm"
-          data-testid="edit-project-button"
-        >
-          <Settings2 class="w-4 h-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              @click="emit('openConfigEditor')"
+              variant="outline"
+              size="sm"
+              data-testid="edit-project-button"
+            >
+              <Settings2 class="w-4 h-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Edit settings</TooltipContent>
+        </Tooltip>
 
-        <Button
-          @click="handleShareProject"
-          variant="outline"
-          size="sm"
-          :disabled="!isProjectMode"
-          data-testid="share-project-button"
-        >
-          <Link class="h-4 w-4" />
-        </Button>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Button
+              @click="handleShareProject"
+              variant="outline"
+              size="sm"
+              :disabled="!isProjectMode"
+              data-testid="share-project-button"
+            >
+              <Link class="h-4 w-4" />
+            </Button>
+          </TooltipTrigger>
+          <TooltipContent>Copy shareable link</TooltipContent>
+        </Tooltip>
 
 
       </div>

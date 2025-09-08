@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import type { RuntimeType } from '@/types/effects'
 import { getAllTagNames } from '@/utils/dicom-tag-dictionary'
 import { Combobox, ComboboxTrigger, ComboboxList, ComboboxItem, ComboboxAnchor, ComboboxInput, ComboboxViewport } from '@/components/ui/combobox'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const props = defineProps<{
   open: boolean
@@ -160,11 +161,16 @@ watch(() => props.open, (isOpen) => {
               />
             </div>
             <div class="col-span-1">
-              <Button
-                variant="outline"
-                size="icon"
-                @click="removeRow(idx)"
-              >✕</Button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Button
+                    variant="outline"
+                    size="icon"
+                    @click="removeRow(idx)"
+                  >✕</Button>
+                </TooltipTrigger>
+                <TooltipContent>Remove field</TooltipContent>
+              </Tooltip>
             </div>
           </div>
 

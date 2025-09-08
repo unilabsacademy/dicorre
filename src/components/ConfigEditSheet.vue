@@ -22,6 +22,7 @@ import type { ProjectConfig } from '@/services/config/schema'
 import { ConfigService } from '@/services/config'
 import ConfigLoader from '@/components/ConfigLoader.vue'
 import { useProjectSharing } from '@/composables/useProjectSharing'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
 const props = defineProps<{
   open: boolean
@@ -321,14 +322,19 @@ function handleDownloadConfig() {
                       placeholder="Value"
                       :disabled="isProcessing"
                     />
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      @click="removeParam(idx)"
-                      :disabled="isProcessing"
-                    >
-                      <X class="w-4 h-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          @click="removeParam(idx)"
+                          :disabled="isProcessing"
+                        >
+                          <X class="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Remove parameter</TooltipContent>
+                    </Tooltip>
                   </div>
                   <Button
                     variant="outline"
@@ -401,14 +407,19 @@ function handleDownloadConfig() {
                       placeholder="Header value"
                       :disabled="isProcessing"
                     />
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      @click="removeRecordItem('dicomServer.headers', String(key))"
-                      :disabled="isProcessing"
-                    >
-                      <X class="w-4 h-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          @click="removeRecordItem('dicomServer.headers', String(key))"
+                          :disabled="isProcessing"
+                        >
+                          <X class="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Remove header</TooltipContent>
+                    </Tooltip>
                   </div>
                   <Button
                     variant="outline"
@@ -563,14 +574,19 @@ function handleDownloadConfig() {
                       placeholder="Replacement value"
                       :disabled="isProcessing"
                     />
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      @click="removeRecordItem('anonymization.replacements', String(key))"
-                      :disabled="isProcessing"
-                    >
-                      <X class="w-4 h-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          @click="removeRecordItem('anonymization.replacements', String(key))"
+                          :disabled="isProcessing"
+                        >
+                          <X class="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Remove replacement</TooltipContent>
+                    </Tooltip>
                   </div>
                   <Button
                     variant="outline"
@@ -600,14 +616,19 @@ function handleDownloadConfig() {
                       placeholder="Tag name or hex"
                       :disabled="isProcessing"
                     />
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      @click="removeArrayItem('anonymization.preserveTags', index)"
-                      :disabled="isProcessing"
-                    >
-                      <X class="w-4 h-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          @click="removeArrayItem('anonymization.preserveTags', index)"
+                          :disabled="isProcessing"
+                        >
+                          <X class="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Remove tag</TooltipContent>
+                    </Tooltip>
                   </div>
                   <Button
                     variant="outline"
@@ -636,14 +657,19 @@ function handleDownloadConfig() {
                       placeholder="Tag pattern"
                       :disabled="isProcessing"
                     />
-                    <Button
-                      size="icon"
-                      variant="outline"
-                      @click="removeArrayItem('anonymization.tagsToRemove', index)"
-                      :disabled="isProcessing"
-                    >
-                      <X class="w-4 h-4" />
-                    </Button>
+                    <Tooltip>
+                      <TooltipTrigger asChild>
+                        <Button
+                          size="icon"
+                          variant="outline"
+                          @click="removeArrayItem('anonymization.tagsToRemove', index)"
+                          :disabled="isProcessing"
+                        >
+                          <X class="w-4 h-4" />
+                        </Button>
+                      </TooltipTrigger>
+                      <TooltipContent>Remove pattern</TooltipContent>
+                    </Tooltip>
                   </div>
                   <Button
                     variant="outline"
@@ -717,14 +743,19 @@ function handleDownloadConfig() {
                         placeholder="Value"
                         :disabled="isProcessing"
                       />
-                      <Button
-                        size="icon"
-                        variant="outline"
-                        @click="removeRecordItem(`plugins.settings.${String(pluginId)}`, String(key))"
-                        :disabled="isProcessing"
-                      >
-                        <X class="w-4 h-4" />
-                      </Button>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Button
+                            size="icon"
+                            variant="outline"
+                            @click="removeRecordItem(`plugins.settings.${String(pluginId)}`, String(key))"
+                            :disabled="isProcessing"
+                          >
+                            <X class="w-4 h-4" />
+                          </Button>
+                        </TooltipTrigger>
+                        <TooltipContent>Remove setting</TooltipContent>
+                      </Tooltip>
                     </div>
                     <Button
                       variant="outline"
