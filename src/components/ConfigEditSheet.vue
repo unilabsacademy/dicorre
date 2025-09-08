@@ -20,6 +20,7 @@ import type { RuntimeType } from '@/types/effects'
 import { toast } from 'vue-sonner'
 import type { ProjectConfig } from '@/services/config/schema'
 import { ConfigService } from '@/services/config'
+import { configId } from '@/services/config/configId'
 import ConfigLoader from '@/components/ConfigLoader.vue'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
@@ -41,6 +42,7 @@ const emit = defineEmits<{
 const isProcessing = ref(false)
 const editedConfig = ref<any>({})
 const expandedSections = ref<Set<string>>(new Set(['project', 'dicomServer']))
+const shortConfigId = ref('')
 
 // Project-specific state
 const projectName = ref('')
@@ -77,6 +79,14 @@ refreshEditedConfig()
 watch(() => props.open, (isOpen) => {
   if (isOpen) refreshEditedConfig()
 })
+
+watch(editedConfig, async (v) => {
+  try {
+    shortConfigId.value = await configId(v, { len: 8, ignoreKeys: ['project', 'projectName'] })
+  } catch {
+    shortConfigId.value = ''
+  }
+}, { deep: true, immediate: true })
 
 // Keep simple: treat project as part of config; sync local fields from edited config
 function syncProjectFieldsFromConfig(cfg: any) {
@@ -265,7 +275,13 @@ function handleDownloadConfig() {
       class="w-[600px] sm:max-w-[600px] overflow-y-auto"
     >
       <SheetHeader>
-        <SheetTitle>Settings</SheetTitle>
+        <SheetTitle>
+          Settings
+          <span
+            v-if="shortConfigId"
+            class="text-muted-foreground text-xs ml-2"
+          >#{{ shortConfigId }}</span>
+        </SheetTitle>
         <SheetDescription>
           Configure project settings and application configuration.
         </SheetDescription>
