@@ -21,6 +21,7 @@ import { toast } from 'vue-sonner'
 import type { ProjectConfig } from '@/services/config/schema'
 import { ConfigService } from '@/services/config'
 import ConfigLoader from '@/components/ConfigLoader.vue'
+import { useProjectSharing } from '@/composables/useProjectSharing'
 
 const props = defineProps<{
   open: boolean
@@ -44,6 +45,8 @@ const expandedSections = ref<Set<string>>(new Set(['project', 'dicomServer']))
 const projectName = ref('')
 type ParamRow = { key: string; value: string }
 const params = ref<ParamRow[]>([])
+
+const { prepareConfigForExport, downloadConfig } = useProjectSharing()
 
 function toggleSection(section: string) {
   if (expandedSections.value.has(section)) {
@@ -232,6 +235,22 @@ async function handleSaveConfig() {
 
 function handleCancel() {
   emit('update:open', false)
+}
+
+function buildConfigForDownload() {
+  return prepareConfigForExport(editedConfig.value, projectName.value, toRecord(params.value))
+}
+
+function handleDownloadConfig() {
+  try {
+    const configToSave = buildConfigForDownload()
+    downloadConfig(configToSave, projectName.value || editedConfig.value?.project?.name)
+  } catch (error) {
+    console.error('Failed to download configuration:', error)
+    toast.error('Failed to download configuration', {
+      description: error instanceof Error ? error.message : 'Unknown error'
+    })
+  }
 }
 </script>
 
@@ -732,6 +751,13 @@ function handleCancel() {
             :disabled="isProcessing"
           >
             Cancel
+          </Button>
+          <Button
+            variant="outline"
+            @click="handleDownloadConfig"
+            :disabled="isProcessing"
+          >
+            Download Config
           </Button>
           <ConfigLoader @config-loaded="() => { $emit('config-updated'); $emit('update:open', false) }" />
         </div>

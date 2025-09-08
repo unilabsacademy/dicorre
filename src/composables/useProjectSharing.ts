@@ -117,9 +117,103 @@ export function useProjectSharing() {
     }
   }
 
+  function sanitizeFileBase(name: string): string {
+    const base = (name || 'config').trim()
+    const safe = base
+      .replace(/\s+/g, '-')
+      .replace(/[^a-zA-Z0-9._-]/g, '')
+      .toLowerCase()
+    return safe || 'config'
+  }
+
+  function formatTimestamp(d: Date): string {
+    const pad = (n: number) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}_${pad(d.getHours())}-${pad(d.getMinutes())}-${pad(d.getSeconds())}`
+  }
+
+  function makeConfigFilename(projectName?: string, when: Date = new Date()): string {
+    const base = sanitizeFileBase(projectName || 'config')
+    return `${base}_${formatTimestamp(when)}.json`
+  }
+
+  function triggerJsonDownload(data: unknown, filename: string): void {
+    const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' })
+    const url = URL.createObjectURL(blob)
+    const a = document.createElement('a')
+    a.href = url
+    a.download = filename
+    document.body.appendChild(a)
+    a.click()
+    a.remove()
+    URL.revokeObjectURL(url)
+  }
+
+  function prepareConfigForExport(editedConfig: any, projectName: string, params: Record<string, string>): AppConfig {
+    const configToSave: any = { ...editedConfig }
+
+    if (configToSave.dicomServer?.auth?.type === 'none') {
+      configToSave.dicomServer.auth = null
+    }
+
+    if (projectName && projectName.trim()) {
+      const existing = editedConfig?.project
+      const nextProject = {
+        ...existing,
+        name: projectName.trim(),
+        id: existing?.id ?? crypto.randomUUID(),
+        createdAt: existing?.createdAt ?? new Date().toISOString(),
+        plugins: {
+          ...(existing as any)?.plugins,
+          settings: {
+            ...(((existing as any)?.plugins as any)?.settings),
+            ['sent-notifier']: {
+              ...((((existing as any)?.plugins as any)?.settings || {})['sent-notifier']),
+              params
+            }
+          }
+        }
+      }
+      configToSave.project = nextProject
+    } else if (configToSave.project) {
+      delete (configToSave as any).project
+    }
+
+    return configToSave as AppConfig
+  }
+
+  function downloadConfig(config: AppConfig, projectName?: string): void {
+    try {
+      const filename = makeConfigFilename(projectName || (config as any)?.project?.name || 'config')
+      triggerJsonDownload(config, filename)
+    } catch (error) {
+      console.error('Failed to download configuration:', error)
+      toast.error('Failed to download configuration')
+    }
+  }
+
+  async function downloadCurrentConfig(): Promise<void> {
+    try {
+      const config = await runtime?.runPromise(
+        Effect.gen(function* () {
+          const configService = yield* ConfigService
+          return yield* configService.getCurrentConfig
+        })
+      )
+      if (!config) throw new Error('No configuration available')
+      downloadConfig(config, (config as any)?.project?.name)
+    } catch (error) {
+      console.error('Failed to download current configuration:', error)
+      toast.error('Failed to download configuration')
+    }
+  }
+
   return {
     generateShareableUrl,
     loadConfigFromUrl,
-    copyShareableUrl
+    copyShareableUrl,
+    makeConfigFilename,
+    prepareConfigForExport,
+    downloadConfig,
+    downloadCurrentConfig
   }
 }
