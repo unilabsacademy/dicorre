@@ -34,6 +34,7 @@ describe('SendLogger Plugin', () => {
 
   describe('Hook Functionality', () => {
     const mockStudy: DicomStudy = {
+      id: 'study-1',
       studyInstanceUID: '1.2.3.4.5',
       patientName: 'Test Patient',
       patientId: 'TEST123',

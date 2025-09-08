@@ -49,6 +49,7 @@ const createTestStudy = (
   patientId: string = 'TEST001',
   seriesCount: number = 1
 ): DicomStudy => ({
+  id: `study-${studyInstanceUID}`,
   studyInstanceUID,
   patientId,
   patientName: `Patient ${patientId}`,
