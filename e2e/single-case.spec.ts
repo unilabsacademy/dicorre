@@ -42,6 +42,10 @@ test('uploads single case zip file and checks correct grouping', async ({ page }
   
   await expect(anonymizeButton).toBeDisabled({ timeout: 15000 });
 
+  // After anonymization, studies are deselected. Wait for UI update then re-select
+  await page.waitForTimeout(500);
+  await studyCheckboxes.nth(1).click();
+
   const anonymizedCountText = await page.getByTestId('anonymized-count-badge').textContent();
   const anonymizedCount = parseInt(anonymizedCountText?.match(/(\d+)/)?.[1] || '0');
   

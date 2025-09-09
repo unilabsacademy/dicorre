@@ -40,6 +40,9 @@ test.describe('DICOM Sending with Real Orthanc Server', () => {
 
     await expect(page.getByTestId('studies-data-table')).toBeVisible({ timeout: 5000 })
     
+    // After anonymization, studies are deselected. Wait for UI update then re-select
+    await page.waitForTimeout(500)
+    
     const allCheckboxes = page.getByRole('checkbox')
     const checkboxCount = await allCheckboxes.count()
     

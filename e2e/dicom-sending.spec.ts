@@ -31,6 +31,8 @@ test.describe('DICOM Sending E2E Tests', () => {
 
     await expect(anonymizeButton).toBeDisabled({ timeout: 15000 })
     
+    // After anonymization, studies are deselected. Wait for UI update then re-select
+    await page.waitForTimeout(500)
     await studyCheckboxes.nth(1).click()
 
     let requestCount = 0
@@ -75,6 +77,8 @@ test.describe('DICOM Sending E2E Tests', () => {
     await anonymizeButton.click()
     await expect(anonymizeButton).toBeDisabled({ timeout: 15000 })
 
+    // After anonymization, studies are deselected. Wait for UI update then re-select
+    await page.waitForTimeout(500)
     await studyCheckboxes.nth(1).click()
 
     await page.route('**/studies**', async route => {

@@ -45,7 +45,6 @@ const props = defineProps<{
 }>()
 
 const emit = defineEmits<{
-  createProject: [name: string]
   anonymizeSelected: []
   groupSelected: []
   sendSelected: []
@@ -62,12 +61,6 @@ const emit = defineEmits<{
 const showClearDialog = ref(false)
 
 const { copyShareableUrl } = useProjectSharing()
-
-async function handleCreateProject(name: string) {
-  emit('createProject', name)
-}
-
-// clear project removed
 
 async function handleShareProject() {
   await copyShareableUrl()

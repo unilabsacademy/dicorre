@@ -87,6 +87,10 @@ test.describe('PDF Converter Plugin', () => {
     // Wait for anonymization to complete
     await expect(anonymizeButton).toBeDisabled({ timeout: 15000 });
 
+    // After anonymization, studies are deselected. Wait for UI update then re-select
+    await page.waitForTimeout(500);
+    await headerCheckbox.click();
+
     // Verify files were anonymized
     const anonymizedCountText = await page.getByTestId('anonymized-count-badge').textContent();
     const anonymizedCount = parseInt(anonymizedCountText?.match(/(\d+)/)?.[1] || '0');
