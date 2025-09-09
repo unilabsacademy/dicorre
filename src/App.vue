@@ -19,6 +19,7 @@ import AppToolbar from '@/components/AppToolbar.vue'
 import ConfigEditSheet from '@/components/ConfigEditSheet.vue'
 import CustomFieldsSheet from '@/components/CustomFieldsSheet.vue'
 import StudyLogSheet from '@/components/StudyLogSheet.vue'
+import StudyMetadataSheet from '@/components/StudyMetadataSheet.vue'
 import { Toaster } from '@/components/ui/sonner'
 import { useDropdownSheetTransition } from '@/utils/dropdownSheetTransition'
 import 'vue-sonner/style.css'
@@ -52,6 +53,8 @@ const showConfigEditSheet = ref(false)
 const showCustomFieldsSheet = ref(false)
 const showLogSheet = ref(false)
 const logStudyId = ref<string | undefined>(undefined)
+const showMetadataSheet = ref(false)
+const metadataStudyId = ref<string | undefined>(undefined)
 const showSendWarningDialog = ref(false)
 const pendingSendStudies = ref<DicomStudy[] | null>(null)
 const showResendConfirmDialog = ref(false)
@@ -60,6 +63,7 @@ const pendingResendStudies = ref<DicomStudy[] | null>(null)
 // Setup dropdown-to-sheet transitions
 const customFieldsTransition = useDropdownSheetTransition()
 const logSheetTransition = useDropdownSheetTransition()
+const metadataSheetTransition = useDropdownSheetTransition()
 
 const {
   isGlobalDragOver,
@@ -236,6 +240,13 @@ function openLogForStudy(row: DicomStudy): void {
   })
 }
 
+function openMetadataForStudy(row: DicomStudy): void {
+  metadataSheetTransition.openWithTransition(() => {
+    metadataStudyId.value = row.id
+    showMetadataSheet.value = true
+  })
+}
+
 function openCustomFieldsFromToolbar(): void {
   customFieldsTransition.openWithTransition(() => {
     showCustomFieldsSheet.value = true
@@ -250,6 +261,11 @@ function handleCustomFieldsUpdateOpen(next: boolean): void {
 function handleLogSheetUpdateOpen(next: boolean): void {
   if (!next && logSheetTransition.suppressClose.value) return
   showLogSheet.value = next
+}
+
+function handleMetadataSheetUpdateOpen(next: boolean): void {
+  if (!next && metadataSheetTransition.suppressClose.value) return
+  showMetadataSheet.value = next
 }
 </script>
 
@@ -397,6 +413,7 @@ function handleLogSheetUpdateOpen(next: boolean): void {
           :data="studiesData"
           :open-custom-fields-for-study="openCustomFieldsForStudy"
           :open-log-for-study="openLogForStudy"
+          :open-metadata-for-study="openMetadataForStudy"
           data-testid="studies-data-table"
         />
 
@@ -440,6 +457,13 @@ function handleLogSheetUpdateOpen(next: boolean): void {
         :open="showLogSheet"
         :study-id="logStudyId"
         @update:open="handleLogSheetUpdateOpen"
+      />
+
+      <!-- Study Metadata Sheet -->
+      <StudyMetadataSheet
+        :open="showMetadataSheet"
+        :study="appState.studies.value.find(s => s.id === metadataStudyId)"
+        @update:open="handleMetadataSheetUpdateOpen"
       />
 
       <!-- Toast Notifications -->

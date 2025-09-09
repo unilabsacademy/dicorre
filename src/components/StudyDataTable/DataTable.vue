@@ -24,6 +24,7 @@ const props = defineProps<{
   data: TData[]
   openCustomFieldsForStudy?: (row: TData) => void
   openLogForStudy?: (row: TData) => void
+  openMetadataForStudy?: (row: TData) => void
 }>()
 
 const {
@@ -42,7 +43,8 @@ const table = useVueTable({
   },
   meta: {
     openCustomFieldsForStudy: (row: TData) => props.openCustomFieldsForStudy?.(row),
-    openLogForStudy: (row: TData) => props.openLogForStudy?.(row)
+    openLogForStudy: (row: TData) => props.openLogForStudy?.(row),
+    openMetadataForStudy: (row: TData) => props.openMetadataForStudy?.(row)
   },
   getCoreRowModel: getCoreRowModel(),
   getSortedRowModel: getSortedRowModel(),

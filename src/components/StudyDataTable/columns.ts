@@ -47,6 +47,13 @@ export const columns: ColumnDef<DicomStudy>[] = [
             }, () => 'Edit custom fields'),
             h(DropdownMenuItem as any, {
               onClick: () => {
+                const openMeta = (table.options.meta as any)?.openMetadataForStudy
+                if (openMeta) openMeta(study)
+              },
+              'data-testid': `view-dicom-metadata-${study.id}`
+            }, () => 'Inspect DICOM metadata'),
+            h(DropdownMenuItem as any, {
+              onClick: () => {
                 const openLog = (table.options.meta as any)?.openLogForStudy
                 if (openLog) openLog(study)
               },
