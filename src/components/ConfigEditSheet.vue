@@ -24,6 +24,8 @@ import { configId } from '@/services/config/configId'
 import ConfigLoader from '@/components/ConfigLoader.vue'
 import { useProjectSharing } from '@/composables/useProjectSharing'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
+import { Combobox, ComboboxTrigger, ComboboxList, ComboboxItem, ComboboxAnchor, ComboboxInput, ComboboxViewport } from '@/components/ui/combobox'
+import { getAllTagNames } from '@/utils/dicom-tag-dictionary'
 
 const props = defineProps<{
   open: boolean
@@ -50,6 +52,7 @@ type ParamRow = { key: string; value: string }
 const params = ref<ParamRow[]>([])
 
 const { prepareConfigForExport, downloadConfig } = useProjectSharing()
+const allTagNames = getAllTagNames()
 
 function toggleSection(section: string) {
   if (expandedSections.value.has(section)) {
@@ -576,14 +579,35 @@ function handleDownloadConfig() {
                   <div
                     v-for="(value, key) in (getFieldValue('anonymization.replacements') || {})"
                     :key="key"
-                    class="flex gap-2"
+                    class="grid grid-cols-[1fr_auto_auto] gap-2"
                   >
-                    <Input
+                    <Combobox
                       :model-value="String(key)"
                       @update:model-value="(v) => updateRecordKey('anonymization.replacements', String(key), String(v))"
-                      placeholder="Tag name"
-                      :disabled="isProcessing"
-                    />
+                    >
+                      <ComboboxAnchor class="w-full">
+                        <ComboboxTrigger
+                          class="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                        >
+                          {{ String(key) || 'Select Field' }}
+                        </ComboboxTrigger>
+                      </ComboboxAnchor>
+                      <ComboboxList
+                        class="w-[320px]"
+                        align="start"
+                      >
+                        <ComboboxInput placeholder="Search DICOM fields..." />
+                        <ComboboxViewport>
+                          <ComboboxItem
+                            v-for="name in allTagNames"
+                            :key="name"
+                            :value="name"
+                          >
+                            {{ name }}
+                          </ComboboxItem>
+                        </ComboboxViewport>
+                      </ComboboxList>
+                    </Combobox>
                     <Input
                       :model-value="String(value)"
                       @update:model-value="(v) => updateRecordValue('anonymization.replacements', String(key), String(v))"
@@ -626,12 +650,35 @@ function handleDownloadConfig() {
                     :key="index"
                     class="flex gap-2"
                   >
-                    <Input
-                      :model-value="tag"
-                      @update:model-value="(v) => updateArrayItem('anonymization.preserveTags', index, String(v))"
-                      placeholder="Tag name or hex"
-                      :disabled="isProcessing"
-                    />
+                    <div class="flex-1">
+                      <Combobox
+                        :model-value="tag"
+                        @update:model-value="(v) => updateArrayItem('anonymization.preserveTags', index, String(v))"
+                      >
+                        <ComboboxAnchor class="w-full">
+                          <ComboboxTrigger
+                            class="flex h-9 w-full items-center justify-between rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                          >
+                            {{ tag || 'Select Field' }}
+                          </ComboboxTrigger>
+                        </ComboboxAnchor>
+                        <ComboboxList
+                          class="w-[320px]"
+                          align="start"
+                        >
+                          <ComboboxInput placeholder="Search DICOM fields..." />
+                          <ComboboxViewport>
+                            <ComboboxItem
+                              v-for="name in allTagNames"
+                              :key="name"
+                              :value="name"
+                            >
+                              {{ name }}
+                            </ComboboxItem>
+                          </ComboboxViewport>
+                        </ComboboxList>
+                      </Combobox>
+                    </div>
                     <Tooltip>
                       <TooltipTrigger asChild>
                         <Button
