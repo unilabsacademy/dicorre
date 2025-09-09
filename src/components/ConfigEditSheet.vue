@@ -431,6 +431,19 @@ function handleDownloadConfig() {
                 />
               </div>
 
+              <!-- Test Connection Path -->
+              <div class="space-y-2">
+                <Label>Test Connection Path</Label>
+                <Input
+                  :model-value="getFieldValue('dicomServer.testConnectionPath')"
+                  @update:model-value="(v) => setFieldValue('dicomServer.testConnectionPath', v)"
+                  placeholder="/studies"
+                  :disabled="isProcessing"
+                />
+                <p class="text-xs text-muted-foreground">Relative path appended to the base URL when testing server
+                  connectivity</p>
+              </div>
+
               <!-- Headers -->
               <div class="space-y-2">
                 <Label>Headers</Label>

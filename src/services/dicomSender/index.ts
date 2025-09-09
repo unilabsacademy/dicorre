@@ -32,7 +32,9 @@ export const DicomSenderLive = Layer.succeed(
       Effect.gen(function* () {
         const result = yield* Effect.tryPromise({
           try: async () => {
-            const testUrl = `${config.url}/studies`
+            const path = (config as any).testConnectionPath || "/studies"
+            const normalizedPath = path.startsWith("/") ? path : `/${path}`
+            const testUrl = `${config.url}${normalizedPath}`
             const response = await fetch(testUrl, {
               method: 'GET',
               headers: { 'Accept': 'application/dicom+json', ...config.headers }
@@ -40,7 +42,7 @@ export const DicomSenderLive = Layer.succeed(
             return response.ok
           },
           catch: (error) => new NetworkError({
-            message: `Failed to connect to DICOM server: ${config.url}`,
+            message: `Failed to connect to DICOM server: ${config.url}/${config.testConnectionPath}`,
             cause: error
           })
         })

@@ -4,6 +4,7 @@
     "url": "/api/orthanc/dicom-web",
     "headers": {},
     "timeout": 30000,
+    "testConnectionPath": "/studies",
     "auth": null,
     "description": "Orthanc DICOM-Web server configuration"
   },

@@ -134,6 +134,12 @@ export const appConfigEditSchema: ConfigEditSchema = {
       min: 1000,
       max: 600000
     },
+    testConnectionPath: {
+      type: 'text',
+      label: 'Test Connection Path',
+      description: 'Relative path appended to the base URL when testing connectivity',
+      placeholder: '/studies'
+    },
     auth: {
       type: {
         type: 'select',

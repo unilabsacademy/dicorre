@@ -149,7 +149,7 @@ export function useDicomSender(runtime?: RuntimeType) {
       const serverConfig = yield* configService.getServerConfig
       const ok = yield* sender.testConnection(serverConfig)
       if (!ok) {
-        return yield* Effect.fail(new Error(`DICOM server test failed: ${serverConfig.url}/studies`))
+        return yield* Effect.fail(new Error(`DICOM server test failed: ${serverConfig.url}${serverConfig.testConnectionPath}`))
       }
       return undefined
     })

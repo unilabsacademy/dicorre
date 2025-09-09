@@ -19,7 +19,8 @@ export const DicomServerConfigSchema = Schema.Struct({
     Schema.lessThanOrEqualTo(600000, { message: () => "Timeout must not exceed 600000ms (10 minutes)" })
   )),
   auth: Schema.optional(Schema.NullOr(DicomServerAuthSchema)),
-  description: Schema.optional(Schema.String)
+  description: Schema.optional(Schema.String),
+  testConnectionPath: Schema.optional(Schema.String)
 }).pipe(
   Schema.annotations({
     identifier: "DicomServerConfig",
