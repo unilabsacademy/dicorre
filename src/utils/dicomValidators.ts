@@ -13,18 +13,27 @@
  * applies format checks. Some elements also have enumerations beyond VR (e.g., Patient's Sex),
  * which are validated explicitly in `validateDicomField`.
  */
-import { dicomTagsReference } from '@/utils/deidentify-reference'
 import { getTagHex } from '@/utils/dicom-tag-dictionary'
+import * as dcmjs from 'dcmjs'
 
 const vrByHex: Record<string, string> = Object.create(null)
 
-for (const row of dicomTagsReference as any[]) {
-  const rawTag: string = String((row as any).Tag ?? '')
-  const hex = rawTag.replace(/[(),]/g, '')
-  const vr = String((row as any).VR ?? '')
-  if (hex && vr) {
-    vrByHex[hex] = vr
+try {
+  const meta: any = (dcmjs as any)?.data?.DicomMetaDictionary
+  const dictionary: Record<string, any> | undefined = meta?.dictionary
+  if (dictionary) {
+    for (const [key, entry] of Object.entries(dictionary)) {
+      const hex = key.replace(/^x/i, '').toUpperCase()
+      const vr: string | undefined = Array.isArray((entry as any)?.vr)
+        ? (entry as any).vr[0]
+        : (entry as any)?.vr || (entry as any)?.VR
+      if (hex && vr) {
+        vrByHex[hex] = vr
+      }
+    }
   }
+} catch {
+  // ignore if dcmjs dictionary not available
 }
 
 // Manual fallbacks for common fields if reference lacks VR
@@ -42,28 +51,7 @@ for (const [hex, vr] of Object.entries(manualVRByHex)) {
 function getVR(tagName: string): string | null {
   const hex = getTagHex(tagName)
   if (!hex) return null
-  if (vrByHex[hex]) return vrByHex[hex]
-
-  // Attempt to enrich from dcmjs dictionary if available at runtime
-  try {
-    // eslint-disable-next-line @typescript-eslint/no-var-requires
-    const dcmjs = require('dcmjs') as any
-    const dict = dcmjs?.data?.DicomMetaDictionary?.dictionary
-    if (dict) {
-      const key1 = `x${hex.toLowerCase()}`
-      const key2 = hex
-      const entry = dict[key1] || dict[key2]
-      const vr: string | undefined = Array.isArray(entry?.vr) ? entry.vr[0] : entry?.vr || entry?.VR
-      if (vr) {
-        vrByHex[hex] = vr
-        return vr
-      }
-    }
-  } catch {
-    // ignore if dcmjs not resolvable or structure differs
-  }
-
-  return null
+  return vrByHex[hex] ?? null
 }
 
 export function validateByVR(vr: string, value: string): string | null {
