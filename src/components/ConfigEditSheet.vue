@@ -19,6 +19,7 @@ import { appConfigEditSchema, type FieldSchema, type ConfigEditSchema } from '@/
 import type { RuntimeType } from '@/types/effects'
 import { toast } from 'vue-sonner'
 import type { ProjectConfig } from '@/services/config/schema'
+import { validateAppConfig, encodeAppConfig } from '@/services/config/schema'
 import { ConfigService } from '@/services/config'
 import { configId } from '@/services/config/configId'
 import ConfigLoader from '@/components/ConfigLoader.vue'
@@ -53,6 +54,23 @@ const params = ref<ParamRow[]>([])
 
 const { prepareConfigForExport, downloadConfig } = useProjectSharing()
 const allTagNames = getAllTagNames()
+
+// Local search state to avoid rendering thousands of items at once
+const preserveSearchTerms = ref<Record<number, string>>({})
+const replacementSearchTerms = ref<Record<string, string>>({})
+
+function filterTagNames(term: string | undefined): string[] {
+  const t = (term || '').toLowerCase().trim()
+  if (!t) return allTagNames.slice(0, 200)
+  const out: string[] = []
+  for (const name of allTagNames) {
+    if (name.toLowerCase().includes(t)) {
+      out.push(name)
+      if (out.length >= 200) break
+    }
+  }
+  return out
+}
 
 function toggleSection(section: string) {
   if (expandedSections.value.has(section)) {
@@ -226,7 +244,15 @@ async function handleSaveConfig() {
       if (configToSave.project) delete (configToSave as any).project
     }
 
-    // Update config (project included) through the config service
+    // Validate before saving to avoid putting app into bad state
+    await props.runtime.runPromise(
+      Effect.gen(function* () {
+        // Will throw with detailed message if invalid
+        yield* validateAppConfig(configToSave)
+      })
+    )
+
+    // Update config (project included) through the config service only after validation passes
     await props.runtime.runPromise(
       Effect.gen(function* () {
         const configService = yield* ConfigService
@@ -596,10 +622,16 @@ function handleDownloadConfig() {
                         class="w-[320px]"
                         align="start"
                       >
-                        <ComboboxInput placeholder="Search DICOM fields..." />
+                        <div class="px-2 py-1">
+                          <Input
+                            :model-value="replacementSearchTerms[String(key)] || ''"
+                            @update:model-value="(v) => replacementSearchTerms[String(key)] = String(v)"
+                            placeholder="Search DICOM fields..."
+                          />
+                        </div>
                         <ComboboxViewport>
                           <ComboboxItem
-                            v-for="name in allTagNames"
+                            v-for="name in filterTagNames(replacementSearchTerms[String(key)])"
                             :key="name"
                             :value="name"
                           >
@@ -666,10 +698,16 @@ function handleDownloadConfig() {
                           class="w-[320px]"
                           align="start"
                         >
-                          <ComboboxInput placeholder="Search DICOM fields..." />
+                          <div class="px-2 py-1">
+                            <Input
+                              :model-value="preserveSearchTerms[index] || ''"
+                              @update:model-value="(v) => preserveSearchTerms[index] = String(v)"
+                              placeholder="Search DICOM fields..."
+                            />
+                          </div>
                           <ComboboxViewport>
                             <ComboboxItem
-                              v-for="name in allTagNames"
+                              v-for="name in filterTagNames(preserveSearchTerms[index])"
                               :key="name"
                               :value="name"
                             >

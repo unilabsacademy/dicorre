@@ -129,7 +129,14 @@ export function getTagName(hexTag: string): string {
  * Get DICOM tag hex from name
  */
 export function getTagHex(tagName: string): string | null {
-  return DICOM_NAME_TO_TAG[tagName] || null
+  const direct = DICOM_NAME_TO_TAG[tagName]
+  if (direct) return direct
+  const normalizedName = tagName
+    .replace(/'/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[-()]/g, '')
+    .replace(/\//g, 'Or')
+  return DICOM_NAME_TO_TAG[normalizedName] || null
 }
 
 /**
@@ -161,7 +168,13 @@ export function tagHexToName(hexTag: string): string {
  * Validate if a tag name exists in the dictionary
  */
 export function isValidTagName(tagName: string): boolean {
-  return tagName in DICOM_NAME_TO_TAG
+  if (tagName in DICOM_NAME_TO_TAG) return true
+  const normalizedName = tagName
+    .replace(/'/g, '')
+    .replace(/\s+/g, '')
+    .replace(/[-()]/g, '')
+    .replace(/\//g, 'Or')
+  return normalizedName in DICOM_NAME_TO_TAG
 }
 
 /**
@@ -176,10 +189,10 @@ export function isValidTagHex(hexTag: string): boolean {
  * Get all available tag names
  */
 export function getAllTagNames(): string[] {
-  return Object.keys(DICOM_NAME_TO_TAG).filter(name =>
-    // Filter out normalized names, keep only official names
-    dicomTagsReference.some(ref => ref["Attribute Name"] === name)
-  )
+  // Only include names from the de-identification reference plus known common additions
+  const referenceNames = dicomTagsReference.map(ref => ref["Attribute Name"]).filter(Boolean) as string[]
+  const manualNames = Object.values(commonMissingTags)
+  return Array.from(new Set([...referenceNames, ...manualNames]))
 }
 
 /**
