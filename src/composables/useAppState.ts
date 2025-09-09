@@ -112,6 +112,7 @@ export function useAppState(runtime: RuntimeType) {
 
     const selectedUids = new Set(selected.map(s => s.studyInstanceUID))
 
+
     // Rewrite metadata on files for all selected studies so they collapse into the parent study
     dicomFiles.value = dicomFiles.value.map(file => {
       const m = file.metadata
@@ -361,6 +362,14 @@ export function useAppState(runtime: RuntimeType) {
           }
         })
 
+        // Minimal intervention: only force StudyInstanceUID if an anonymized file already exists
+        const existingAnonUid = studyFiles.find(f => f.anonymized && f.metadata?.studyInstanceUID)?.metadata?.studyInstanceUID
+        const overrides: Record<string, string> = {
+          ...(study.customFields ?? {}),
+          ...(study.assignedPatientId ? { 'Patient ID': study.assignedPatientId } : {}),
+          ...(existingAnonUid ? { 'Study Instance UID': existingAnonUid } : {})
+        }
+
         // Initial progress
         setStudyProgress(study.studyInstanceUID, {
           isProcessing: true,
@@ -376,7 +385,7 @@ export function useAppState(runtime: RuntimeType) {
             anonymizationConfig,
             concurrency: concurrency.value,
             patientIdMap,
-            overrides: study.customFields,
+            overrides,
             onProgress: (p) => {
               setStudyProgress(study.studyInstanceUID, {
                 isProcessing: true,
