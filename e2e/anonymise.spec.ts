@@ -59,7 +59,7 @@ test('uploads zip file and checks anonymization works', async ({ page }) => {
   }
 
   const anonymizeButton = page.getByTestId('anonymize-button');
-  await expect(anonymizeButton).toContainText('Anonymize (', { timeout: 5000 });
+  await expect(anonymizeButton).toContainText('Anonymize', { timeout: 5000 });
   await expect(anonymizeButton).toBeEnabled();
 
   await anonymizeButton.click();

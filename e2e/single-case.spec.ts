@@ -35,7 +35,7 @@ test('uploads single case zip file and checks correct grouping', async ({ page }
   await studyCheckboxes.nth(1).click();
 
   const anonymizeButton = page.getByTestId('anonymize-button');
-  await expect(anonymizeButton).toContainText('Anonymize (1)', { timeout: 5000 });
+  await expect(anonymizeButton).toContainText('Anonymize', { timeout: 5000 });
   await expect(anonymizeButton).toBeEnabled();
 
   await anonymizeButton.click();

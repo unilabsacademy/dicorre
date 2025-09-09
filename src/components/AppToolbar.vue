@@ -188,7 +188,7 @@ const clearDialogDescription = computed(() => {
         data-testid="anonymize-button"
       >
         <Shield class="w-4 h-4 mr-2" />
-        Anonymize{{ props.selectedStudiesCount > 0 ? ` (${props.selectedStudiesCount})` : '' }}
+        Anonymize
       </Button>
 
       <Button

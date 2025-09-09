@@ -78,7 +78,7 @@ test.describe('PDF Converter Plugin', () => {
     const studyRows = page.locator('[data-testid="studies-data-table"] tbody tr');
     const studiesCount = await studyRows.count();
 
-    await expect(anonymizeButton).toContainText(`Anonymize (${studiesCount})`, { timeout: 5000 });
+    await expect(anonymizeButton).toContainText('Anonymize', { timeout: 5000 });
     await expect(anonymizeButton).toBeEnabled();
 
     // Click anonymize button
