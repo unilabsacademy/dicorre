@@ -38,7 +38,7 @@ export const columns: ColumnDef<DicomStudy>[] = [
               'data-testid': `actions-menu-${study.id}`
             }, () => '⋯')
           ]),
-          h(DropdownMenuContent as any, { align: 'end' }, () => [
+          h(DropdownMenuContent as any, { align: 'start' }, () => [
             h(DropdownMenuItem as any, {
               onClick: () => {
                 const open = (table.options.meta as any)?.openCustomFieldsForStudy

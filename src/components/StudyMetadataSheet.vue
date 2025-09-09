@@ -82,9 +82,20 @@ async function loadSamples() {
               const anyElem: any = elem as any
               if (anyElem?.Value != null) {
                 if (Array.isArray(anyElem.Value)) {
-                  valueStr = anyElem.Value.map((v: unknown) => String(v)).join(' | ')
+                  // Pretty print arrays, including nested objects
+                  valueStr = anyElem.Value.map((v: unknown) => {
+                    if (v == null) return ''
+                    if (typeof v === 'object') {
+                      try { return JSON.stringify(v, null, 2) } catch { return String(v) }
+                    }
+                    return String(v)
+                  }).join(' | ')
                 } else {
-                  valueStr = String(anyElem.Value)
+                  if (typeof anyElem.Value === 'object') {
+                    try { valueStr = JSON.stringify(anyElem.Value, null, 2) } catch { valueStr = String(anyElem.Value) }
+                  } else {
+                    valueStr = String(anyElem.Value)
+                  }
                 }
               } else if (anyElem?.InlineBinary) {
                 const len = (anyElem.InlineBinary as string).length

@@ -5,32 +5,48 @@
  */
 
 import { dicomTagsReference } from './deidentify-reference'
+import * as dcmjs from 'dcmjs'
 
 // Create dictionaries from reference data
 function createDictionaries() {
   const tagToName: Record<string, string> = {}
   const nameToTag: Record<string, string> = {}
-  
+
   dicomTagsReference.forEach(item => {
     const hexTag = item.Tag.replace(/[(),,]/g, '').replace(/,/g, '')
     const tagName = item["Attribute Name"]
-    
+
     // Create mappings
     tagToName[hexTag] = tagName
     nameToTag[tagName] = hexTag
-    
+
     // Also create mapping with normalized name for easier lookup
     const normalizedName = tagName
       .replace(/'/g, '')
       .replace(/\s+/g, '')
       .replace(/[-()]/g, '')
       .replace(/\//g, 'Or')
-    
+
     if (normalizedName !== tagName) {
       nameToTag[normalizedName] = hexTag
     }
   })
-  
+
+  // Merge dcmjs DicomMetaDictionary name map if available for comprehensive coverage
+  try {
+    const meta: any = (dcmjs as any)?.data?.DicomMetaDictionary
+    const nameMap: Record<string, string> | undefined = meta?.nameMap
+    if (nameMap) {
+      for (const [hex, name] of Object.entries(nameMap)) {
+        const clean = hex.replace(/[^0-9A-Fa-f]/g, '').toUpperCase()
+        if (!tagToName[clean]) tagToName[clean] = name
+        if (!nameToTag[name]) nameToTag[name] = clean
+      }
+    }
+  } catch {
+    // ignore if dcmjs dictionary shape changes
+  }
+
   return { tagToName, nameToTag }
 }
 
@@ -76,10 +92,18 @@ export const DICOM_NAME_TO_TAG: Record<string, string> = nameToTag
 export function getTagName(hexTag: string): string {
   const cleanTag = hexTag.replace(/[(),,]/g, '').replace(/,/g, '')
   const name = DICOM_TAG_TO_NAME[cleanTag]
-  if (!name) {
-    throw new Error(`Unknown DICOM tag: ${hexTag}`)
-  }
-  return name
+  if (name) return name
+  // Fallback: attempt dcmjs dictionary again if present (defensive)
+  try {
+    const meta: any = (dcmjs as any)?.data?.DicomMetaDictionary
+    const nameMap: Record<string, string> | undefined = meta?.nameMap
+    if (nameMap) {
+      const alt = nameMap[cleanTag] || nameMap[`x${cleanTag.toLowerCase()}`]
+      if (alt) return alt
+    }
+  } catch { }
+  // As a last resort, return the hex itself to never fail
+  return cleanTag
 }
 
 /**
@@ -122,7 +146,7 @@ export function isValidTagName(tagName: string): boolean {
 }
 
 /**
- * Validate if a tag hex exists in the dictionary  
+ * Validate if a tag hex exists in the dictionary
  */
 export function isValidTagHex(hexTag: string): boolean {
   const cleanTag = hexTag.replace(/[(),,]/g, '').replace(/,/g, '')
@@ -133,7 +157,7 @@ export function isValidTagHex(hexTag: string): boolean {
  * Get all available tag names
  */
 export function getAllTagNames(): string[] {
-  return Object.keys(DICOM_NAME_TO_TAG).filter(name => 
+  return Object.keys(DICOM_NAME_TO_TAG).filter(name =>
     // Filter out normalized names, keep only official names
     dicomTagsReference.some(ref => ref["Attribute Name"] === name)
   )
@@ -151,7 +175,7 @@ export function getAllTagHex(): string[] {
  */
 export function findTagName(searchTerm: string): string[] {
   const term = searchTerm.toLowerCase()
-  return getAllTagNames().filter(name => 
+  return getAllTagNames().filter(name =>
     name.toLowerCase().includes(term)
   )
 }
@@ -171,11 +195,11 @@ export function getTagInfo(identifier: string): { hex: string; name: string } | 
       return null
     }
   }
-  
+
   // Assume it's a tag name
   const hex = getTagHex(identifier)
   if (!hex) return null
-  
+
   return {
     hex,
     name: identifier
@@ -187,30 +211,30 @@ export const COMMON_TAGS = Object.fromEntries(
   Object.entries({
     // Patient Information
     PATIENT_NAME: "Patient's Name",
-    PATIENT_ID: "Patient ID", 
+    PATIENT_ID: "Patient ID",
     PATIENT_BIRTH_DATE: "Patient's Birth Date",
     PATIENT_SEX: "Patient's Sex",
-    
-    // Study Information  
+
+    // Study Information
     STUDY_DATE: "Study Date",
-    STUDY_TIME: "Study Time", 
+    STUDY_TIME: "Study Time",
     STUDY_INSTANCE_UID: "Study Instance UID",
     STUDY_DESCRIPTION: "Study Description",
-    
+
     // Series Information
     SERIES_INSTANCE_UID: "Series Instance UID",
-    SERIES_DESCRIPTION: "Series Description", 
+    SERIES_DESCRIPTION: "Series Description",
     MODALITY: "Modality",
-    
+
     // Instance Information
     SOP_CLASS_UID: "SOP Class UID",
     SOP_INSTANCE_UID: "SOP Instance UID",
     INSTANCE_NUMBER: "Instance Number",
-    
+
     // Technical Information
     MANUFACTURER: "Manufacturer",
     REFERRING_PHYSICIAN_NAME: "Referring Physician's Name",
-    PROTOCOL_NAME: "Protocol Name", 
+    PROTOCOL_NAME: "Protocol Name",
     STATION_NAME: "Station Name",
     INSTITUTION_NAME: "Institution Name",
   }).filter(([_, tagName]) => getTagHex(tagName) !== null)
