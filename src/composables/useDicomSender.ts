@@ -43,6 +43,10 @@ export function useDicomSender(runtime?: RuntimeType) {
       if (!runtime) {
         return yield* Effect.fail(new Error('Runtime not provided to useDicomSender'))
       }
+      // Guard against concurrent sends of the same study (works for both sendStudy and sendStudyEffect paths)
+      if (progresses.value.has(studyId) || fibers.value.has(studyId)) {
+        return yield* Effect.fail(new Error(`Study ${studyId} send already in progress`))
+      }
       if (files.length === 0) {
         return []
       }
@@ -152,7 +156,7 @@ export function useDicomSender(runtime?: RuntimeType) {
 
   const progressPercentage = computed(() => progress.value?.percentage || 0)
   const getStudyProgress = (studyId: string) => computed(() => progresses.value.get(studyId))
-  const isStudySending = (studyId: string) => Boolean(fibers.value.get(studyId))
+  const isStudySending = (studyId: string) => Boolean(progresses.value.get(studyId) || fibers.value.get(studyId))
   const hasActiveSending = computed(() => fibers.value.size > 0)
 
   return {

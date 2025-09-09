@@ -271,6 +271,10 @@ export function useAppState(runtime: RuntimeType) {
     }
 
     try {
+      // Snapshot selection and clear selection early for immediate UI feedback
+      const selectedSnapshot = selectedStudies.value.slice()
+      clearSelection()
+
       const anonymizationConfig = await runtime.runPromise(
         Effect.gen(function* () {
           const cfgService = yield* ConfigService
@@ -279,9 +283,6 @@ export function useAppState(runtime: RuntimeType) {
       )
 
       const manager = getAnonymizationWorkerManager()
-
-      // Snapshot selection to avoid index drift if studies/selection change during processing
-      const selectedSnapshot = selectedStudies.value.slice()
 
       const promises = selectedSnapshot.map(study => {
         const studyFiles = study.series.flatMap(series => series.files)
@@ -409,8 +410,31 @@ export function useAppState(runtime: RuntimeType) {
     try {
       successMessage.value = ''
 
+      // Skip studies that are already being sent right now
+      const studiesForRun = selectedStudiesToSend.filter((study) => {
+        const inProgress = dicomSender.isStudySending(study.studyInstanceUID)
+        if (inProgress) {
+          runtime.runPromise(
+            Effect.gen(function* () {
+              const logger = yield* StudyLogger
+              yield* logger.append(study.id, { ts: Date.now(), level: 'warn', message: `Send skipped: study is already sending` })
+            })
+          ).catch(() => { })
+          toast.info('Some studies are already sending', {
+            description: `Skipped study ${study.studyInstanceUID} because sending is in progress`,
+            duration: 3000
+          })
+          return false
+        }
+        return true
+      })
+
+      if (studiesForRun.length === 0) {
+        return
+      }
+
       // Build Effect per study (no streams)
-      const studyEffects = selectedStudiesToSend.map(study => {
+      const studyEffects = studiesForRun.map(study => {
         const allFiles = study.series.flatMap(series => series.files)
         const studyFiles = allFiles.filter(file => file.anonymized)
         const nonAnonymizedFiles = allFiles.filter(file => !file.anonymized)
@@ -573,14 +597,14 @@ export function useAppState(runtime: RuntimeType) {
         Effect.all(studyEffects.map((effect, index) =>
           effect.pipe(
             Effect.map(() => {
-              const currentStudy = selectedStudiesToSend[index]
+              const currentStudy = studiesForRun[index]
               if (currentStudy) {
                 successfulStudies.push(currentStudy.studyInstanceUID)
               }
               return true
             }),
             Effect.catchAll(() => {
-              const currentStudy = selectedStudiesToSend[index]
+              const currentStudy = studiesForRun[index]
               if (currentStudy) {
                 failedStudies.push(currentStudy.studyInstanceUID)
               }
@@ -596,7 +620,7 @@ export function useAppState(runtime: RuntimeType) {
       } else if (successfulStudies.length === 0) {
         setAppError(new Error(`Failed to send all ${failedStudies.length} studies`))
       } else {
-        successMessage.value = `Sent ${successfulStudies.length} of ${selectedStudiesToSend.length} studies. ${failedStudies.length} failed.`
+        successMessage.value = `Sent ${successfulStudies.length} of ${studiesForRun.length} studies. ${failedStudies.length} failed.`
       }
 
     } catch (error) {
@@ -749,6 +773,18 @@ export function useAppState(runtime: RuntimeType) {
     await loadPlugins()
   })
 
+  // Helpers for UI logic
+  const isStudyCurrentlySending = (studyId: string): boolean => {
+    return dicomSender.isStudySending(studyId)
+  }
+
+  const isStudyAlreadySent = (study: DicomStudy): boolean => {
+    const allFiles = study.series.flatMap(series => series.files)
+    const anonymizedFiles = allFiles.filter(f => f.anonymized)
+    if (anonymizedFiles.length === 0) return false
+    return anonymizedFiles.every(f => f.sent === true)
+  }
+
   return {
     // State
     uploadedFiles,
@@ -794,5 +830,8 @@ export function useAppState(runtime: RuntimeType) {
     handleSendSelected,
     clearFiles,
     clearSelected,
+    // Helpers
+    isStudyCurrentlySending,
+    isStudyAlreadySent,
   }
 }

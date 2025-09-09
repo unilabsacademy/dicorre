@@ -54,6 +54,8 @@ const showLogSheet = ref(false)
 const logStudyId = ref<string | undefined>(undefined)
 const showSendWarningDialog = ref(false)
 const pendingSendStudies = ref<DicomStudy[] | null>(null)
+const showResendConfirmDialog = ref(false)
+const pendingResendStudies = ref<DicomStudy[] | null>(null)
 
 // Setup dropdown-to-sheet transitions
 const customFieldsTransition = useDropdownSheetTransition()
@@ -133,14 +135,23 @@ async function handleSendSelected(selectedStudiesToSend: DicomStudy[]) {
 }
 
 function attemptSendSelected() {
-  const selected = appState.selectedStudies.value
+  const { clearSelection: clearTableSelection } = useTableState()
+  const selected = appState.selectedStudies.value.slice()
   if (selected.length === 0) return
+  // Unselect immediately
+  clearTableSelection()
   const hasNonAnonymized = selected.some(s =>
     s.series.some(ser => ser.files.some(f => !f.anonymized))
   )
   if (hasNonAnonymized) {
     pendingSendStudies.value = selected
     showSendWarningDialog.value = true
+    return
+  }
+  const hasAlreadySent = selected.some(s => appState.isStudyAlreadySent(s))
+  if (hasAlreadySent) {
+    pendingResendStudies.value = selected
+    showResendConfirmDialog.value = true
     return
   }
   handleSendSelected(selected)
@@ -150,6 +161,20 @@ function confirmSendAfterWarning() {
   const toSend = pendingSendStudies.value ?? []
   showSendWarningDialog.value = false
   pendingSendStudies.value = null
+  if (toSend.length === 0) return
+  const hasAlreadySent = toSend.some(s => appState.isStudyAlreadySent(s))
+  if (hasAlreadySent) {
+    pendingResendStudies.value = toSend
+    showResendConfirmDialog.value = true
+    return
+  }
+  handleSendSelected(toSend)
+}
+
+function confirmResendAfterDialog() {
+  const toSend = pendingResendStudies.value ?? []
+  showResendConfirmDialog.value = false
+  pendingResendStudies.value = null
   if (toSend.length > 0) handleSendSelected(toSend)
 }
 
@@ -442,6 +467,31 @@ function handleLogSheetUpdateOpen(next: boolean): void {
               data-testid="confirm-send-non-anonymized"
             >
               Send anonymized only
+            </AlertDialogAction>
+          </AlertDialogFooter>
+        </AlertDialogContent>
+      </AlertDialog>
+
+      <!-- Resend Confirmation Dialog -->
+      <AlertDialog
+        :open="showResendConfirmDialog"
+        @update:open="showResendConfirmDialog = $event"
+      >
+        <AlertDialogContent>
+          <AlertDialogHeader>
+            <AlertDialogTitle>Resend already sent studies?</AlertDialogTitle>
+            <AlertDialogDescription>
+              One or more selected studies have already been sent. Do you want to resend them?
+            </AlertDialogDescription>
+          </AlertDialogHeader>
+          <AlertDialogFooter>
+            <AlertDialogCancel>Cancel</AlertDialogCancel>
+            <AlertDialogAction
+              variant="default"
+              @click="confirmResendAfterDialog"
+              data-testid="confirm-resend-sent-studies"
+            >
+              Resend
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
