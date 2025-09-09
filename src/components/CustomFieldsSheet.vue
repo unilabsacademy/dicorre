@@ -1,10 +1,11 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { ref, watch, computed } from 'vue'
+import { validateDicomField } from '@/utils/dicomValidators'
 import { Sheet, SheetContent, SheetHeader, SheetTitle, SheetDescription, SheetFooter } from '@/components/ui/sheet'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import type { RuntimeType } from '@/types/effects'
-import { getAllTagNames } from '@/utils/dicom-tag-dictionary'
+import { getAllTagNames, isValidTagName } from '@/utils/dicom-tag-dictionary'
 import { Combobox, ComboboxTrigger, ComboboxList, ComboboxItem, ComboboxAnchor, ComboboxInput, ComboboxViewport } from '@/components/ui/combobox'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 
@@ -28,6 +29,24 @@ const isProcessing = ref(false)
 
 const allTagNames = getAllTagNames()
 
+const standardFieldNames = [
+  "Patient's Age",
+  "Patient's Sex",
+  'Study Date'
+]
+
+function validateValueForKey(key: string, value: string): string | null {
+  return validateDicomField(key, value)
+}
+
+const rowValidationErrors = computed<(string | null)[]>(() =>
+  rows.value.map(r => validateValueForKey(r.key, r.value))
+)
+
+const hasValidationErrors = computed<boolean>(() =>
+  rowValidationErrors.value.some(msg => Boolean(msg))
+)
+
 function addRow() {
   rows.value = [...rows.value, { key: '', value: '' }]
 }
@@ -48,6 +67,17 @@ function setValue(index: number, value: string) {
   rows.value = next
 }
 
+function addStandardFields() {
+  const validNames = standardFieldNames.filter(isValidTagName)
+  const existingKeys = new Set(rows.value.map(r => r.key))
+  const toAdd = validNames
+    .filter(name => !existingKeys.has(name))
+    .map(name => ({ key: name, value: '' }))
+  if (toAdd.length) {
+    rows.value = [...rows.value, ...toAdd]
+  }
+}
+
 function toRecord(): Record<string, string> {
   const out: Record<string, string> = {}
   for (const r of rows.value) {
@@ -65,6 +95,9 @@ function fromRecord(rec: Record<string, string>): Row[] {
 async function handleSave() {
   isProcessing.value = true
   try {
+    if (hasValidationErrors.value) {
+      return
+    }
     if (patientId.value.trim()) {
       emit('assign-patient-id', patientId.value.trim())
     }
@@ -122,7 +155,7 @@ watch(() => props.open, (isOpen) => {
           <div
             v-for="(row, idx) in rows"
             :key="idx"
-            class="grid grid-cols-12 gap-2 items-center"
+            class="grid grid-cols-12 gap-2 items-start"
           >
             <div class="col-span-6">
               <Combobox
@@ -158,7 +191,15 @@ watch(() => props.open, (isOpen) => {
                 :model-value="row.value"
                 @update:model-value="(v) => setValue(idx, String(v))"
                 placeholder="Value"
+                :aria-invalid="Boolean(rowValidationErrors[idx])"
+                :class="rowValidationErrors[idx] ? 'border-destructive focus-visible:ring-destructive' : ''"
               />
+              <p
+                v-if="rowValidationErrors[idx]"
+                class="mt-1 text-xs text-destructive"
+              >
+                {{ rowValidationErrors[idx] }}
+              </p>
             </div>
             <div class="col-span-1">
               <Tooltip>
@@ -174,11 +215,19 @@ watch(() => props.open, (isOpen) => {
             </div>
           </div>
 
-          <Button
-            variant="outline"
-            size="sm"
-            @click="addRow"
-          >Add Field</Button>
+          <div class="flex gap-2">
+            <Button
+              variant="outline"
+              size="sm"
+              @click="addRow"
+            >Add Field</Button>
+            <Button
+              variant="outline"
+              size="sm"
+              @click="addStandardFields"
+              data-testid="custom-fields-add-standard"
+            >Add standard</Button>
+          </div>
         </div>
       </div>
 
@@ -188,7 +237,7 @@ watch(() => props.open, (isOpen) => {
           @click="$emit('update:open', false)"
         >Cancel</Button>
         <Button
-          :disabled="isProcessing"
+          :disabled="isProcessing || hasValidationErrors"
           @click="handleSave"
         >{{ isProcessing ? 'Saving...' : 'Save' }}</Button>
       </SheetFooter>

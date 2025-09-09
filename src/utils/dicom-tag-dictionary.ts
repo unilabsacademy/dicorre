@@ -32,15 +32,23 @@ function createDictionaries() {
     }
   })
 
-  // Merge dcmjs DicomMetaDictionary name map if available for comprehensive coverage
+  // Merge dcmjs DicomMetaDictionary dictionary for comprehensive coverage
   try {
     const meta: any = (dcmjs as any)?.data?.DicomMetaDictionary
-    const nameMap: Record<string, string> | undefined = meta?.nameMap
-    if (nameMap) {
-      for (const [hex, name] of Object.entries(nameMap)) {
-        const clean = hex.replace(/[^0-9A-Fa-f]/g, '').toUpperCase()
-        if (!tagToName[clean]) tagToName[clean] = name
-        if (!nameToTag[name]) nameToTag[name] = clean
+    const dict: Record<string, any> | undefined = meta?.dictionary
+    if (dict && typeof dict === 'object') {
+      for (const [key, entry] of Object.entries(dict)) {
+        const cleanHex = key.replace(/^x/i, '').replace(/[^0-9A-Fa-f]/g, '').toUpperCase()
+        const entryName = (entry as any)?.name ?? (typeof entry === 'string' ? entry : undefined)
+        if (!entryName) continue
+        if (!tagToName[cleanHex]) tagToName[cleanHex] = entryName
+        if (!nameToTag[entryName]) nameToTag[entryName] = cleanHex
+        const normalizedName = entryName
+          .replace(/'/g, '')
+          .replace(/\s+/g, '')
+          .replace(/[-()]/g, '')
+          .replace(/\//g, 'Or')
+        if (!nameToTag[normalizedName]) nameToTag[normalizedName] = cleanHex
       }
     }
   } catch {
@@ -90,16 +98,27 @@ export const DICOM_NAME_TO_TAG: Record<string, string> = nameToTag
  * Get DICOM tag name from hex value
  */
 export function getTagName(hexTag: string): string {
-  const cleanTag = hexTag.replace(/[(),,]/g, '').replace(/,/g, '')
+  let cleanTag = hexTag.replace(/[^0-9A-Fa-f]/g, '').toUpperCase()
+  if (cleanTag.length === 6) {
+    cleanTag = cleanTag.padStart(8, '0')
+  }
+  if (cleanTag.length !== 8) {
+    return cleanTag
+  }
   const name = DICOM_TAG_TO_NAME[cleanTag]
   if (name) return name
   // Fallback: attempt dcmjs dictionary again if present (defensive)
   try {
     const meta: any = (dcmjs as any)?.data?.DicomMetaDictionary
-    const nameMap: Record<string, string> | undefined = meta?.nameMap
-    if (nameMap) {
-      const alt = nameMap[cleanTag] || nameMap[`x${cleanTag.toLowerCase()}`]
+    if (meta?.nameForTag && typeof meta.nameForTag === 'function') {
+      const alt = meta.nameForTag(`x${cleanTag.toLowerCase()}`)
       if (alt) return alt
+    }
+    const dict: Record<string, any> | undefined = meta?.dictionary
+    if (dict) {
+      const entry = dict[`x${cleanTag.toLowerCase()}`]
+      const alt2 = entry?.name ?? (typeof entry === 'string' ? entry : undefined)
+      if (alt2) return alt2
     }
   } catch { }
   // As a last resort, return the hex itself to never fail
