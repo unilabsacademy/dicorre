@@ -44,8 +44,7 @@ export class SentNotifierPlugin implements HookPlugin {
         }
 
         const payload = {
-          studyInstanceUID: study.studyInstanceUID,
-          accessionNumber: study.accessionNumber,
+          study_instance_uid: study.studyInstanceUID,
           ...params
         }
 
