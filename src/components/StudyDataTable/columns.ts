@@ -4,7 +4,7 @@ import { h } from 'vue'
 import { Checkbox } from '@/components/ui/checkbox'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { ArrowUp, ArrowDown } from 'lucide-vue-next'
+import { ArrowUp, ArrowDown, Edit, FileSearch, FileText } from 'lucide-vue-next'
 import StudyProgressIndicator from '@/components/StudyProgressIndicator.vue'
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
@@ -29,11 +29,13 @@ export const columns: ColumnDef<DicomStudy>[] = [
     header: () => null,
     cell: ({ row, table }) => {
       const study = row.original
+      const hasCustomFields = study.customFields && Object.keys(study.customFields).length > 0
+
       return h(DropdownMenu as any, {}, {
         default: () => [
           h(DropdownMenuTrigger as any, { asChild: true }, () => [
             h(Button as any, {
-              variant: 'ghost',
+              variant: hasCustomFields ? 'outline' : 'ghost',
               size: 'icon-sm',
               'data-testid': `actions-menu-${study.id}`
             }, () => '⋯')
@@ -43,22 +45,40 @@ export const columns: ColumnDef<DicomStudy>[] = [
               onClick: () => {
                 const open = (table.options.meta as any)?.openCustomFieldsForStudy
                 if (open) open(study)
-              }
-            }, () => 'Edit custom fields'),
+              },
+              class: hasCustomFields ? 'font-semibold' : ''
+            }, () => [
+              h('div', { class: 'flex items-center gap-2' }, [
+                h(Edit, {
+                  class: hasCustomFields ? 'h-4 w-4 text-primary' : 'h-4 w-4'
+                }),
+                h('span', {}, 'Edit custom fields')
+              ])
+            ]),
             h(DropdownMenuItem as any, {
               onClick: () => {
                 const openMeta = (table.options.meta as any)?.openMetadataForStudy
                 if (openMeta) openMeta(study)
               },
               'data-testid': `view-dicom-metadata-${study.id}`
-            }, () => 'Inspect DICOM metadata'),
+            }, () => [
+              h('div', { class: 'flex items-center gap-2' }, [
+                h(FileSearch, { class: 'h-4 w-4' }),
+                h('span', {}, 'Inspect DICOM metadata')
+              ])
+            ]),
             h(DropdownMenuItem as any, {
               onClick: () => {
                 const openLog = (table.options.meta as any)?.openLogForStudy
                 if (openLog) openLog(study)
               },
               'data-testid': `view-log-${study.id}`
-            }, () => 'View log')
+            }, () => [
+              h('div', { class: 'flex items-center gap-2' }, [
+                h(FileText, { class: 'h-4 w-4' }),
+                h('span', {}, 'View log')
+              ])
+            ])
           ])
         ]
       })
