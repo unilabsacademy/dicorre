@@ -345,6 +345,7 @@ function handleMetadataSheetUpdateOpen(next: boolean): void {
           @create-project="appState.handleCreateProject"
           @anonymize-selected="anonymizeSelected"
           @group-selected="appState.groupSelectedStudies()"
+          @merge-selected="appState.mergeSelectedStudiesIntoOne()"
           @send-selected="attemptSendSelected()"
           @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"
           @clear-all="clearFiles"

@@ -97,6 +97,71 @@ export function useAppState(runtime: RuntimeType) {
     studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, customFields: normalized } : s)
   }
 
+  const mergeSelectedStudiesIntoOne = async (): Promise<void> => {
+    const selected = selectedStudies.value
+    if (selected.length < 2) return
+
+    const parent = selected[0]
+    const parentUID = parent.studyInstanceUID
+    const parentAccession = parent.accessionNumber ?? ''
+    const parentPatientId = parent.patientId ?? 'Unknown'
+    const parentPatientName = parent.patientName ?? 'Unknown'
+    const parentStudyDate = parent.studyDate
+    const parentStudyDescription = parent.studyDescription
+    const parentAssignedPatientId = parent.assignedPatientId
+
+    const selectedUids = new Set(selected.map(s => s.studyInstanceUID))
+
+    // Rewrite metadata on files for all selected studies so they collapse into the parent study
+    dicomFiles.value = dicomFiles.value.map(file => {
+      const m = file.metadata
+      if (!m || !m.studyInstanceUID || !selectedUids.has(m.studyInstanceUID)) return file
+      return {
+        ...file,
+        metadata: {
+          ...m,
+          studyInstanceUID: parentUID,
+          accessionNumber: parentAccession,
+          patientId: parentPatientId,
+          patientName: parentPatientName,
+          studyDate: parentStudyDate,
+          studyDescription: parentStudyDescription
+        }
+      }
+    })
+
+    try {
+      const rebuilt = await runtime.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.groupFilesByStudy(dicomFiles.value)
+        })
+      )
+
+      const next = rebuilt.map(s => {
+        if (s.studyInstanceUID === parentUID) {
+          return { ...s, assignedPatientId: parentAssignedPatientId ?? s.assignedPatientId }
+        }
+        return s
+      })
+      studies.value = next
+
+      // Clear progress for non-parent merged studies
+      selected.forEach(s => {
+        if (s.studyInstanceUID !== parentUID) {
+          removeStudyProgress(s.studyInstanceUID)
+          removeStudySendingProgress(s.studyInstanceUID)
+        }
+      })
+
+      clearSelection()
+      successMessage.value = `Merged ${selected.length} studies into one`
+    } catch (error) {
+      console.error('Failed to merge studies:', error)
+      setAppError(error as Error)
+    }
+  }
+
   const loadConfig = async () => { /* stream-backed; kept for API compatibility */ }
 
   const loadServerUrl = async () => { /* replaced by stream; keep for API compatibility */ }
@@ -826,6 +891,7 @@ export function useAppState(runtime: RuntimeType) {
     groupSelectedStudies,
     assignPatientIdToSelected,
     setCustomFieldsForSelected,
+    mergeSelectedStudiesIntoOne,
     testConnection,
     handleSendSelected,
     clearFiles,

@@ -47,6 +47,7 @@ const props = defineProps<{
 const emit = defineEmits<{
   anonymizeSelected: []
   groupSelected: []
+  mergeSelected: []
   sendSelected: []
   downloadSelected: []
   clearAll: []
@@ -219,7 +220,16 @@ const clearDialogDescription = computed(() => {
             data-testid="group-menu-item"
           >
             <Layers class="w-4 h-4 mr-2" />
-            Group Studies
+            Assign same Patient ID to Selected
+          </DropdownMenuItem>
+
+          <DropdownMenuItem
+            @click="emit('mergeSelected')"
+            :disabled="props.selectedStudiesCount < 2"
+            data-testid="merge-menu-item"
+          >
+            <Layers class="w-4 h-4 mr-2" />
+            Merge into One Study
           </DropdownMenuItem>
 
           <DropdownMenuItem
