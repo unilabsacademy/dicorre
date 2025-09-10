@@ -79,6 +79,16 @@ export function useAppState(runtime: RuntimeType) {
     // Apply to all selected studies
     const selectedUids = new Set(selected.map(s => s.studyInstanceUID))
     studies.value = studies.value.map(s => selectedUids.has(s.studyInstanceUID) ? { ...s, assignedPatientId: targetAssignedId } : s)
+
+    // Mark files for the selected studies as no longer anonymized
+    dicomFiles.value = dicomFiles.value.map(file => {
+      const uid = file.metadata?.studyInstanceUID
+      if (!uid || !selectedUids.has(uid)) return file
+      return { ...file, anonymized: false }
+    })
+
+    // Rebuild affected studies so UI reflects updated file flags
+    await Promise.all(selected.map(s => rebuildStudyAfterFileChanges(s.studyInstanceUID)))
   }
 
   const assignPatientIdToSelected = (patientId: string): void => {
@@ -119,6 +129,7 @@ export function useAppState(runtime: RuntimeType) {
       if (!m || !m.studyInstanceUID || !selectedUids.has(m.studyInstanceUID)) return file
       return {
         ...file,
+        anonymized: false,
         metadata: {
           ...m,
           studyInstanceUID: parentUID,
