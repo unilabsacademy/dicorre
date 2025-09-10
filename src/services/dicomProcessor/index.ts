@@ -74,6 +74,7 @@ export const DicomProcessorLive = Layer.succeed(
               patientName: dict[tag("Patient's Name")]?.Value?.[0] || 'Unknown',
               patientId: dict[tag('Patient ID')]?.Value?.[0] || 'Unknown',
               patientBirthDate: dict[tag("Patient's Birth Date")]?.Value?.[0] || '',
+              patientAge: dict[tag("Patient's Age")]?.Value?.[0] || '',
               patientSex: dict[tag("Patient's Sex")]?.Value?.[0] || '',
               patientWeight: dict[tag("Patient's Weight")]?.Value?.[0] || 0,
               patientHeight: dict[tag("Patient's Size")]?.Value?.[0] || 0,
@@ -172,7 +173,7 @@ export const DicomProcessorLive = Layer.succeed(
               studyInstanceUID: studyInstanceUID || '',
               patientName: patientName || 'Unknown',
               patientId: patientId || 'Unknown',
-              studyDate: studyDate || new Date().toISOString().split('T')[0].replace(/-/g, ''), // Dicom date format: YYYYMMDD
+              studyDate: studyDate || '',
               studyDescription: studyDescription || 'Unknown Study',
               series: []
             })

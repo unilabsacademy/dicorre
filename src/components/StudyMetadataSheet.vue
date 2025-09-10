@@ -29,6 +29,8 @@ type StudySample = {
   patientId?: string
   accessionNumber?: string
   studyDate?: string
+  patientSex?: string
+  patientAge?: string
 }
 
 const isLoading = ref(false)
@@ -121,10 +123,12 @@ async function loadSamples() {
       const md = (parsedTagged as any).parsed.metadata || {}
       if (!headerSet) {
         studySample.value = {
-          patientName: md.patientName,
+          patientName: normalizePatientName(md.patientName),
           patientId: md.patientId,
           accessionNumber: md.accessionNumber,
-          studyDate: md.studyDate
+          studyDate: md.studyDate,
+          patientSex: md.patientSex,
+          patientAge: md.patientAge
         }
         headerSet = true
       }
@@ -148,6 +152,8 @@ async function loadSamples() {
   }
 }
 
+// removed calculated age; we display raw DICOM patient age
+
 watch(() => props.open, (next) => {
   if (next) loadSamples()
 })
@@ -157,6 +163,26 @@ watch(() => props.study?.id, () => {
 })
 
 // No copy summary; we display full tag tables per sampled series
+</script>
+
+<script lang="ts">
+// Local helper to normalize PN objects or other non-string representations
+function normalizePatientName(value: unknown): string {
+  if (value == null) return 'Unknown'
+  if (typeof value === 'string') return value
+  if (typeof value === 'object') {
+    const obj: any = value as any
+    if (typeof obj.Alphabetic === 'string') return obj.Alphabetic
+    const entries = Object.values(obj)
+    if (entries.length > 0) {
+      const first = entries[0]
+      if (typeof first === 'string') return first
+      try { return String(first) } catch { return 'Unknown' }
+    }
+    return 'Unknown'
+  }
+  try { return String(value) } catch { return 'Unknown' }
+}
 </script>
 
 <template>
@@ -193,9 +219,11 @@ watch(() => props.study?.id, () => {
         >
           <div><span class="opacity-60">Patient:</span> {{ studySample.patientName || 'Unknown' }} <span
               class="opacity-60"
-            >({{ studySample.patientId || 'Unknown' }})</span></div>
+            >[{{ studySample.patientId || 'Unknown' }}]</span></div>
           <div><span class="opacity-60">Accession:</span> {{ studySample.accessionNumber || '—' }}</div>
           <div><span class="opacity-60">Study Date:</span> {{ studySample.studyDate || '—' }}</div>
+          <div><span class="opacity-60">Sex:</span> {{ studySample.patientSex || '—' }}</div>
+          <div><span class="opacity-60">Age:</span> {{ studySample.patientAge || '—' }}</div>
         </div>
 
         <div class="space-y-2">

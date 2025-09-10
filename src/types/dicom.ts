@@ -16,6 +16,7 @@ export interface DicomMetadata {
   patientId?: string
   accessionNumber?: string
   patientBirthDate?: string
+  patientAge?: string
   patientSex?: string
   patientHeight?: number
   patientWeight?: number

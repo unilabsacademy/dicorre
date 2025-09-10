@@ -148,7 +148,7 @@ export const columns: ColumnDef<DicomStudy>[] = [
         const formatted = `${date.slice(0, 4)}-${date.slice(4, 6)}-${date.slice(6, 8)}`
         return h('div', formatted)
       }
-      return h('div', { class: 'text-muted-foreground' }, date || 'Unknown Date')
+      return h('div', { class: 'text-muted-foreground' }, '-')
     },
   },
   {
