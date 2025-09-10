@@ -513,6 +513,16 @@ export function useAppState(runtime: RuntimeType) {
         const studyFiles = allFiles.filter(file => file.anonymized)
         const nonAnonymizedFiles = allFiles.filter(file => !file.anonymized)
 
+        // Immediately reflect sending state in UI to avoid delays before first progress callback
+        if (studyFiles.length > 0) {
+          setStudySendingProgress(study.studyInstanceUID, {
+            isProcessing: true,
+            progress: 0,
+            totalFiles: studyFiles.length,
+            currentFile: undefined
+          })
+        }
+
         const callBeforeSendHooks = Effect.gen(function* () {
           const registry = yield* PluginRegistry
           const hookPlugins = yield* registry.getHookPlugins()
