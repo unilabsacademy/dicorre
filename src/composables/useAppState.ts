@@ -352,6 +352,7 @@ export function useAppState(runtime: RuntimeType) {
 
       const promises = selectedSnapshot.map(study => {
         const studyFiles = study.series.flatMap(series => series.files)
+        const allAnonymized = studyFiles.length > 0 && studyFiles.every(f => f.anonymized)
 
         // Build patientIdMap based on currently assigned IDs for all studies in memory
         const patientIdMap: Record<string, string> = {}
@@ -367,7 +368,8 @@ export function useAppState(runtime: RuntimeType) {
         const overrides: Record<string, string> = {
           ...(study.customFields ?? {}),
           ...(study.assignedPatientId ? { 'Patient ID': study.assignedPatientId } : {}),
-          ...(existingAnonUid ? { 'Study Instance UID': existingAnonUid } : {})
+          // Do not pin Study Instance UID if all files are already anonymized
+          ...(!allAnonymized && existingAnonUid ? { 'Study Instance UID': existingAnonUid } : {})
         }
 
         // Initial progress
