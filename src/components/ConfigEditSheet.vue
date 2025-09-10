@@ -586,7 +586,7 @@ function handleDownloadConfig() {
               </div>
 
               <!-- Date Jitter -->
-              <div class="space-y-2">
+              <!-- <div class="space-y-2">
                 <Label>Date Jitter (days)</Label>
                 <Input
                   type="number"
@@ -597,10 +597,10 @@ function handleDownloadConfig() {
                   max="365"
                   :disabled="isProcessing"
                 />
-              </div>
+              </div> -->
 
               <!-- Organization Root -->
-              <div class="space-y-2">
+              <!-- <div class="space-y-2">
                 <Label>Organization Root OID</Label>
                 <Input
                   :model-value="getFieldValue('anonymization.organizationRoot')"
@@ -609,7 +609,7 @@ function handleDownloadConfig() {
                   :disabled="isProcessing"
                 />
                 <p class="text-xs text-muted-foreground">Must be a valid OID (digits and dots only)</p>
-              </div>
+              </div> -->
 
               <!-- Replacements -->
               <div class="space-y-2">
