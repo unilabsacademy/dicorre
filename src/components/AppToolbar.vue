@@ -46,7 +46,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   anonymizeSelected: []
-  groupSelected: []
+  groupAsSamePatient: []
   mergeSelected: []
   sendSelected: []
   downloadSelected: []
@@ -215,7 +215,7 @@ const clearDialogDescription = computed(() => {
         </DropdownMenuTrigger>
         <DropdownMenuContent align="end">
           <DropdownMenuItem
-            @click="emit('groupSelected')"
+            @click="emit('groupAsSamePatient')"
             :disabled="props.selectedStudiesCount < 2"
             data-testid="group-menu-item"
           >

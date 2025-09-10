@@ -344,7 +344,7 @@ function handleMetadataSheetUpdateOpen(next: boolean): void {
           :is-downloading="isDownloading"
           @create-project="appState.handleCreateProject"
           @anonymize-selected="anonymizeSelected"
-          @group-selected="appState.groupSelectedStudies()"
+          @group-as-same-patient="appState.groupAsSamePatient()"
           @merge-selected="appState.mergeSelectedStudiesIntoOne()"
           @send-selected="attemptSendSelected()"
           @download-selected="downloadSelectedStudies(appState.studies.value, appState.selectedStudies.value)"

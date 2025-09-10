@@ -63,7 +63,7 @@ export function useAppState(runtime: RuntimeType) {
     appError.value = null
   }
 
-  const groupSelectedStudies = async (): Promise<void> => {
+  const groupAsSamePatient = async (): Promise<void> => {
     const selected = selectedStudies.value
     if (selected.length < 2) return
 
@@ -141,7 +141,12 @@ export function useAppState(runtime: RuntimeType) {
 
       const next = rebuilt.map(s => {
         if (s.studyInstanceUID === parentUID) {
-          return { ...s, assignedPatientId: parentAssignedPatientId ?? s.assignedPatientId }
+          return {
+            ...s,
+            assignedPatientId: parentAssignedPatientId ?? s.assignedPatientId,
+            // Pin Study Instance UID during anonymization to prevent the merged study from splitting
+            customFields: { ...(s.customFields ?? {}), 'Study Instance UID': parentUID }
+          }
         }
         return s
       })
@@ -909,7 +914,7 @@ export function useAppState(runtime: RuntimeType) {
     addFilesToUploaded,
     processFiles,
     anonymizeSelected,
-    groupSelectedStudies,
+    groupAsSamePatient,
     assignPatientIdToSelected,
     setCustomFieldsForSelected,
     mergeSelectedStudiesIntoOne,
