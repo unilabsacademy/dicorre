@@ -344,6 +344,149 @@ describe('Anonymizer Service (Effect Service Testing)', () => {
       const ids = result.anonymizedFiles.map(f => f.metadata?.patientId)
       expect(ids.every(id => id === 'PATFIXED123')).toBe(true)
     })
+
+    it('generates different core UIDs across runs when uidStrategy is perRun', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      const result = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const configService = yield* ConfigService
+        const baseConfig = yield* configService.getAnonymizationConfig
+        const config: AnonymizationConfig = { ...baseConfig, uidStrategy: 'perRun' }
+
+        const run1 = yield* anonymizer.anonymizeStudy('uid-per-run-study', parsedFiles, config, { concurrency: 1 })
+        const run2 = yield* anonymizer.anonymizeStudy('uid-per-run-study', parsedFiles, config, { concurrency: 1 })
+
+        return { run1, run2 }
+      }))
+
+      const meta1 = result.run1.anonymizedFiles[0].metadata
+      const meta2 = result.run2.anonymizedFiles[0].metadata
+      expect(meta1?.studyInstanceUID).toBeDefined()
+      expect(meta2?.studyInstanceUID).toBeDefined()
+      expect(meta1?.studyInstanceUID).not.toBe(meta2?.studyInstanceUID)
+      expect(meta1?.seriesInstanceUID).not.toBe(meta2?.seriesInstanceUID)
+      expect(meta1?.sopInstanceUID).not.toBe(meta2?.sopInstanceUID)
+    })
+
+    it('keeps core UIDs stable across runs when uidStrategy is deterministic', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      const result = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const configService = yield* ConfigService
+        const baseConfig = yield* configService.getAnonymizationConfig
+        const config: AnonymizationConfig = { ...baseConfig, uidStrategy: 'deterministic' }
+
+        const run1 = yield* anonymizer.anonymizeStudy('uid-deterministic-study', parsedFiles, config, { concurrency: 1 })
+        const run2 = yield* anonymizer.anonymizeStudy('uid-deterministic-study', parsedFiles, config, { concurrency: 1 })
+
+        return { run1, run2 }
+      }))
+
+      const meta1 = result.run1.anonymizedFiles[0].metadata
+      const meta2 = result.run2.anonymizedFiles[0].metadata
+      expect(meta1?.studyInstanceUID).toBe(meta2?.studyInstanceUID)
+      expect(meta1?.seriesInstanceUID).toBe(meta2?.seriesInstanceUID)
+      expect(meta1?.sopInstanceUID).toBe(meta2?.sopInstanceUID)
+    })
+
+    it('creates separate grouped studies across perRun anonymization runs', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      const grouped = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const processor = yield* DicomProcessor
+        const configService = yield* ConfigService
+        const baseConfig = yield* configService.getAnonymizationConfig
+        const config: AnonymizationConfig = { ...baseConfig, uidStrategy: 'perRun' }
+
+        const overrides = { 'Patient ID': 'PAT-GROUP-001' }
+        const run1 = yield* anonymizer.anonymizeStudy('group-study', parsedFiles, config, { concurrency: 1, overrides })
+        const run2 = yield* anonymizer.anonymizeStudy('group-study', parsedFiles, config, { concurrency: 1, overrides })
+        const run2Files = run2.anonymizedFiles.map((f, idx) => ({ ...f, id: `run2-${idx}-${f.id}` }))
+
+        return yield* processor.groupFilesByStudy([...run1.anonymizedFiles, ...run2Files])
+      }))
+
+      expect(grouped.length).toBe(2)
+    })
+
+    it('keeps grouped study unified when Study Instance UID is pinned', async () => {
+      const files = [
+        loadTestDicomFile('CASES/Caso1/DICOM/0000042D/AA4B9094/AAAB4A82/00002C50/EE0BF3EC')
+      ]
+
+      const parsedFiles = await Effect.runPromise(
+        Effect.gen(function* () {
+          const processor = yield* DicomProcessor
+          return yield* processor.parseFiles(files)
+        }).pipe(Effect.provide(DicomProcessorLive))
+      )
+
+      const grouped = await runTest(Effect.gen(function* () {
+        const anonymizer = yield* Anonymizer
+        const processor = yield* DicomProcessor
+        const configService = yield* ConfigService
+        const baseConfig = yield* configService.getAnonymizationConfig
+        const config: AnonymizationConfig = { ...baseConfig, uidStrategy: 'perRun' }
+
+        const run1 = yield* anonymizer.anonymizeStudy(
+          'group-study-pinned',
+          parsedFiles,
+          config,
+          { concurrency: 1, overrides: { 'Patient ID': 'PAT-GROUP-002' } }
+        )
+        const pinnedStudyUid = run1.anonymizedFiles[0]?.metadata?.studyInstanceUID
+        if (!pinnedStudyUid) {
+          return yield* Effect.fail(new Error('Expected pinned Study Instance UID to be defined'))
+        }
+        const run2 = yield* anonymizer.anonymizeStudy(
+          'group-study-pinned',
+          parsedFiles,
+          config,
+          {
+            concurrency: 1,
+            overrides: {
+              'Patient ID': 'PAT-GROUP-002',
+              'Study Instance UID': pinnedStudyUid!
+            }
+          }
+        )
+        const run2Files = run2.anonymizedFiles.map((f, idx) => ({ ...f, id: `run2-pinned-${idx}-${f.id}` }))
+
+        return yield* processor.groupFilesByStudy([...run1.anonymizedFiles, ...run2Files])
+      }))
+
+      expect(grouped.length).toBe(1)
+    })
   })
 
   describe('Error handling', () => {

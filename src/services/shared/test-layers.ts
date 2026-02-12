@@ -23,6 +23,7 @@ export const TestConfigLayer = Layer.succeed(
       profileOptions: ['BasicProfile'],
       removePrivateTags: true,
       useCustomHandlers: true,
+      uidStrategy: 'perRun',
       dateJitterDays: 31,
       organizationRoot: '1.2.826.0.1.3680043.8.498',
       preserveTags: [
@@ -53,6 +54,7 @@ export const TestConfigLayer = Layer.succeed(
         profileOptions: ['BasicProfile'],
         removePrivateTags: true,
         useCustomHandlers: true,
+        uidStrategy: 'perRun',
         dateJitterDays: 31,
         organizationRoot: '1.2.826.0.1.3680043.8.498',
         preserveTags: [

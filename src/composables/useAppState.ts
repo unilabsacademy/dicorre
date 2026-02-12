@@ -12,7 +12,6 @@ import { useSendingProgress } from '@/composables/useSendingProgress'
 import { useFileProcessing } from '@/composables/useFileProcessing'
 import { useDragAndDrop } from '@/composables/useDragAndDrop'
 import { useDicomSender } from '@/composables/useDicomSender'
-import { clearStudyCache } from '@/services/anonymizer/handlers'
 import { toast } from 'vue-sonner'
 import { getAnonymizationWorkerManager } from '@/workers/workerManager'
 import { StudyLogger } from '@/services/studyLogger'
@@ -645,7 +644,6 @@ export function useAppState(runtime: RuntimeType) {
               }
 
               removeStudySendingProgress(study.studyInstanceUID)
-              clearStudyCache(study.studyInstanceUID)
             })
           ),
           Effect.catchAll((err) =>

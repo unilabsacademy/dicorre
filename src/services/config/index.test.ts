@@ -115,6 +115,7 @@ describe('ConfigService (Effect Service Testing)', () => {
       expect(config.profileOptions).toBeDefined()
       expect(Array.isArray(config.profileOptions)).toBe(true)
       expect(config.profileOptions.length).toBeGreaterThan(0)
+      expect(config.uidStrategy).toBe('perRun')
     })
   })
 

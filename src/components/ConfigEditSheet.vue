@@ -585,6 +585,24 @@ function handleDownloadConfig() {
                 </div>
               </div>
 
+              <div class="space-y-2">
+                <Label>UID Strategy</Label>
+                <select
+                  class="flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm"
+                  :value="getFieldValue('anonymization.uidStrategy') || 'perRun'"
+                  @change="setFieldValue('anonymization.uidStrategy', ($event.target as HTMLSelectElement).value)"
+                  :disabled="isProcessing"
+                >
+                  <option
+                    v-for="option in ((appConfigEditSchema.anonymization as ConfigEditSchema).uidStrategy as FieldSchema).options || []"
+                    :key="option.value"
+                    :value="option.value"
+                  >
+                    {{ option.label }}
+                  </option>
+                </select>
+              </div>
+
               <!-- Date Jitter -->
               <!-- <div class="space-y-2">
                 <Label>Date Jitter (days)</Label>

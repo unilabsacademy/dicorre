@@ -183,6 +183,15 @@ export const appConfigEditSchema: ConfigEditSchema = {
       label: 'Use Custom Handlers',
       description: 'Enable custom anonymization handlers for specific tags'
     },
+    uidStrategy: {
+      type: 'select',
+      label: 'UID Strategy',
+      description: 'Choose whether core UIDs are stable or regenerated for each anonymization run',
+      options: [
+        { value: 'perRun', label: 'Per Run (new UIDs each run)' },
+        { value: 'deterministic', label: 'Deterministic (stable mapping)' }
+      ]
+    },
     dateJitterDays: {
       type: 'number',
       label: 'Date Jitter (days)',

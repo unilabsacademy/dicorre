@@ -61,6 +61,11 @@ const ReplacementsSchema = Schema.Record({
   })
 )
 
+const UidStrategySchema = Schema.Literal(
+  "perRun",
+  "deterministic"
+)
+
 export const AnonymizationConfigSchema = Schema.Struct({
   removePrivateTags: Schema.Boolean,
   profileOptions: AnonymizationProfileOptionsSchema,
@@ -79,6 +84,7 @@ export const AnonymizationConfigSchema = Schema.Struct({
     Schema.lessThanOrEqualTo(365, { message: () => "dateJitterDays must be <= 365" })
   )),
   useCustomHandlers: Schema.optional(Schema.Boolean),
+  uidStrategy: Schema.optional(UidStrategySchema),
   organizationRoot: Schema.optional(Schema.String.pipe(
     Schema.filter((oid) => /^[0-9.]+$/.test(oid), {
       message: () => "Organization root must be a valid OID (digits and dots only)"
@@ -156,6 +162,7 @@ export const AppConfigSchema = Schema.Struct({
 export type AppConfig = Schema.Schema.Type<typeof AppConfigSchema>
 export type AppConfigInput = Schema.Schema.Encoded<typeof AppConfigSchema>
 export type AnonymizationConfig = Schema.Schema.Type<typeof AnonymizationConfigSchema>
+export type UidStrategy = Schema.Schema.Type<typeof UidStrategySchema>
 export type DicomServerConfig = Schema.Schema.Type<typeof DicomServerConfigSchema>
 export type ProjectConfig = Schema.Schema.Type<typeof ProjectConfigSchema>
 export type PluginsConfig = Schema.Schema.Type<typeof PluginsConfigSchema>

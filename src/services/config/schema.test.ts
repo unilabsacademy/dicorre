@@ -184,6 +184,37 @@ describe('Config Schema Validation', () => {
 
       await expect(Effect.runPromise(validateAppConfig(config))).rejects.toThrow(/Organization root must be a valid OID/)
     })
+
+    it('should accept valid uidStrategy', async () => {
+      const config = {
+        dicomServer: {
+          url: '/api/test'
+        },
+        anonymization: {
+          profileOptions: ['BasicProfile'],
+          removePrivateTags: true,
+          uidStrategy: 'deterministic'
+        }
+      }
+
+      const result = await Effect.runPromise(validateAppConfig(config))
+      expect(result.anonymization.uidStrategy).toBe('deterministic')
+    })
+
+    it('should reject invalid uidStrategy', async () => {
+      const config = {
+        dicomServer: {
+          url: '/api/test'
+        },
+        anonymization: {
+          profileOptions: ['BasicProfile'],
+          removePrivateTags: true,
+          uidStrategy: 'invalid-strategy'
+        }
+      }
+
+      await expect(Effect.runPromise(validateAppConfig(config))).rejects.toThrow()
+    })
   })
 
 
@@ -337,6 +368,7 @@ describe('Config Schema Validation', () => {
       anonymization: {
         profileOptions: ['BasicProfile'],
         removePrivateTags: true,
+        uidStrategy: 'perRun',
         useCustomHandlers: true,
         dateJitterDays: 31,
         organizationRoot: '1.2.826.0.1.3680043.8.498',
@@ -398,6 +430,7 @@ describe('Config Schema Validation', () => {
         anonymization: {
           profileOptions: ["BasicProfile"],
           removePrivateTags: true,
+          uidStrategy: "perRun",
           useCustomHandlers: true,
           dateJitterDays: 31,
           organizationRoot: "1.2.826.0.1.3680043.8.498",

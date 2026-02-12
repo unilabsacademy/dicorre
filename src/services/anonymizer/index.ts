@@ -246,8 +246,12 @@ export const AnonymizerLive = Layer.effect(
         // Add custom special handlers
         if (config.useCustomHandlers || (overrides && Object.keys(overrides).length > 0)) {
           const tagsToRemove = config.tagsToRemove ? [...config.tagsToRemove] : []
-          // For individual files, use the Study Instance UID as the cache key
-          const studyId = file.metadata?.studyInstanceUID || 'unknown'
+          const originalStudyId = file.metadata?.studyInstanceUID || 'unknown'
+          const uidStrategy = config.uidStrategy ?? 'perRun'
+          const uidScopeKey =
+            uidStrategy === 'perRun'
+              ? `${originalStudyId}:${sharedRandom || generateRandomString()}`
+              : originalStudyId
           // If a patientIdMap is provided, disable PatientID generation in handlers to prevent conflicts
           const disablePatientId = !!patientIdMap
           const specialHandlers =
@@ -255,12 +259,13 @@ export const AnonymizerLive = Layer.effect(
               ? getAllSpecialHandlersWithOverrides(
                   config.dateJitterDays || 31,
                   tagsToRemove,
-                  studyId,
-                  { disablePatientId },
+                  originalStudyId,
+                  { disablePatientId, uidScopeKey },
                   overrides,
                 )
-              : getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, studyId, {
+              : getAllSpecialHandlers(config.dateJitterDays || 31, tagsToRemove, originalStudyId, {
                   disablePatientId,
+                  uidScopeKey,
                 })
           deidentifierConfig.specialHandlers = specialHandlers
         }

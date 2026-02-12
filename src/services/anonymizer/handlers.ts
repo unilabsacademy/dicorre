@@ -217,11 +217,28 @@ export function createDateJitterHandler(maxDays: number = 31) {
 /**
  * Special handler for value replacements
  */
-export function createValueReplacementHandler(studyId: string, options?: { disablePatientId?: boolean }) {
+interface ValueReplacementHandlerOptions {
+  disablePatientId?: boolean
+  uidScopeKey?: string
+}
+
+function resolveUidScopeKey(studyId: string, options?: ValueReplacementHandlerOptions): string {
+  return options?.uidScopeKey || studyId
+}
+
+function normalizeTagNumber(tagValue: string): string {
+  return tagValue.replace(/[^0-9A-Fa-f]/g, '').toUpperCase()
+}
+
+export function createValueReplacementHandler(studyId: string, options?: ValueReplacementHandlerOptions) {
   return (element: DicomElement, _options: any) => {
     const tagName = element.keyword || element.name || ''
-    const tagNumber = element.tag?.toString() || ''
-    const originalValue = element.value || element.getValue?.()
+    const tagNumber = normalizeTagNumber(element.tag?.toString() || '')
+    const rawValue =
+      element.value === '' || element.value === undefined || element.value === null
+        ? element.getValue?.()
+        : element.value
+    const originalValue = Array.isArray(rawValue) ? rawValue[0] : rawValue
 
     if (typeof originalValue !== 'string') return false
 
@@ -246,38 +263,30 @@ export function createValueReplacementHandler(studyId: string, options?: { disab
         newValue = getCachedValue('AccessionNumber', keyValue, studyId)
         break
       case 'StudyInstanceUID':
-        newValue = getCachedValue('StudyInstanceUID', originalValue, studyId)
+      case 'Study Instance UID':
+        newValue = getCachedValue('StudyInstanceUID', originalValue, resolveUidScopeKey(studyId, options))
         break
       case 'SeriesInstanceUID':
-        newValue = getCachedValue('SeriesInstanceUID', originalValue, studyId)
+      case 'Series Instance UID':
+        newValue = getCachedValue('SeriesInstanceUID', originalValue, resolveUidScopeKey(studyId, options))
         break
       case 'SOPInstanceUID':
-        newValue = getCachedValue('SOPInstanceUID', originalValue, studyId)
+      case 'SOP Instance UID':
+        newValue = getCachedValue('SOPInstanceUID', originalValue, resolveUidScopeKey(studyId, options))
         break
     }
 
     // Also check by DICOM tag number if name didn't match
     if (!newValue) {
       switch (tagNumber) {
-        case tag("Patient's Name"):
-          newValue = 'Anonymous'
+        case tag('Study Instance UID').toUpperCase():
+          newValue = getCachedValue('StudyInstanceUID', originalValue, resolveUidScopeKey(studyId, options))
           break
-        case tag('Patient ID'):
-          if (!options?.disablePatientId) {
-            newValue = getCachedValue('PatientID', originalValue, studyId)
-          }
+        case tag('Series Instance UID').toUpperCase():
+          newValue = getCachedValue('SeriesInstanceUID', originalValue, resolveUidScopeKey(studyId, options))
           break
-        case tag('Study Instance UID'):
-          newValue = getCachedValue('StudyInstanceUID', originalValue, studyId)
-          break
-        case tag('Series Instance UID'):
-          newValue = getCachedValue('SeriesInstanceUID', originalValue, studyId)
-          break
-        case tag('SOP Instance UID'):
-          newValue = getCachedValue('SOPInstanceUID', originalValue, studyId)
-          break
-        case tag('Accession Number'):
-          newValue = getCachedValue('AccessionNumber', originalValue, studyId)
+        case tag('SOP Instance UID').toUpperCase():
+          newValue = getCachedValue('SOPInstanceUID', originalValue, resolveUidScopeKey(studyId, options))
           break
       }
     }
@@ -323,11 +332,11 @@ export function clearValueCache() {
 /**
  * Get all special handlers as an array
  */
-export function getAllSpecialHandlers(jitterDays: number = 31, tagsToRemove: string[] = [], studyId: string = 'default', options?: { disablePatientId?: boolean }) {
+export function getAllSpecialHandlers(jitterDays: number = 31, tagsToRemove: string[] = [], studyId: string = 'default', options?: ValueReplacementHandlerOptions) {
   return [
     createRemoveTagsHandler(tagsToRemove),
     createDateJitterHandler(jitterDays),
-    createValueReplacementHandler(studyId, { disablePatientId: options?.disablePatientId }),
+    createValueReplacementHandler(studyId, options),
     createAddTagsHandler()
   ]
 }
@@ -376,7 +385,7 @@ export function getAllSpecialHandlersWithOverrides(
   jitterDays: number = 31,
   tagsToRemove: string[] = [],
   studyId: string = 'default',
-  options?: { disablePatientId?: boolean },
+  options?: ValueReplacementHandlerOptions,
   overrides?: Record<string, string>
 ) {
   const handlers = [] as any[]
@@ -386,7 +395,7 @@ export function getAllSpecialHandlersWithOverrides(
   handlers.push(
     createRemoveTagsHandler(tagsToRemove),
     createDateJitterHandler(jitterDays),
-    createValueReplacementHandler(studyId, { disablePatientId: options?.disablePatientId }),
+    createValueReplacementHandler(studyId, options),
     createAddTagsHandler()
   )
   return handlers

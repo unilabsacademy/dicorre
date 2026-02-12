@@ -89,6 +89,7 @@ export const ConfigServiceLive = Layer.scoped(
         tagsToRemove: anonymizationConfig.tagsToRemove ? [...anonymizationConfig.tagsToRemove] : undefined,
         dateJitterDays: anonymizationConfig.dateJitterDays,
         useCustomHandlers: anonymizationConfig.useCustomHandlers,
+        uidStrategy: anonymizationConfig.uidStrategy ?? 'perRun',
         organizationRoot: anonymizationConfig.organizationRoot
       }
     })
@@ -153,4 +154,3 @@ export const ConfigServiceLive = Layer.scoped(
     } as const
   })
 )
-
