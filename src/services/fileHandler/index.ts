@@ -1,18 +1,24 @@
-import { Effect, Context, Layer } from "effect"
-import JSZip from 'jszip'
+import { Effect, Context, Layer } from 'effect'
+import { BlobReader, ZipReader } from '@zip.js/zip.js'
 import type { DicomFile, DicomMetadata } from '@/types/dicom'
 import { FileHandlerError, ValidationError, type FileHandlerErrorType } from '@/types/effects'
 import { PluginRegistry } from '@/services/pluginRegistry'
 
-export class FileHandler extends Context.Tag("FileHandler")<
+export class FileHandler extends Context.Tag('FileHandler')<
   FileHandler,
   {
-    readonly extractZipFile: (file: File, options?: { onProgress?: (completed: number, total: number, currentFile?: string) => void }) => Effect.Effect<DicomFile[], FileHandlerErrorType>
+    readonly extractZipFile: (
+      file: File,
+      options?: { onProgress?: (completed: number, total: number, currentFile?: string) => void },
+    ) => Effect.Effect<DicomFile[], FileHandlerErrorType>
     readonly readSingleDicomFile: (file: File) => Effect.Effect<DicomFile, FileHandlerErrorType>
-    readonly validateDicomFile: (arrayBuffer: ArrayBuffer, fileName: string) => Effect.Effect<boolean, ValidationError>
+    readonly validateDicomFile: (
+      arrayBuffer: ArrayBuffer,
+      fileName: string,
+    ) => Effect.Effect<boolean, ValidationError>
     readonly processFile: (file: File) => Effect.Effect<DicomFile[], FileHandlerErrorType>
   }
->() { }
+>() {}
 
 /**
  * Live implementation layer
@@ -42,17 +48,22 @@ export const FileHandlerLive = Layer.effect(
         studyDescription: truncateToDICOMLO(file.name),
         seriesDescription: 'File Conversion',
         instanceNumber: 1,
-        transferSyntaxUID: '1.2.840.10008.1.2.1'
+        transferSyntaxUID: '1.2.840.10008.1.2.1',
       }
     }
 
-    const validateDicomFile = (arrayBuffer: ArrayBuffer, fileName: string): Effect.Effect<boolean, ValidationError> =>
+    const validateDicomFile = (
+      arrayBuffer: ArrayBuffer,
+      fileName: string,
+    ): Effect.Effect<boolean, ValidationError> =>
       Effect.gen(function* () {
         if (arrayBuffer.byteLength === 0) {
-          return yield* Effect.fail(new ValidationError({
-            message: `File ${fileName} is empty`,
-            fileName
-          }))
+          return yield* Effect.fail(
+            new ValidationError({
+              message: `File ${fileName} is empty`,
+              fileName,
+            }),
+          )
         }
 
         const view = new DataView(arrayBuffer)
@@ -64,17 +75,19 @@ export const FileHandlerLive = Layer.effect(
               view.getUint8(128),
               view.getUint8(129),
               view.getUint8(130),
-              view.getUint8(131)
+              view.getUint8(131),
             )
 
             if (magic === 'DICM') {
               return true
             }
           } catch (error) {
-            return yield* Effect.fail(new ValidationError({
-              message: `Error reading DICOM magic number in ${fileName} - ${error}`,
-              fileName,
-            }))
+            return yield* Effect.fail(
+              new ValidationError({
+                message: `Error reading DICOM magic number in ${fileName} - ${error}`,
+                fileName,
+              }),
+            )
           }
         }
 
@@ -87,7 +100,9 @@ export const FileHandlerLive = Layer.effect(
 
             // Check for common Group 0002 elements
             if (group === 0x0002) {
-              console.log(`Found DICOM Group 0002 tag at position ${i}: (${group.toString(16).padStart(4, '0')},${element.toString(16).padStart(4, '0')})`)
+              console.log(
+                `Found DICOM Group 0002 tag at position ${i}: (${group.toString(16).padStart(4, '0')},${element.toString(16).padStart(4, '0')})`,
+              )
               return true
             }
           }
@@ -99,11 +114,13 @@ export const FileHandlerLive = Layer.effect(
         // Method 3: Check for common system files that should not be treated as DICOM
         const lowerFileName = fileName.toLowerCase()
         const systemFiles = ['.ds_store', 'thumbs.db', 'desktop.ini', '.git', '.svn']
-        if (systemFiles.some(sysFile => lowerFileName.includes(sysFile))) {
-          return yield* Effect.fail(new ValidationError({
-            message: `File ${fileName} is a system file, not a DICOM file`,
-            fileName,
-          }))
+        if (systemFiles.some((sysFile) => lowerFileName.includes(sysFile))) {
+          return yield* Effect.fail(
+            new ValidationError({
+              message: `File ${fileName} is a system file, not a DICOM file`,
+              fileName,
+            }),
+          )
         }
 
         // Method 4: Fallback - assume it's DICOM if it has reasonable size and no clear non-DICOM markers
@@ -112,21 +129,24 @@ export const FileHandlerLive = Layer.effect(
           return true
         }
 
-        return yield* Effect.fail(new ValidationError({
-          message: `File ${fileName} is not a valid DICOM file`,
-          fileName,
-        }))
+        return yield* Effect.fail(
+          new ValidationError({
+            message: `File ${fileName} is not a valid DICOM file`,
+            fileName,
+          }),
+        )
       })
 
     const readSingleDicomFile = (file: File): Effect.Effect<DicomFile, FileHandlerErrorType> =>
       Effect.gen(function* () {
         const arrayBuffer = yield* Effect.tryPromise({
           try: () => file.arrayBuffer(),
-          catch: (error) => new FileHandlerError({
-            message: `Failed to read file: ${file.name}`,
-            fileName: file.name,
-            cause: error
-          })
+          catch: (error) =>
+            new FileHandlerError({
+              message: `Failed to read file: ${file.name}`,
+              fileName: file.name,
+              cause: error,
+            }),
         })
 
         // Validate that it's a DICOM file
@@ -137,87 +157,96 @@ export const FileHandlerLive = Layer.effect(
           fileName: file.name,
           fileSize: file.size,
           arrayBuffer,
-          anonymized: false
+          anonymized: false,
         }
       })
 
+    const formatFileSize = (bytes: number): string => {
+      if (bytes >= 1024 * 1024 * 1024) return `${(bytes / (1024 * 1024 * 1024)).toFixed(1)} GB`
+      if (bytes >= 1024 * 1024) return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
+      if (bytes >= 1024) return `${(bytes / 1024).toFixed(1)} KB`
+      return `${bytes} bytes`
+    }
+
     const extractZipFile = (
       file: File,
-      options?: { onProgress?: (completed: number, total: number, currentFile?: string) => void }
+      options?: { onProgress?: (completed: number, total: number, currentFile?: string) => void },
     ): Effect.Effect<DicomFile[], FileHandlerErrorType> =>
       Effect.gen(function* () {
-        // Read the ZIP file
-        const arrayBuffer = yield* Effect.tryPromise({
-          try: () => file.arrayBuffer(),
-          catch: (error) => new FileHandlerError({
-            message: `Failed to read ZIP file: ${file.name}`,
-            fileName: file.name,
-            cause: error
-          })
+        // Use zip.js BlobReader to stream directly from the File (which is a Blob)
+        // This avoids loading the entire ZIP into memory as an ArrayBuffer,
+        // which would fail for files >2GB due to browser ArrayBuffer size limits.
+        const zipReader = yield* Effect.tryPromise({
+          try: () => {
+            const reader = new ZipReader(new BlobReader(file))
+            return reader.getEntries()
+          },
+          catch: (error) =>
+            new FileHandlerError({
+              message: `Failed to read ZIP file: ${file.name} (${formatFileSize(file.size)}). ${error instanceof Error ? error.message : String(error)}`,
+              fileName: file.name,
+              cause: error,
+            }),
         })
 
-        // Load the ZIP with JSZip
-        const zip = yield* Effect.tryPromise({
-          try: () => JSZip.loadAsync(arrayBuffer),
-          catch: (error) => new FileHandlerError({
-            message: `Failed to parse ZIP file: ${file.name}`,
-            fileName: file.name,
-            cause: error
-          })
-        })
+        // Filter out directories - narrows type to FileEntry which has getData/arrayBuffer
+        const entries = zipReader.filter(
+          (entry): entry is import('@zip.js/zip.js').FileEntry => !entry.directory,
+        )
+        console.log(`Found ${entries.length} potential files in ZIP archive`)
 
-        // Get all files in the ZIP
-        const zipFiles = Object.values(zip.files).filter(zipFile => !zipFile.dir)
-        console.log(`Found ${zipFiles.length} potential files in ZIP archive`)
-
-        if (zipFiles.length === 0) {
+        if (entries.length === 0) {
           return []
         }
 
         const dicomFiles: DicomFile[] = []
         let completed = 0
-        const total = zipFiles.length
+        const total = entries.length
 
-        // Process each file in the ZIP
-        for (let i = 0; i < zipFiles.length; i++) {
-          const zipFile = zipFiles[i]
+        // Process each entry - zip.js extracts one file at a time without loading the whole ZIP
+        for (let i = 0; i < entries.length; i++) {
+          const entry = entries[i]
 
           const fileBuffer = yield* Effect.tryPromise({
-            try: () => zipFile.async('arraybuffer'),
-            catch: (error) => new FileHandlerError({
-              message: `Failed to extract file from ZIP: ${zipFile.name}`,
-              fileName: zipFile.name,
-              cause: error
-            })
+            try: () => entry.arrayBuffer(),
+            catch: (error) =>
+              new FileHandlerError({
+                message: `Failed to extract file from ZIP: ${entry.filename}. ${error instanceof Error ? error.message : String(error)}`,
+                fileName: entry.filename,
+                cause: error,
+              }),
           })
 
           // Check if it's a DICOM file
-          const isDicom = yield* validateDicomFile(fileBuffer, zipFile.name)
-            .pipe(Effect.catchAll(() => Effect.succeed(false)))
+          const isDicom = yield* validateDicomFile(fileBuffer, entry.filename).pipe(
+            Effect.catchAll(() => Effect.succeed(false)),
+          )
 
           if (isDicom) {
             const dicomFile: DicomFile = {
               id: generateFileId(),
-              fileName: zipFile.name,
+              fileName: entry.filename,
               fileSize: fileBuffer.byteLength,
               arrayBuffer: fileBuffer,
-              anonymized: false
+              anonymized: false,
             }
             dicomFiles.push(dicomFile)
           }
 
           completed++
           // Report actual extraction progress
-          options?.onProgress?.(completed, total, zipFile.name)
+          options?.onProgress?.(completed, total, entry.filename)
         }
 
-        console.log(`Extracted ${dicomFiles.length} DICOM files from ${zipFiles.length} total files`)
+        console.log(`Extracted ${dicomFiles.length} DICOM files from ${entries.length} total files`)
 
         if (dicomFiles.length === 0) {
-          return yield* Effect.fail(new FileHandlerError({
-            message: `No valid DICOM files found in ZIP: ${file.name}`,
-            fileName: file.name
-          }))
+          return yield* Effect.fail(
+            new FileHandlerError({
+              message: `No valid DICOM files found in ZIP: ${file.name}`,
+              fileName: file.name,
+            }),
+          )
         }
 
         return dicomFiles
@@ -231,7 +260,8 @@ export const FileHandlerLive = Layer.effect(
         }
 
         // Check if it's a DICOM file
-        const isDicomFile = file.name.toLowerCase().endsWith('.dcm') ||
+        const isDicomFile =
+          file.name.toLowerCase().endsWith('.dcm') ||
           file.name.toLowerCase().endsWith('.dicom') ||
           !file.name.includes('.')
 
@@ -239,15 +269,17 @@ export const FileHandlerLive = Layer.effect(
           // Try to read as DICOM first
           const arrayBuffer = yield* Effect.tryPromise({
             try: () => file.arrayBuffer(),
-            catch: (error) => new FileHandlerError({
-              message: `Failed to read file: ${file.name}`,
-              fileName: file.name,
-              cause: error
-            })
+            catch: (error) =>
+              new FileHandlerError({
+                message: `Failed to read file: ${file.name}`,
+                fileName: file.name,
+                cause: error,
+              }),
           })
 
-          const isValidDicom = yield* validateDicomFile(arrayBuffer, file.name)
-            .pipe(Effect.catchAll(() => Effect.succeed(false)))
+          const isValidDicom = yield* validateDicomFile(arrayBuffer, file.name).pipe(
+            Effect.catchAll(() => Effect.succeed(false)),
+          )
 
           if (isValidDicom) {
             const dicomFile = yield* readSingleDicomFile(file)
@@ -256,7 +288,8 @@ export const FileHandlerLive = Layer.effect(
         }
 
         // Not a DICOM file - check if any plugin can handle it
-        const plugin = yield* registry.getPluginForFile(file)
+        const plugin = yield* registry
+          .getPluginForFile(file)
           .pipe(Effect.catchAll(() => Effect.succeed(undefined)))
 
         if (plugin) {
@@ -266,35 +299,42 @@ export const FileHandlerLive = Layer.effect(
           const defaultMetadata = createDefaultConversionMetadata(file)
 
           // Fetch plugin-specific settings if available
-          const pluginSettings = yield* registry.getPluginSettings(plugin.id).pipe(Effect.catchAll(() => Effect.succeed(undefined)))
+          const pluginSettings = yield* registry
+            .getPluginSettings(plugin.id)
+            .pipe(Effect.catchAll(() => Effect.succeed(undefined)))
 
-          return yield* plugin.convertToDicom(file, defaultMetadata, pluginSettings as any)
-            .pipe(
-              Effect.mapError((error) => new FileHandlerError({
-                message: `Plugin ${plugin.id} failed to convert ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
-                fileName: file.name,
-                cause: error
-              }))
-            )
+          return yield* plugin.convertToDicom(file, defaultMetadata, pluginSettings as any).pipe(
+            Effect.mapError(
+              (error) =>
+                new FileHandlerError({
+                  message: `Plugin ${plugin.id} failed to convert ${file.name}: ${error instanceof Error ? error.message : String(error)}`,
+                  fileName: file.name,
+                  cause: error,
+                }),
+            ),
+          )
         }
 
         // No plugin found and not a recognized format
         // Get supported extensions dynamically
-        const supportedExtensions = yield* registry.getSupportedExtensions()
+        const supportedExtensions = yield* registry
+          .getSupportedExtensions()
           .pipe(Effect.catchAll(() => Effect.succeed(['.zip', '.dcm', '.dicom'])))
 
         const extensionsList = supportedExtensions.join(', ')
-        return yield* Effect.fail(new FileHandlerError({
-          message: `File ${file.name} has unsupported format. Only DICOM files (.dcm), ZIP archives, and supported formats (${extensionsList}) are accepted`,
-          fileName: file.name
-        }))
+        return yield* Effect.fail(
+          new FileHandlerError({
+            message: `File ${file.name} has unsupported format. Only DICOM files (.dcm), ZIP archives, and supported formats (${extensionsList}) are accepted`,
+            fileName: file.name,
+          }),
+        )
       })
 
     return {
       extractZipFile,
       readSingleDicomFile,
       validateDicomFile,
-      processFile
+      processFile,
     } as const
-  })
+  }),
 )

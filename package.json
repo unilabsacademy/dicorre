@@ -24,6 +24,7 @@
     "@tanstack/vue-table": "^8.21.3",
     "@umessen/dicom-deidentifier": "1.0.0-beta.4",
     "@vueuse/core": "^13.5.0",
+    "@zip.js/zip.js": "^2.8.20",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "dcmjs": "^0.43.1",
